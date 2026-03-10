@@ -305,19 +305,20 @@ body {
 #analysis-panel { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
 .analysis-header {
-  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  height: 52px; min-height: 52px; max-height: 52px; overflow: hidden; flex-shrink: 0;
 }
 
-.engine-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--accent-green-bright); }
+.engine-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--accent-green-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .engine-dot {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--accent-green-bright);
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent-green-bright); flex-shrink: 0;
 }
 .engine-dot.idle { background: var(--text-muted); animation: none; }
 .engine-dot.thinking { animation: pulse 1s ease-in-out infinite; }
 .engine-dot.ready { background: var(--accent-green-bright); animation: none; }
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
-.depth-info { font-size: 11px; color: var(--text-muted); }
+.depth-info { display: none; }
 
 /* ===== TOP MOVES — chess.com style ===== */
 .top-moves {
@@ -326,14 +327,18 @@ body {
   display: flex; flex-direction: column;
   overflow-y: auto;
   max-height: 340px;
+  min-height: 156px; /* 3행 × 52px — 분석 중/완료 상관없이 크기 고정 */
 }
 
-/* 각 라인 행 — 수순이 길면 자동으로 높이 확장 */
+/* 각 라인 행 — 높이 고정 */
 .top-move-row {
   display: flex; align-items: stretch;
   cursor: pointer; transition: background 0.12s;
   border-bottom: 1px solid var(--border);
+  height: 52px;
   min-height: 52px;
+  max-height: 52px;
+  overflow: hidden;
   position: relative;
 }
 .top-move-row:last-child { border-bottom: none; }
@@ -377,10 +382,12 @@ body {
 }
 .top-move-row.rank-1 .top-move-first { color: #c8e8a0; }
 
-/* 나머지 수들 — 줄바꿈 허용 */
+/* 나머지 수들 — 한 줄 말줄임 */
 .top-move-rest {
   font-size: 11px; color: var(--text-muted);
-  white-space: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.6;
 }
 
@@ -2279,17 +2286,13 @@ function uciMovesToSan(uciMoves, startBoard, startTurn, startCastling, startEnPa
 
 function renderTopMoves(msg) {
   const container = document.getElementById('top-moves');
-  if (msg && Object.keys(pvData).length === 0) {
-    container.innerHTML = `<div class="top-moves-empty">${msg}</div>`;
-    return;
-  }
-  const pvKeys = Object.keys(pvData).sort((a,b)=>parseInt(a)-parseInt(b));
-  if (pvKeys.length === 0) {
-    container.innerHTML = '<div class="top-moves-empty">분석 시작 중...</div>';
-    return;
-  }
+  const rowCount = Math.max(multiPV, 1);
 
-  const rowCount = Math.max(pvKeys.length, multiPV);
+  // 항상 고정 높이 (행 수 × 52px) — 분석 중/완료 상관없이 크기 동일
+  const fixedH = (rowCount * 52) + 'px';
+  container.style.minHeight = fixedH;
+  container.style.height    = fixedH;
+
   container.innerHTML = '';
 
   for (let i = 1; i <= rowCount; i++) {
@@ -2433,6 +2436,7 @@ let lastAnalyzedFen = '';
 let pvData         = {};
 let pendingTurn    = 'w';
 let pendingFen     = '';
+let _soundMuted    = false; // PGN 로드 등 일괄 처리 시 음소거
 let lastSentFen    = '';
 let currentAnalysisId = 0;
 
@@ -3337,6 +3341,9 @@ class ChessGame {
     this.selectedSq = null;
     this.possibleMoves = [];
 
+    // 착수음 재생 (state.board = 착수 전 보드, state.turn = 착수 전 턴)
+    playMoveSound(move, state.board, state.turn);
+
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
@@ -3397,11 +3404,18 @@ class ChessGame {
       const line = this.variations[varIdx].lines[lineIdx];
       if (moveIdx < line.length - 1) {
         this.currentVariation.moveIdx++;
+        const s = line[this.currentVariation.moveIdx];
+        playMoveSound(s.move, s.board, s.turn);
         this._restoreVariationState(); return;
       }
       return;
     }
-    if (this.historyIndex < this.history.length - 1) { this.historyIndex++; this._restoreMainState(); }
+    if (this.historyIndex < this.history.length - 1) {
+      this.historyIndex++;
+      const s = this.history[this.historyIndex];
+      if (s) playMoveSound(s.move, s.board, s.turn);
+      this._restoreMainState();
+    }
   }
 
   gotoMove(idx) {
@@ -3856,6 +3870,7 @@ class ChessGame {
     this.selectedSq = null;
     this.possibleMoves = [];
 
+    playMoveSound(move, varState.board, varState.turn);
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
@@ -3917,6 +3932,7 @@ class ChessGame {
     this.selectedSq = null;
     this.possibleMoves = [];
 
+    playMoveSound(move, varState.board, varState.turn);
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
@@ -3975,6 +3991,9 @@ class ChessGame {
     this.selectedSq = null;
     this.possibleMoves = [];
 
+    // 방금 push한 extraMove에서 착수 전 board/turn 가져오기
+    const em = lineData.extraMoves[lineData.extraMoves.length - 1];
+    playMoveSound(move, em.board, em.turn);
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
@@ -4534,10 +4553,6 @@ class ChessGame {
     // ── 엔진 미리보기 (각 수 바로 아래에 삽입됨 — _renderEnginePreviewsAt 에서 처리)
     // (이 위치에는 별도 블록 없음)
 
-    // 현재 활성 수로 스크롤
-    const activeEl = el.querySelector('.move-cell.active, .var-move.active');
-    if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-
     const count = this.history.length;
     document.getElementById('move-count').textContent = `${count} 수`;
     document.getElementById('move-count-bar').textContent = `${count} 수`;
@@ -4688,8 +4703,6 @@ class ChessGame {
     let currentRow = rowEl;
 
     // 엔진라인 수들
-    console.log('[RENDER] lineData.id:', lineData.id, 'pvIdx:', pvIdx);
-    console.log('[RENDER] allSubLines for this line:', allSubLines.filter(sl => sl.parentLineId === lineData.id).map(sl => ({pvIdx: sl.pvIdx, branchAt: sl.branchAt})));
     lineData.moves.forEach((san, mi) => {
       const needsNum = t2 === 'w' || mi === 0 || currentRow._needsMoveNum;
       if (needsNum) {
@@ -5040,6 +5053,8 @@ class ChessGame {
   }
 
   parsePGN(pgn) {
+    _soundMuted = true;  // PGN 일괄 파싱 중 사운드 비활성화
+    try {
     this.variations = [];
     this.currentVariation = null;
     this.enginePreview = null;
@@ -5125,6 +5140,9 @@ class ChessGame {
 
     this.goToStart();
     setTimeout(()=>this.goToEnd(),50);
+    } finally {
+      _soundMuted = false;  // 파싱 완료 후 사운드 복원
+    }
   }
 }
 
@@ -5308,11 +5326,220 @@ function toggleColorMode() {
   showToast(isDark?'라이트 모드':'다크 모드');
 }
 
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// 착수 사운드 시스템 — chess.com 스타일 (Web Audio API)
+// ═══════════════════════════════════════════════════════════
+
+const _audioCtx = (() => {
+  try { return new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return null; }
+})();
+
+// 사운드 버퍼 캐시
+const _soundCache = {};
+
+function _getCtx() {
+  if (!_audioCtx) return null;
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+
+// 노이즈 버퍼 생성 헬퍼
+function _makeNoise(ctx, duration, decayRate) {
+  const len = Math.ceil(ctx.sampleRate * duration);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * decayRate));
+  }
+  return buf;
+}
+
+// 저역통과 필터 헬퍼
+function _lpf(ctx, freq) {
+  const f = ctx.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.value = freq;
+  f.Q.value = 0.5;
+  return f;
+}
+
+function _playSound(type) {
+  if (_soundMuted) return;
+  const ctx = _getCtx();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+
+  if (type === 'move') {
+    // chess.com 이동음: 두 레이어
+    // 1) 짧은 저주파 타격 펄스 (나무 소리)
+    // 2) 약간 더 긴 잔향 노이즈
+    const dur = 0.14;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      const t = i / ctx.sampleRate;
+      // 타격 층: 빠른 감쇠 노이즈
+      const hit  = Math.exp(-t * 80)  * (Math.random() * 2 - 1);
+      // 바디 층: 나무 공명 (낮은 사인 + 느린 노이즈)
+      const body = Math.exp(-t * 22)  * Math.sin(2 * Math.PI * 220 * t) * 0.6
+                 + Math.exp(-t * 30)  * (Math.random() * 2 - 1) * 0.35;
+      d[i] = hit * 0.55 + body * 0.55;
+    }
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.62, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    const filter = _lpf(ctx, 3200);
+    src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+    src.start(now);
+
+  } else if (type === 'capture') {
+    // chess.com 캡처음: 더 묵직하고 강한 충격 + 두꺼운 잔향
+    const dur = 0.22;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      const t = i / ctx.sampleRate;
+      const hit  = Math.exp(-t * 60)  * (Math.random() * 2 - 1);
+      const thud = Math.exp(-t * 18)  * Math.sin(2 * Math.PI * 140 * t) * 0.7
+                 + Math.exp(-t * 12)  * Math.sin(2 * Math.PI * 95  * t) * 0.4;
+      const body = Math.exp(-t * 25)  * (Math.random() * 2 - 1) * 0.5;
+      d[i] = hit * 0.65 + thud * 0.6 + body * 0.45;
+    }
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.82, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    const filter = _lpf(ctx, 2800);
+    src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+    src.start(now);
+
+  } else if (type === 'castle') {
+    // 캐슬링: 이동음 두 번 (짧은 간격)
+    _playMoveRaw(now);
+    _playMoveRaw(now + 0.10);
+
+  } else if (type === 'check') {
+    // 체크: 이동음 + 살짝 뒤에 날카로운 경고 틱
+    _playMoveRaw(now);
+    // 경고음: chess.com의 높은 클릭 사운드
+    const t2 = now + 0.07;
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc1.type = 'triangle'; osc1.frequency.value = 1050;
+    osc2.type = 'sine';     osc2.frequency.value = 700;
+    g.gain.setValueAtTime(0.22, t2);
+    g.gain.exponentialRampToValueAtTime(0.001, t2 + 0.13);
+    osc1.connect(g); osc2.connect(g); g.connect(ctx.destination);
+    osc1.start(t2); osc1.stop(t2 + 0.13);
+    osc2.start(t2); osc2.stop(t2 + 0.13);
+
+  } else if (type === 'nav') {
+    // 방향키 탐색음: 매우 짧고 부드러운 클릭
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.07, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+    const osc = ctx.createOscillator();
+    osc.type = 'sine'; osc.frequency.value = 480;
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.055);
+  }
+}
+
+// 캐슬링용 내부 이동음 (시간 지정 버전)
+function _playMoveRaw(startTime) {
+  const ctx = _getCtx(); if (!ctx) return;
+  const dur = 0.14;
+  const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) {
+    const t = i / ctx.sampleRate;
+    d[i] = Math.exp(-t * 80) * (Math.random() * 2 - 1) * 0.55
+         + Math.exp(-t * 22) * Math.sin(2 * Math.PI * 220 * t) * 0.33
+         + Math.exp(-t * 30) * (Math.random() * 2 - 1) * 0.19;
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.62, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + dur);
+  const filter = _lpf(ctx, 3200);
+  src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+  src.start(startTime);
+}
+
+// move 객체와 착수 전 보드/턴을 받아 적절한 사운드 재생
+function playMoveSound(move, boardBefore, turn) {
+  if (_soundMuted || !move) return;
+  const boardAfter = applyMoveToBoard(boardBefore.map(r=>[...r]), move, turn);
+  const enemy = turn === 'w' ? 'b' : 'w';
+  const inCheck = isInCheck(boardAfter, enemy);
+
+  if (inCheck)                                              _playSound('check');
+  else if (move.castle)                                     _playSound('castle');
+  else if (boardBefore[move.to[0]][move.to[1]] || move.enPassant) _playSound('capture');
+  else                                                      _playSound('move');
+}
+
 function setupKeyboard() {
   // 보드 우클릭 컨텍스트 메뉴 방지
   document.getElementById('chessboard')?.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('keydown', e => {
     if (e.target.tagName==='TEXTAREA'||e.target.tagName==='INPUT') return;
+
+    // ── 엔진라인 탐색 중: 방향키로 수 이동 ──
+    if (game && game.enginePreview) {
+      const ep = game.enginePreview;
+      const lines = game.enginePreviews[ep.histIdx] || [];
+      const line = lines.find(l => l.pvIdx === ep.pvIdx);
+      if (!line) return;
+
+      const totalMoves = line.moves.length;
+      const extraMoves = line.extraMoves || [];
+      const totalExtra = extraMoves.length;
+      const activeIdx = ep.activeIdx ?? -1;
+      const extraIdx  = ep.extraMoveIdx ?? -1;
+
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (extraIdx >= 0) {
+          if (extraIdx < totalExtra - 1) { _playSound('nav'); game._applyEngineLineExtra(ep.histIdx, ep.pvIdx, extraIdx + 1); }
+        } else if (activeIdx < totalMoves - 1) {
+          _playSound('nav'); game._applyEngineLine(ep.histIdx, ep.pvIdx, activeIdx + 1);
+        } else if (totalExtra > 0 && activeIdx === totalMoves - 1) {
+          _playSound('nav'); game._applyEngineLineExtra(ep.histIdx, ep.pvIdx, 0);
+        }
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (extraIdx >= 1) {
+          _playSound('nav'); game._applyEngineLineExtra(ep.histIdx, ep.pvIdx, extraIdx - 1);
+        } else if (extraIdx === 0) {
+          _playSound('nav'); game._applyEngineLine(ep.histIdx, ep.pvIdx, totalMoves - 1);
+        } else if (activeIdx > 0) {
+          _playSound('nav'); game._applyEngineLine(ep.histIdx, ep.pvIdx, activeIdx - 1);
+        } else if (activeIdx === 0) {
+          game.enginePreview = null;
+          _engineLineAnalysisFen = null;
+          game._applyHistState(ep.histIdx);
+          game.historyIndex = ep.histIdx;
+          game.renderBoard(); game.renderMoveList(); game.updateStatus(); analyzePosition(true);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        game.enginePreview = null;
+        _engineLineAnalysisFen = null;
+        game._applyHistState(ep.histIdx);
+        game.historyIndex = ep.histIdx;
+        game.renderBoard(); game.renderMoveList(); game.updateStatus(); analyzePosition(true);
+        return;
+      }
+    }
+
     if (e.key==='ArrowLeft')  game.prevMove();
     if (e.key==='ArrowRight') game.nextMove();
     if (e.key==='ArrowUp')    game.goToEnd();
