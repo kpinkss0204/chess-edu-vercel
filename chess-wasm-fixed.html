@@ -1214,63 +1214,32 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
   border-left-color: rgba(127,166,80,0.4);
 }
 
-/* ===== MOBILE ===== */
+/* ===== MOBILE RIGHT PANEL ===== */
+#mobile-panel-toggle {
+  display: none;
+  position: fixed; bottom: 20px; right: 20px; z-index: 500;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--accent-green); border: none; cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  align-items: center; justify-content: center;
+  transition: background 0.2s;
+}
+#mobile-panel-toggle:hover { background: var(--accent-green-bright); }
+#mobile-panel-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 498;
+  background: rgba(0,0,0,0.5);
+}
 @media (max-width: 768px) {
-  :root { --sidebar-width: 0px; }
-
-  #sidebar { display: none; }
-
-  body { flex-direction: column; overflow: hidden; }
-
-  #main { flex-direction: column; overflow: hidden; height: 100%; }
-
-  #board-area {
-    flex: none;
-    padding: 8px;
-    height: auto;
-  }
-
-  #chessboard {
-    width: min(96vw, 96vw) !important;
-    height: min(96vw, 96vw) !important;
-  }
-
-  /* 오른쪽 패널 → 하단 슬라이드 패널 */
   #right-panel {
-    width: 100% !important;
-    flex-shrink: 0;
-    border-left: none;
-    border-top: 2px solid var(--accent-green-dark);
-    flex-direction: column;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-    max-height: 48px; /* 탭바만 보임 */
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: min(320px, 90vw) !important;
+    z-index: 499; transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    box-shadow: -8px 0 32px rgba(0,0,0,0.5);
   }
-  #right-panel.panel-open {
-    max-height: 55vh;
-    overflow-y: auto;
-  }
-
-  /* 탭바 항상 표시 + 토글 힌트 */
-  #panel-tabs {
-    cursor: pointer;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    flex-shrink: 0;
-  }
-
-  /* 탭 패널 내용 스크롤 */
-  .tab-panel.active {
-    overflow-y: auto;
-    max-height: calc(55vh - 48px);
-  }
-
-  /* 이동 목록 높이 제한 */
-  #move-list { max-height: 120px; }
-
-  /* 보드 하단 UI 압축 */
-  #board-area .player-bar { padding: 6px 10px; }
+  #right-panel.mobile-open { transform: translateX(0); }
+  #mobile-panel-toggle { display: flex; }
+  #mobile-panel-backdrop.show { display: block; }
 }
 </style>
 
@@ -1318,6 +1287,12 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 </div>
 
 <!-- SIDEBAR -->
+
+<div id="mobile-panel-backdrop" onclick="toggleMobilePanel(false)"></div>
+<button id="mobile-panel-toggle" onclick="toggleMobilePanel()" title="분석 패널">
+  <svg id="mpanel-icon-open" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+  <svg id="mpanel-icon-close" width="24" height="24" viewBox="0 0 24 24" fill="white" style="display:none;"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+</button>
 <nav id="sidebar">
   <div class="sidebar-logo" title="체스 분석">♟</div>
   <div class="sidebar-nav">
@@ -1446,7 +1421,6 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       <button class="tab-btn active" onclick="switchTab('analysis')">분석</button>
       <button class="tab-btn" onclick="switchTab('pgn')">PGN</button>
       <button class="tab-btn" onclick="switchTab('settings')">설정</button>
-      <button id="panel-toggle-btn" onclick="toggleMobilePanel()" style="display:none;margin-left:auto;padding:0 12px;background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;" title="패널 열기/닫기">⌄</button>
     </div>
 
     <div class="tab-panel active" id="tab-analysis">
@@ -1524,11 +1498,13 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
         <div class="pgn-divider"></div>
         <span class="pgn-label">PGN 입력</span>
         <textarea class="pgn-textarea" id="pgn-input" placeholder="PGN을 여기에 붙여넣기 하세요...&#10;&#10;예시:&#10;1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. O-O Nf6"></textarea>
-        <div class="pgn-actions">
-          <button class="btn-primary" onclick="loadPGN()">불러오기</button>
-          <button class="btn-secondary" onclick="exportPGN()">내보내기</button>
-          <button class="btn-secondary" onclick="copyPGN()">복사</button>
-          <button class="btn-secondary" id="btn-save-pgn" onclick="savePGN()" style="background:var(--accent-green-dark);color:#fff;border-color:var(--accent-green);">저장</button>
+        <div class="pgn-actions" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button class="btn-primary" onclick="loadPGN()" style="flex:1;">불러오기</button>
+          <button class="btn-secondary" onclick="exportPGN()" style="flex:1;">내보내기</button>
+          <button class="btn-secondary" id="btn-save-pgn" onclick="savePGN()" style="flex:1;background:var(--accent-green-dark);color:#fff;border-color:var(--accent-green);">저장</button>
+          <button class="btn-secondary" onclick="copyPGN()" title="PGN 복사" style="width:36px;height:36px;padding:0;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:8px;" id="btn-copy-pgn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4C2.9 1 2 1.9 2 3V17H4V3H16V1ZM19 5H8C6.9 5 6 5.9 6 7V21C6 22.1 6.9 23 8 23H19C20.1 23 21 22.1 21 21V7C21 5.9 20.1 5 19 5ZM19 21H8V7H19V21Z"/></svg>
+          </button>
         </div>
         <div class="pgn-divider"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -5440,38 +5416,7 @@ function init() {
   setupCoachKeyboard();
 }
 
-function toggleMobilePanel() {
-  const panel = document.getElementById('right-panel');
-  const btn   = document.getElementById('panel-toggle-btn');
-  const isOpen = panel.classList.toggle('panel-open');
-  if (btn) btn.textContent = isOpen ? '⌃' : '⌄';
-}
-
-function initMobilePanel() {
-  const btn = document.getElementById('panel-toggle-btn');
-  if (window.innerWidth <= 768 && btn) {
-    btn.style.display = 'flex';
-    btn.style.alignItems = 'center';
-  }
-}
-window.addEventListener('resize', initMobilePanel);
-window.addEventListener('load', initMobilePanel);
-
 function switchTab(tab) {
-  const panel = document.getElementById('right-panel');
-  const isMobile = window.innerWidth <= 768;
-  // 모바일: 이미 같은 탭 클릭 시 토글, 다른 탭 클릭 시 열기
-  if (isMobile) {
-    const isOpen = panel.classList.contains('panel-open');
-    const currentActive = document.querySelector('.tab-btn.active');
-    const tabs = ['analysis','pgn','settings'];
-    const currentTab = currentActive ? tabs[document.querySelector('.tab-btn.active') ? [...document.querySelectorAll('.tab-btn')].indexOf(currentActive) : 0] : null;
-    if (isOpen && currentTab === tab) {
-      panel.classList.remove('panel-open');
-      return;
-    }
-    panel.classList.add('panel-open');
-  }
   document.querySelectorAll('.tab-btn').forEach((b,i) => {
     const tabs = ['analysis','pgn','settings'];
     b.classList.toggle('active', tabs[i]===tab);
@@ -6555,6 +6500,19 @@ function formatCoachPlain(escaped) {
 
 document.addEventListener('DOMContentLoaded', init);
 
+
+function toggleMobilePanel(forceClose) {
+  const panel    = document.getElementById('right-panel');
+  const backdrop = document.getElementById('mobile-panel-backdrop');
+  const iconOpen  = document.getElementById('mpanel-icon-open');
+  const iconClose = document.getElementById('mpanel-icon-close');
+  const isOpen = panel.classList.contains('mobile-open');
+  const shouldOpen = forceClose === false ? false : !isOpen;
+  panel.classList.toggle('mobile-open', shouldOpen);
+  backdrop.classList.toggle('show', shouldOpen);
+  iconOpen.style.display  = shouldOpen ? 'none'  : '';
+  iconClose.style.display = shouldOpen ? ''       : 'none';
+}
 </script>
 </body>
 </html>

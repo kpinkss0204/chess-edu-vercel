@@ -780,12 +780,53 @@ function openRecord(doc, itemEl) {
 // ══════════════════════════════════════════
 // 수 이동
 // ══════════════════════════════════════════
+// ── 기보 뷰어 사운드 ──────────────────────────────────────────────
+const _SOUND_BASE  = 'sound/';
+const _viewSounds  = {};
+['move','capture','castle','check','checkmate','stalemate'].forEach(k => {
+  const a = new Audio(_SOUND_BASE + 'chess_' + k + '.mp3');
+  a.preload = 'auto'; _viewSounds[k] = a;
+});
+function playViewSound(type) {
+  const a = _viewSounds[type]; if (!a) return;
+  try { const c = a.cloneNode(); c.volume = 0.7; c.play().catch(()=>{}); } catch(e){}
+}
+function getViewSoundType(state) {
+  if (!state || !state.move) return null;
+  const move  = state.move;
+  const board = _states[_viewIdx > 0 ? _viewIdx - 1 : 0]?.board;
+  if (!board) return 'move';
+  const prevBoard = _states[_viewIdx - 1]?.board;
+  const isCapture = prevBoard && prevBoard[move.to[0]] && prevBoard[move.to[0]][move.to[1]];
+  const isEP      = move.enPassant;
+  const isCastle  = move.castle;
+  // 체크/체크메이트 판단
+  const nb = state.board;
+  const nextTurn = state.turn;
+  if (isInCheck(nb, nextTurn)) {
+    const legal = getAllLegal(nb, nextTurn, state.castling, state.enPassant);
+    return legal.length === 0 ? 'checkmate' : 'check';
+  }
+  const legal2 = getAllLegal(nb, nextTurn, state.castling, state.enPassant);
+  if (!isInCheck(nb, nextTurn) && legal2.length === 0) return 'stalemate';
+  if (isCastle) return 'castle';
+  if (isCapture || isEP) return 'capture';
+  return 'move';
+}
+
 function goToMove(idx) {
+  const prevIdx = _viewIdx;
   idx = Math.max(0, Math.min(_states.length - 1, idx));
   _viewIdx = idx;
   renderViewerBoard();
   updateControls();
   highlightMoveToken(idx);
+
+  // 사운드 재생 (앞으로 이동할 때만)
+  if (idx > prevIdx && idx > 0) {
+    const stype = getViewSoundType(_states[idx]);
+    if (stype) playViewSound(stype);
+  }
 
   // 스크롤 동기화
   const activeToken = document.querySelector('.move-san.active');
