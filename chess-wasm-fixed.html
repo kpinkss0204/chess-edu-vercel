@@ -2417,15 +2417,78 @@ function hideLoading() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 엔진 — Stockfish 18 WASM (Web Worker 방식)
-// 로컬 서버 필요: server.py 실행 후 http://localhost:8080 접속
+// 엔진 — Stockfish 18 WASM (Blob Worker 방식, file:// 완전 지원)
 // ═══════════════════════════════════════════════════════════
 
 // ── 설정 ────────────────────────────────────────────────────
-const _origin = (location.origin && location.origin !== 'null')
-  ? location.origin
-  : 'http://localhost:8080';
-const STOCKFISH_CDN = _origin + '/stockfish/stockfish-18-single.js';
+// file:// 환경과 로컬 서버 환경 모두 지원
+// 로컬 서버(/stockfish/) 우선, 없으면 unpkg CDN에서 자동 로드
+const _isFileProtocol = location.protocol === 'file:';
+const _localOrigin = (!_isFileProtocol && location.origin && location.origin !== 'null')
+  ? location.origin : null;
+
+// CDN 절대 URL (항상 고정)
+const _CDN_JS   = 'https://unpkg.com/stockfish@18.0.0/src/stockfish-18-single.js';
+const _CDN_WASM = 'https://unpkg.com/stockfish@18.0.0/src/stockfish-18-single.wasm';
+
+// 로드 소스 목록 (우선순위 순)
+const STOCKFISH_SOURCES = [
+  // 로컬 호스팅 우선 (Firebase에 stockfish/ 폴더 배포 시)
+  { js: '/stockfish/stockfish-18-single.js',
+    wasm: '/stockfish/stockfish-18-single.wasm',
+    label: '로컬' },
+];
+
+// Blob Worker URL 캐시
+let _stockfishBlobUrl = null;
+let _stockfishBlobPromise = null;
+
+/**
+ * Stockfish JS를 fetch → 3개 패치 적용 → Blob URL 반환
+ *
+ * [왜 3개 패치인가]
+ *  Stockfish single-file WASM Worker는 내부에서 3곳에서 URL을 자체 계산:
+ *
+ *  패치1) var Te;
+ *    → document.currentScript?.src (Worker 내부엔 document 없음 → undefined)
+ *    → wasm base path 계산에 사용됨
+ *    → Te = CDN_JS_URL 로 강제 설정
+ *
+ *  패치2) ,a=decodeURIComponent(e[0]||location.origin+location.pathname.replace(/\.js$/i,".wasm"))
+ *    → hash가 없을 때 현재 파일 기반으로 wasm URL 계산
+ *    → Blob Worker에선 location.pathname = Blob URL → 계산 실패
+ *    → CDN wasm URL로 직접 교체
+ *
+ *  패치3) self.location.origin+self.location.pathname+"#"+a+",worker"
+ *    → 멀티스레드 Worker 재생성 시 자신의 JS URL을 self.location으로 계산
+ *    → Blob Worker에선 self.location.origin = "null", pathname = blob 경로 → "nullnull/..."
+ *    → CDN JS URL로 직접 교체
+ */
+async function getStockfishBlobUrl() {
+  if (_stockfishBlobUrl) return _stockfishBlobUrl;
+  if (_stockfishBlobPromise) return _stockfishBlobPromise;
+
+  _stockfishBlobPromise = (async () => {
+    let lastErr;
+    for (const {js: src, label} of STOCKFISH_SOURCES) {
+      try {
+        console.log(`[Stockfish] 로드 시도 (${label}):`, src);
+        // 로컬 파일은 Worker에서 직접 로드 가능
+        // self.location이 https라서 wasm 경로도 자동으로 올바르게 계산됨
+        _stockfishBlobUrl = src;
+        console.log(`[Stockfish] Worker URL 준비 완료 (${label})`);
+        return _stockfishBlobUrl;
+      } catch (e) {
+        console.warn(`[Stockfish] 실패 (${label}):`, e.message);
+        _stockfishBlobUrl = null;
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('모든 Stockfish 소스 로드 실패');
+  })();
+
+  return _stockfishBlobPromise;
+}
 
 let multiPV        = 3;
 let analysisDepth  = 16;   // 시작 depth — 항상 16부터 movetime까지 무제한 상승
@@ -2455,42 +2518,60 @@ let renderTimer     = null;
 let engineSearching = false;  // go 전송 후 bestmove 수신 전
 let pendingNextFen  = null;   // stop 후 bestmove 오면 실행할 다음 분석 파라미터
 
-// Worker 생성: stockfish-18-single.js를 직접 Worker URL로 생성
-// Blob Worker가 아닌 직접 URL → base URL이 올바르게 설정되어 wasm fetch 정상 동작
+// Worker 생성: Blob URL 방식
 function createStockfishWorker(threads = 1, hashMb = 64) {
   return new Promise((resolve, reject) => {
-    // 직접 URL로 Worker 생성 (로컬 서버 필수)
-    // → Stockfish 내부 wasm fetch 시 base URL = http://localhost:8080/stockfish/
-    const worker = new Worker(STOCKFISH_CDN);
-    let ready = false;
+    getStockfishBlobUrl().then(blobUrl => {
+      const worker = new Worker(blobUrl);
+      let ready = false;
+      let uciReceived = false;
 
-    worker.onmessage = (e) => {
-      const line = e.data;
-      if (typeof line !== 'string') return;
-      if (line === 'uciok') {
-        worker.postMessage('setoption name Threads value ' + threads);
-        worker.postMessage('setoption name Hash value ' + hashMb);
-        worker.postMessage('setoption name UCI_AnalyseMode value true');
-        worker.postMessage('setoption name Move Overhead value 0');
-        worker.postMessage('isready');
-      } else if (line === 'readyok' && !ready) {
-        ready = true;
-        resolve(worker);
-      }
-    };
+      worker.onmessage = (e) => {
+        const line = typeof e.data === 'string' ? e.data.trim() : null;
+        if (!line) return;
+        // 모든 메시지 로그 (초기화 전까지)
+        if (!ready) console.log('[SF]', line.substring(0, 120));
 
-    worker.onerror = (e) => {
-      console.error('[Stockfish] Worker 오류:', e);
-      reject(e);
-    };
+        if (line.includes('uciok')) {
+          uciReceived = true;
+          worker.postMessage('setoption name Threads value ' + threads);
+          worker.postMessage('setoption name Hash value ' + hashMb);
+          worker.postMessage('setoption name UCI_AnalyseMode value true');
+          worker.postMessage('setoption name Move Overhead value 0');
+          worker.postMessage('isready');
+        } else if (line.includes('readyok') && !ready) {
+          ready = true;
+          console.log('[Stockfish] 초기화 완료!');
+          resolve(worker);
+        }
+      };
 
-    worker.postMessage('uci');
+      worker.onerror = (e) => {
+        console.error('[Stockfish] Worker 오류:', e.message || e);
+        reject(e);
+      };
 
-    setTimeout(() => {
-      if (!ready) reject(new Error('Stockfish Worker 초기화 타임아웃'));
-    }, 15000);
+      // 500ms 후 uci 전송 (WASM 로드 대기)
+      setTimeout(() => {
+        console.log('[Stockfish] uci 전송');
+        worker.postMessage('uci');
+      }, 500);
+
+      // 타임아웃 30초
+      setTimeout(() => {
+        if (!ready) {
+          const why = uciReceived ? 'readyok 미수신' : 'uciok 미수신';
+          console.error('[Stockfish] 타임아웃:', why);
+          reject(new Error('Stockfish Worker 초기화 타임아웃 — ' + why));
+        }
+      }, 30000);
+    }).catch(err => {
+      console.error('[Stockfish] Blob URL 생성 실패:', err);
+      reject(err);
+    });
   });
 }
+
 
 // ── 엔진 초기화 ──────────────────────────────────────────────
 async function initEngine() {
@@ -2547,7 +2628,7 @@ async function initEngine() {
     console.error('[Engine] 초기화 실패:', err);
     setEngineBadge('error', '엔진 오류');
     document.getElementById('loading-text').textContent =
-      'Stockfish 18 로딩 실패. 인터넷 연결을 확인하세요.';
+      'Stockfish 18 로딩 실패: ' + (err && err.message ? err.message : String(err)) + ' — F12 콘솔에서 상세 오류를 확인하세요.';
   }
 }
 
