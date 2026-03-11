@@ -129,6 +129,42 @@ body {
 .sidebar-item.logout-btn:hover .sidebar-icon { color: #e07070; }
 .sidebar-item.logout-btn:hover .sidebar-label { color: #e07070; }
 
+/* 저장된 게임 목록 */
+.saved-game-item {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.saved-game-item:hover {
+  border-color: var(--accent-green-dark);
+  background: var(--bg-hover);
+}
+.saved-game-title {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-primary); margin-bottom: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.saved-game-meta {
+  font-size: 10px; color: var(--text-muted);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.saved-game-actions {
+  display: flex; gap: 4px; margin-top: 6px;
+}
+.saved-game-btn {
+  font-size: 10px; padding: 3px 8px;
+  border-radius: 5px; border: 1px solid var(--border-light);
+  background: none; color: var(--text-secondary); cursor: pointer;
+  transition: all 0.15s;
+}
+.saved-game-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.saved-game-btn.del { border-color: rgba(192,64,64,0.4); color: #e07070; }
+.saved-game-btn.del:hover { background: rgba(192,64,64,0.1); }
+
 /* ===== MAIN LAYOUT ===== */
 #main { flex: 1; display: flex; overflow: hidden; min-width: 0; }
 
@@ -1206,45 +1242,44 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 }
 </style>
 
-<!-- Firebase SDK (compat) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-<script>
-  firebase.initializeApp({
+<!-- Firebase 인증 체크 -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+  const firebaseConfig = {
     apiKey: "AIzaSyDiBFoUf2QVG9QXO34Xny0bSslFYaiwozg",
     authDomain: "chess-education-464fc.firebaseapp.com",
     projectId: "chess-education-464fc",
     storageBucket: "chess-education-464fc.firebasestorage.app",
     messagingSenderId: "963998720041",
     appId: "1:963998720041:web:aa4037707214d3777c7c38",
-    measurementId: "G-HBS1RQ4WYQ",
-    databaseURL: "https://chess-education-464fc-default-rtdb.firebaseio.com"
-  });
+    measurementId: "G-HBS1RQ4WYQ"
+  };
 
-  const _fbAuth = firebase.auth();
-  const _fbDb   = firebase.firestore();
-  const _rtDb   = firebase.database();
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
 
-  let _currentUser = null;
-
-  _fbAuth.onAuthStateChanged((user) => {
+  // 페이지 로드 시 인증 상태 확인
+  // 로그인 안 되어 있으면 auth.html로 이동
+  onAuthStateChanged(auth, (user) => {
     if (!user) {
       window.location.href = '/auth.html';
     } else {
-      _currentUser = user;
+      // 닉네임 & 아바타 표시
       const name = user.displayName || user.email || '?';
+      const letter = name[0].toUpperCase();
       const avatarEl = document.getElementById('sidebar-avatar-letter');
       const nameEl   = document.getElementById('sidebar-username');
-      if (avatarEl) avatarEl.textContent = name[0].toUpperCase();
-      if (nameEl)   nameEl.textContent   = name.split('@')[0];
+      if (avatarEl) avatarEl.textContent = letter;
+      if (nameEl)   nameEl.textContent   = name.split('@')[0]; // 이메일이면 @ 앞만
     }
   });
 
-  function handleLogout() {
-    _fbAuth.signOut().then(() => { window.location.href = '/auth.html'; });
-  }
+  // 로그아웃
+  window.handleLogout = () => signOut(auth).then(() => {
+    window.location.href = '/auth.html';
+  });
 </script>
 </head>
 <body>
@@ -1277,12 +1312,6 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       </div>
       <span class="sidebar-label">설정</span>
     </div>
-    <a class="sidebar-item" href="/play.html" title="온라인 대국">
-      <div class="sidebar-icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-      </div>
-      <span class="sidebar-label">대국</span>
-    </a>
     <div class="sidebar-divider"></div>
     <div class="sidebar-item" title="히스토리">
       <div class="sidebar-icon">
@@ -1382,7 +1411,6 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
   <div id="right-panel">
     <div id="panel-tabs">
       <button class="tab-btn active" onclick="switchTab('analysis')">분석</button>
-      <button class="tab-btn" onclick="switchTab('online')">대국</button>
       <button class="tab-btn" onclick="switchTab('pgn')">PGN</button>
       <button class="tab-btn" onclick="switchTab('settings')">설정</button>
     </div>
@@ -1466,82 +1494,20 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
           <button class="btn-primary" onclick="loadPGN()">불러오기</button>
           <button class="btn-secondary" onclick="exportPGN()">내보내기</button>
           <button class="btn-secondary" onclick="copyPGN()">복사</button>
+          <button class="btn-secondary" onclick="savePGN()" id="btn-save-pgn" style="background:var(--accent-green-dark);color:#fff;border-color:var(--accent-green);">저장</button>
         </div>
-      </div>
-    </div>
 
-    <!-- ══ 온라인 대국 탭 ══ -->
-    <div class="tab-panel" id="tab-online">
-      <div id="online-lobby" style="padding:20px 16px;">
-
-        <!-- 매칭 대기 전 -->
-        <div id="online-idle">
-          <div style="text-align:center;margin-bottom:24px;">
-            <div style="font-size:40px;margin-bottom:8px;">♟</div>
-            <div style="font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:4px;">랜덤 매칭</div>
-            <div style="font-size:12px;color:var(--text-muted);">⏱ 10분 | 증가분 없음</div>
+        <!-- 저장된 게임 목록 -->
+        <div class="pgn-divider"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span class="pgn-label" style="margin-bottom:0;">저장된 게임</span>
+          <button onclick="loadSavedGames()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;transition:color 0.2s;" onmouseover="this.style.color='var(--text-secondary)'" onmouseout="this.style.color='var(--text-muted)'">↻ 새로고침</button>
+        </div>
+        <div id="saved-games-list">
+          <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">
+            로그인 후 저장된 게임이 표시됩니다
           </div>
-          <button onclick="startMatchmaking()" style="width:100%;padding:13px;background:linear-gradient(135deg,var(--accent-green),var(--accent-green-dark));border:none;border-radius:11px;color:#fff;font-size:0.95rem;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(127,166,80,0.3);">
-            대국 찾기
-          </button>
         </div>
-
-        <!-- 매칭 대기 중 -->
-        <div id="online-searching" style="display:none;text-align:center;padding:20px 0;">
-          <div style="font-size:28px;margin-bottom:12px;animation:spin 2s linear infinite;display:inline-block;">⏳</div>
-          <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">상대방 찾는 중...</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;" id="search-elapsed">0초</div>
-          <button onclick="cancelMatchmaking()" style="width:100%;padding:11px;background:transparent;border:1px solid var(--border-light);border-radius:10px;color:var(--text-secondary);font-size:0.875rem;cursor:pointer;">
-            취소
-          </button>
-        </div>
-
-        <!-- 대국 중 -->
-        <div id="online-playing" style="display:none;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-            <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">대국 중</div>
-            <div id="online-game-id" style="font-size:10px;color:var(--text-muted);"></div>
-          </div>
-
-          <!-- 상대방 -->
-          <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <div style="width:28px;height:28px;border-radius:50%;background:var(--bg-hover);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;" id="opp-avatar">?</div>
-              <div>
-                <div style="font-size:12px;font-weight:600;color:var(--text-primary);" id="opp-name">상대방</div>
-                <div style="font-size:10px;color:var(--text-muted);" id="opp-color-label">—</div>
-              </div>
-            </div>
-            <div style="font-size:20px;font-weight:700;font-family:monospace;color:var(--text-primary);" id="opp-timer">10:00</div>
-          </div>
-
-          <!-- 나 -->
-          <div style="background:var(--bg-tertiary);border:1px solid var(--accent-green-dark);border-radius:10px;padding:10px 12px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent-green),var(--accent-green-dark));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;" id="my-avatar-online">?</div>
-              <div>
-                <div style="font-size:12px;font-weight:600;color:var(--text-primary);" id="my-name-online">나</div>
-                <div style="font-size:10px;color:var(--text-muted);" id="my-color-label">—</div>
-              </div>
-            </div>
-            <div style="font-size:20px;font-weight:700;font-family:monospace;color:var(--accent-green-bright);" id="my-timer">10:00</div>
-          </div>
-
-          <button onclick="resignOnlineGame()" style="width:100%;padding:10px;background:transparent;border:1px solid rgba(192,64,64,0.4);border-radius:10px;color:#e07070;font-size:0.8rem;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(192,64,64,0.1)'" onmouseout="this.style.background='transparent'">
-            기권
-          </button>
-        </div>
-
-        <!-- 결과 -->
-        <div id="online-result" style="display:none;text-align:center;padding:10px 0;">
-          <div style="font-size:36px;margin-bottom:8px;" id="result-emoji">🏆</div>
-          <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:4px;" id="result-text">—</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;" id="result-reason">—</div>
-          <button onclick="resetOnlineUI()" style="width:100%;padding:12px;background:linear-gradient(135deg,var(--accent-green),var(--accent-green-dark));border:none;border-radius:10px;color:#fff;font-size:0.9rem;font-weight:600;cursor:pointer;">
-            다시 찾기
-          </button>
-        </div>
-
       </div>
     </div>
 
@@ -5446,19 +5412,13 @@ function init() {
 
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b,i) => {
-    const tabs = ['analysis','online','pgn','settings'];
+    const tabs = ['analysis','pgn','settings'];
     b.classList.toggle('active', tabs[i]===tab);
   });
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  const panel = document.getElementById(`tab-${tab}`);
-  if (panel) panel.classList.add('active');
-  // 사이드바 아이템 활성화
-  document.querySelectorAll('.sidebar-item').forEach(el => {
-    const t = el.getAttribute('onclick');
-    if (t && t.includes('switchTab')) {
-      el.classList.toggle('active', t.includes(`'${tab}'`));
-    }
-  });
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  // PGN 탭 열릴 때 저장 목록 자동 로드
+  if (tab === 'pgn') setTimeout(loadSavedGames, 100);
 }
 
 function loadPGN() {
@@ -5490,6 +5450,160 @@ function copyPGN() {
   exportPGN();
   const pgn = document.getElementById('pgn-input').value;
   navigator.clipboard.writeText(pgn).then(()=>showToast('클립보드에 복사됨'));
+}
+
+// ── PGN 저장 ──
+async function savePGN() {
+  if (typeof _fbDb === 'undefined' || !_fbDb) { showToast('Firebase 연결 필요'); return; }
+  if (typeof _currentUser === 'undefined' || !_currentUser) { showToast('로그인이 필요합니다'); return; }
+
+  // 현재 보드의 PGN 생성
+  exportPGN();
+  const pgn = document.getElementById('pgn-input').value.trim();
+  if (!pgn) { showToast('저장할 게임이 없습니다'); return; }
+
+  // 게임 정보 수집
+  const white   = document.getElementById('info-white')?.textContent || '-';
+  const black   = document.getElementById('info-black')?.textContent || '-';
+  const date    = document.getElementById('info-date')?.textContent  || '-';
+  const result  = document.getElementById('info-result')?.textContent || '*';
+  const opening = document.getElementById('info-opening')?.textContent || '-';
+  const moveCount = game.history.length;
+  const title   = `${white} vs ${black}`;
+
+  const btn = document.getElementById('btn-save-pgn');
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+
+  try {
+    await _fbDb.collection('saved_pgns').add({
+      uid:       _currentUser.uid,
+      title,
+      pgn,
+      white, black, date, result, opening,
+      moveCount,
+      savedAt:   firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    showToast('✓ 게임이 저장되었습니다');
+    loadSavedGames();
+  } catch(e) {
+    showToast('저장 실패: ' + e.message);
+    console.error(e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '저장'; }
+  }
+}
+
+// ── 저장된 게임 목록 불러오기 ──
+async function loadSavedGames() {
+  const listEl = document.getElementById('saved-games-list');
+  if (!listEl) return;
+  if (typeof _fbDb === 'undefined' || !_fbDb || typeof _currentUser === 'undefined' || !_currentUser) {
+    listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">로그인 후 이용 가능합니다</div>';
+    return;
+  }
+
+  listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0;">불러오는 중...</div>';
+
+  try {
+    const snap = await _fbDb.collection('saved_pgns')
+      .where('uid', '==', _currentUser.uid)
+      .orderBy('savedAt', 'desc')
+      .limit(30)
+      .get();
+
+    if (snap.empty) {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">저장된 게임이 없습니다</div>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    snap.forEach(doc => {
+      const d = doc.data();
+      const dateStr = d.savedAt ? new Date(d.savedAt.seconds * 1000).toLocaleDateString('ko-KR') : '—';
+      const item = document.createElement('div');
+      item.className = 'saved-game-item';
+      item.innerHTML = `
+        <div class="saved-game-title">${d.title || '—'}</div>
+        <div class="saved-game-meta">
+          <span>${d.result || '*'} · ${d.moveCount || 0}수</span>
+          <span>${dateStr}</span>
+        </div>
+        <div class="saved-game-actions">
+          <button class="saved-game-btn" onclick="loadSavedPGN('${doc.id}')">불러오기</button>
+          <button class="saved-game-btn del" onclick="deleteSavedPGN('${doc.id}', this)">삭제</button>
+        </div>
+      `;
+      listEl.appendChild(item);
+    });
+  } catch(e) {
+    // Firestore 인덱스 없을 시 orderBy 없이 재시도
+    try {
+      const snap2 = await _fbDb.collection('saved_pgns')
+        .where('uid', '==', _currentUser.uid)
+        .limit(30)
+        .get();
+      if (snap2.empty) {
+        listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">저장된 게임이 없습니다</div>';
+        return;
+      }
+      const docs = [];
+      snap2.forEach(doc => docs.push(doc));
+      docs.sort((a,b) => (b.data().savedAt?.seconds||0) - (a.data().savedAt?.seconds||0));
+      listEl.innerHTML = '';
+      docs.forEach(doc => {
+        const d = doc.data();
+        const dateStr = d.savedAt ? new Date(d.savedAt.seconds * 1000).toLocaleDateString('ko-KR') : '—';
+        const item = document.createElement('div');
+        item.className = 'saved-game-item';
+        item.innerHTML = `
+          <div class="saved-game-title">${d.title || '—'}</div>
+          <div class="saved-game-meta">
+            <span>${d.result || '*'} · ${d.moveCount || 0}수</span>
+            <span>${dateStr}</span>
+          </div>
+          <div class="saved-game-actions">
+            <button class="saved-game-btn" onclick="loadSavedPGN('${doc.id}')">불러오기</button>
+            <button class="saved-game-btn del" onclick="deleteSavedPGN('${doc.id}', this)">삭제</button>
+          </div>
+        `;
+        listEl.appendChild(item);
+      });
+    } catch(e2) {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0;">불러오기 실패</div>';
+    }
+  }
+}
+
+// ── 저장된 PGN 불러오기 ──
+async function loadSavedPGN(docId) {
+  if (typeof _fbDb === 'undefined') return;
+  try {
+    const doc = await _fbDb.collection('saved_pgns').doc(docId).get();
+    if (!doc.exists) { showToast('게임을 찾을 수 없습니다'); return; }
+    const pgn = doc.data().pgn;
+    document.getElementById('pgn-input').value = pgn;
+    loadPGN();
+    showToast('게임을 불러왔습니다');
+  } catch(e) {
+    showToast('불러오기 실패');
+  }
+}
+
+// ── 저장된 PGN 삭제 ──
+async function deleteSavedPGN(docId, btn) {
+  if (!confirm('이 게임을 삭제하시겠습니까?')) return;
+  try {
+    await _fbDb.collection('saved_pgns').doc(docId).delete();
+    const item = btn.closest('.saved-game-item');
+    if (item) item.remove();
+    showToast('삭제되었습니다');
+    const listEl = document.getElementById('saved-games-list');
+    if (listEl && !listEl.querySelector('.saved-game-item')) {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">저장된 게임이 없습니다</div>';
+    }
+  } catch(e) {
+    showToast('삭제 실패');
+  }
 }
 
 function setTheme(name) {
@@ -5591,8 +5705,6 @@ const _soundFiles = {
   check:      'sound/chess_check.mp3',
   checkmate:  'sound/chess_checkmate.mp3',
   stalemate:  'sound/chess_stalemate.mp3',
-  start:      'sound/chess_start.mp3',
-  over:       'sound/chess_over.mp3',
 };
 
 // 페이지 로드 시 미리 캐싱
@@ -5649,369 +5761,6 @@ function playMoveSound(move, boardBefore, turn) {
   else if (boardBefore[move.to[0]][move.to[1]] || move.enPassant) _playSound('capture');
   else                                                           _playSound('move');
 }
-
-// ══════════════════════════════════════════════════════════════
-// 온라인 대국 시스템 (Firebase Realtime Database)
-// ══════════════════════════════════════════════════════════════
-
-let _onlineGame = null;       // 현재 대국 정보
-let _onlineRef  = null;       // Firebase 게임 ref
-let _queueRef   = null;       // 매칭 큐 ref
-let _timerInterval = null;    // 타이머 인터벌
-let _searchInterval = null;   // 대기 시간 표시
-const GAME_TIME = 600;        // 10분 (초)
-
-// ── 매칭 시작 ──
-async function startMatchmaking() {
-  if (!_currentUser) { showToast('로그인이 필요합니다'); return; }
-  _showOnlineSection('searching');
-  let elapsed = 0;
-  _searchInterval = setInterval(() => {
-    elapsed++;
-    const el = document.getElementById('search-elapsed');
-    if (el) el.textContent = elapsed + '초';
-  }, 1000);
-
-  const queue = _rtDb.ref('matchmaking_queue');
-  const snap  = await queue.once('value');
-  let matched = false;
-
-  snap.forEach(child => {
-    if (matched) return;
-    const data = child.val();
-    if (data && data.uid !== _currentUser.uid) {
-      matched = true;
-      // 내가 2번째 → 게임 생성
-      const myColor  = Math.random() < 0.5 ? 'w' : 'b';
-      const oppColor = myColor === 'w' ? 'b' : 'w';
-      const gameId   = _rtDb.ref('games').push().key;
-      const gameData = {
-        gameId,
-        white: myColor === 'w' ? _currentUser.uid : data.uid,
-        black: myColor === 'b' ? _currentUser.uid : data.uid,
-        whiteName: myColor === 'w' ? (_currentUser.displayName || _currentUser.email.split('@')[0]) : data.displayName,
-        blackName: myColor === 'b' ? (_currentUser.displayName || _currentUser.email.split('@')[0]) : data.displayName,
-        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-        moves: [],
-        turn: 'w',
-        status: 'playing',
-        whiteTime: GAME_TIME,
-        blackTime: GAME_TIME,
-        lastMoveAt: Date.now(),
-        createdAt: firebase.firestore.FieldValue ? firebase.firestore.FieldValue.serverTimestamp() : Date.now(),
-      };
-      _rtDb.ref('games/' + gameId).set(gameData);
-      child.ref.remove(); // 큐에서 제거
-      _joinGame(gameId, myColor);
-    }
-  });
-
-  if (!matched) {
-    // 큐에 나를 추가
-    const myName = _currentUser.displayName || _currentUser.email.split('@')[0];
-    _queueRef = queue.push({ uid: _currentUser.uid, displayName: myName, joinedAt: Date.now() });
-    // 상대가 게임 만들기를 기다림
-    _rtDb.ref('users_waiting/' + _currentUser.uid).set({ gameId: null });
-    // 내 큐 항목에 gameId가 설정되면 조인
-    _queueRef.on('value', snap2 => {
-      const d = snap2.val();
-      if (d && d.gameId) {
-        _queueRef.off();
-        _joinGame(d.gameId, d.color);
-      }
-    });
-    // 상대가 게임을 만들 때 내 큐 항목에 gameId를 설정해줌
-    // (상대가 먼저 찾기를 눌렀을 때를 처리하기 위해 queue를 다시 읽음)
-    setTimeout(async () => {
-      const snap3 = await queue.once('value');
-      let found = false;
-      snap3.forEach(child => {
-        if (found) return;
-        const data = child.val();
-        if (data && data.uid !== _currentUser.uid && child.key !== (_queueRef && _queueRef.key)) {
-          found = true;
-          const myColor2 = Math.random() < 0.5 ? 'w' : 'b';
-          const gameId2  = _rtDb.ref('games').push().key;
-          const myName2  = _currentUser.displayName || _currentUser.email.split('@')[0];
-          const gameData2 = {
-            gameId: gameId2,
-            white: myColor2 === 'w' ? _currentUser.uid : data.uid,
-            black: myColor2 === 'b' ? _currentUser.uid : data.uid,
-            whiteName: myColor2 === 'w' ? myName2 : data.displayName,
-            blackName: myColor2 === 'b' ? myName2 : data.displayName,
-            fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-            moves: [],
-            turn: 'w',
-            status: 'playing',
-            whiteTime: GAME_TIME,
-            blackTime: GAME_TIME,
-            lastMoveAt: Date.now(),
-            createdAt: Date.now(),
-          };
-          _rtDb.ref('games/' + gameId2).set(gameData2);
-          // 상대 큐 항목에 게임 정보 전달
-          child.ref.update({ gameId: gameId2, color: myColor2 === 'w' ? 'b' : 'w' });
-          // 내 큐 항목 제거
-          if (_queueRef) _queueRef.remove();
-          _joinGame(gameId2, myColor2);
-        }
-      });
-    }, 500);
-  }
-}
-
-// ── 게임 참여 ──
-function _joinGame(gameId, myColor) {
-  clearInterval(_searchInterval);
-  _onlineGame = { gameId, myColor, wTime: GAME_TIME, bTime: GAME_TIME, lastMoveAt: Date.now() };
-  _onlineRef  = _rtDb.ref('games/' + gameId);
-
-  _playSound('start');
-
-  // UI 업데이트
-  _onlineRef.once('value').then(snap => {
-    const d = snap.val();
-    if (!d) return;
-    const myName  = myColor === 'w' ? d.whiteName : d.blackName;
-    const oppName = myColor === 'w' ? d.blackName : d.whiteName;
-    const myColorLabel  = myColor === 'w' ? '⬜ 백' : '⬛ 흑';
-    const oppColorLabel = myColor === 'w' ? '⬛ 흑' : '⬜ 백';
-
-    document.getElementById('my-name-online').textContent    = myName  || '나';
-    document.getElementById('opp-name').textContent          = oppName || '상대방';
-    document.getElementById('my-color-label').textContent    = myColorLabel;
-    document.getElementById('opp-color-label').textContent   = oppColorLabel;
-    document.getElementById('my-avatar-online').textContent  = (myName  || '?')[0].toUpperCase();
-    document.getElementById('opp-avatar').textContent        = (oppName || '?')[0].toUpperCase();
-    document.getElementById('online-game-id').textContent    = 'ID: ' + gameId.slice(-6);
-  });
-
-  _showOnlineSection('playing');
-
-  // 보드를 초기화하고 온라인 모드로 전환
-  game.reset();
-  game.onlineMode   = true;
-  game.onlineColor  = myColor;
-  game.onlineGameId = gameId;
-  switchTab('analysis');
-
-  // 타이머 시작
-  _startTimer();
-
-  // Firebase에서 수 수신
-  _onlineRef.child('moves').on('child_added', snap => {
-    const moveData = snap.val();
-    if (!moveData || !moveData.uid) return;
-    if (moveData.uid === _currentUser.uid) return; // 내 수는 무시
-    _applyRemoteMove(moveData);
-  });
-
-  // 게임 상태 감시
-  _onlineRef.child('status').on('value', snap => {
-    const status = snap.val();
-    if (status && status !== 'playing') {
-      _endOnlineGame(status);
-    }
-  });
-
-  // 시간 동기화
-  _onlineRef.child('whiteTime').on('value', snap => {
-    if (_onlineGame) _onlineGame.wTime = snap.val() || _onlineGame.wTime;
-  });
-  _onlineRef.child('blackTime').on('value', snap => {
-    if (_onlineGame) _onlineGame.bTime = snap.val() || _onlineGame.bTime;
-  });
-}
-
-// ── 상대방 수 적용 ──
-function _applyRemoteMove(moveData) {
-  if (!game || !_onlineGame) return;
-  const allMoves = getAllLegalMoves(game.board, game.turn, game.castling, game.enPassant);
-  const move = allMoves.find(m =>
-    m.from[0] === moveData.from[0] && m.from[1] === moveData.from[1] &&
-    m.to[0]   === moveData.to[0]   && m.to[1]   === moveData.to[1]
-  );
-  if (move) {
-    if (moveData.promo) move.promoPiece = moveData.promo;
-    game.makeMove(move, moveData.promo || null);
-  }
-}
-
-// ── 타이머 ──
-function _startTimer() {
-  clearInterval(_timerInterval);
-  let lastTick = Date.now();
-  _timerInterval = setInterval(() => {
-    if (!_onlineGame) return;
-    const now = Date.now();
-    const delta = (now - lastTick) / 1000;
-    lastTick = now;
-
-    // 현재 차례 플레이어 시간 감소
-    const turn = game ? game.turn : 'w';
-    if (turn === 'w') _onlineGame.wTime = Math.max(0, _onlineGame.wTime - delta);
-    else              _onlineGame.bTime = Math.max(0, _onlineGame.bTime - delta);
-
-    _updateTimerDisplay();
-
-    // 시간 초과
-    if (_onlineGame.wTime <= 0 || _onlineGame.bTime <= 0) {
-      const loser  = _onlineGame.wTime <= 0 ? 'w' : 'b';
-      const winner = loser === 'w' ? 'b' : 'w';
-      if (_onlineRef) _onlineRef.update({ status: winner === _onlineGame.myColor ? 'win_time' : 'lose_time' });
-    }
-  }, 200);
-}
-
-function _updateTimerDisplay() {
-  const fmt = s => `${String(Math.floor(Math.max(0,s)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,s)%60)).padStart(2,'0')}`;
-  const myTime  = _onlineGame.myColor === 'w' ? _onlineGame.wTime : _onlineGame.bTime;
-  const oppTime = _onlineGame.myColor === 'w' ? _onlineGame.bTime : _onlineGame.wTime;
-  const myEl  = document.getElementById('my-timer');
-  const oppEl = document.getElementById('opp-timer');
-  if (myEl)  myEl.textContent  = fmt(myTime);
-  if (oppEl) oppEl.textContent = fmt(oppTime);
-}
-
-// ── 수 전송 (makeMove에서 호출) ──
-function sendOnlineMove(move) {
-  if (!_onlineRef || !_currentUser || !_onlineGame) return;
-  const moveData = {
-    uid:  _currentUser.uid,
-    from: move.from,
-    to:   move.to,
-    promo: move.promoPiece || null,
-    at:   Date.now(),
-  };
-  _onlineRef.child('moves').push(moveData);
-  // 시간 동기화
-  _onlineRef.update({
-    whiteTime: _onlineGame.wTime,
-    blackTime: _onlineGame.bTime,
-    lastMoveAt: Date.now(),
-    turn: game.turn === 'w' ? 'b' : 'w',
-  });
-}
-
-// ── 대국 종료 ──
-function _endOnlineGame(status) {
-  clearInterval(_timerInterval);
-  clearInterval(_searchInterval);
-  if (_onlineRef) { _onlineRef.off(); }
-
-  _playSound('over');
-
-  // 결과 판정
-  let emoji = '🏆', text = '', reason = '';
-  const isWin  = status.startsWith('win') || (status === 'resign' && /* 상대 기권 여부 */ false);
-  const myUid  = _currentUser ? _currentUser.uid : '';
-
-  if (status === 'checkmate') {
-    // 마지막 수를 둔 쪽이 이김
-    const winner = game ? (game.turn === 'w' ? 'b' : 'w') : null;
-    if (winner === _onlineGame?.myColor) { emoji='🏆'; text='승리!'; reason='체크메이트'; }
-    else { emoji='😔'; text='패배'; reason='체크메이트'; }
-  } else if (status === 'resign_w') {
-    if (_onlineGame?.myColor === 'b') { emoji='🏆'; text='승리!'; reason='상대방 기권'; }
-    else { emoji='😔'; text='패배'; reason='기권'; }
-  } else if (status === 'resign_b') {
-    if (_onlineGame?.myColor === 'w') { emoji='🏆'; text='승리!'; reason='상대방 기권'; }
-    else { emoji='😔'; text='패배'; reason='기권'; }
-  } else if (status === 'win_time') {
-    emoji='🏆'; text='승리!'; reason='상대방 시간 초과';
-  } else if (status === 'lose_time') {
-    emoji='😔'; text='패배'; reason='시간 초과';
-  } else if (status === 'draw' || status === 'stalemate') {
-    emoji='🤝'; text='무승부'; reason = status === 'stalemate' ? '스테일메이트' : '무승부';
-  } else {
-    emoji='🏁'; text='대국 종료'; reason='';
-  }
-
-  document.getElementById('result-emoji').textContent = emoji;
-  document.getElementById('result-text').textContent  = text;
-  document.getElementById('result-reason').textContent = reason;
-  _showOnlineSection('result');
-
-  // Firestore에 기보 저장
-  _saveGameRecord(status);
-
-  game.onlineMode  = false;
-  game.onlineColor = null;
-  _onlineGame = null;
-}
-
-// ── Firestore 기보 저장 ──
-async function _saveGameRecord(result) {
-  if (!_fbDb || !_currentUser || !game) return;
-  try {
-    const moves = game.history.map(h => h.san).join(' ');
-    const oppColor = _onlineGame?.myColor === 'w' ? 'b' : 'w';
-    await _fbDb.collection('game_records').add({
-      uid:        _currentUser.uid,
-      playerName: _currentUser.displayName || _currentUser.email,
-      gameId:     _onlineGame?.gameId || '',
-      myColor:    _onlineGame?.myColor || '',
-      result,
-      moves,
-      moveCount:  game.history.length,
-      playedAt:   firebase.firestore.FieldValue.serverTimestamp(),
-    });
-  } catch(e) { console.warn('기보 저장 실패', e); }
-}
-
-// ── 기권 ──
-function resignOnlineGame() {
-  if (!_onlineRef || !_onlineGame) return;
-  const status = _onlineGame.myColor === 'w' ? 'resign_w' : 'resign_b';
-  _onlineRef.update({ status });
-}
-
-// ── 매칭 취소 ──
-function cancelMatchmaking() {
-  clearInterval(_searchInterval);
-  if (_queueRef) { _queueRef.remove(); _queueRef = null; }
-  _showOnlineSection('idle');
-}
-
-// ── UI 섹션 전환 ──
-function _showOnlineSection(section) {
-  ['idle','searching','playing','result'].forEach(s => {
-    const el = document.getElementById('online-' + s);
-    if (el) el.style.display = s === section ? '' : 'none';
-  });
-  if (section === 'playing' || section === 'result') {
-    // 탭이 닫혀있어도 타이머는 계속 돌도록 유지
-  }
-}
-
-function resetOnlineUI() {
-  _showOnlineSection('idle');
-}
-
-// ── game.makeMove 패치: 온라인 모드일 때 수 전송 ──
-(function patchMakeMove() {
-  const _origInit = () => {
-    // game 객체가 생성된 후 패치
-    const checkAndPatch = setInterval(() => {
-      if (typeof game !== 'undefined' && game && game.makeMove) {
-        clearInterval(checkAndPatch);
-        const origMakeMove = game.makeMove.bind(game);
-        game.makeMove = function(move, promoPiece) {
-          if (this.onlineMode) {
-            // 내 차례인지 확인
-            if (this.turn !== this.onlineColor) return false;
-          }
-          const result = origMakeMove(move, promoPiece);
-          if (result !== false && this.onlineMode) {
-            sendOnlineMove(move);
-          }
-          return result;
-        };
-      }
-    }, 200);
-  };
-  _origInit();
-})();
 
 function setupKeyboard() {
   // 보드 우클릭 컨텍스트 메뉴 방지
