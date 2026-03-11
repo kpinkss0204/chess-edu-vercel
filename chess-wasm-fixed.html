@@ -128,19 +128,15 @@ body {
 .sidebar-item.logout-btn:hover { background: rgba(192,64,64,0.12); }
 .sidebar-item.logout-btn:hover .sidebar-icon { color: #e07070; }
 .sidebar-item.logout-btn:hover .sidebar-label { color: #e07070; }
-.saved-game-item {
-  background: var(--bg-tertiary); border: 1px solid var(--border);
-  border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
-  transition: border-color 0.15s, background 0.15s;
-}
-.saved-game-item:hover { border-color: var(--accent-green-dark); background: var(--bg-hover); }
-.saved-game-title { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.saved-game-meta { font-size: 10px; color: var(--text-muted); display: flex; justify-content: space-between; }
-.saved-game-actions { display: flex; gap: 4px; margin-top: 6px; }
-.saved-game-btn { font-size: 10px; padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border-light); background: none; color: var(--text-secondary); cursor: pointer; transition: all 0.15s; }
-.saved-game-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.saved-game-btn.del { border-color: rgba(192,64,64,0.4); color: #e07070; }
-.saved-game-btn.del:hover { background: rgba(192,64,64,0.1); }
+.saved-game-item { background:var(--bg-tertiary); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; transition:border-color 0.15s, background 0.15s; }
+.saved-game-item:hover { border-color:var(--accent-green-dark); background:var(--bg-hover); }
+.saved-game-title { font-size:12px; font-weight:600; color:var(--text-primary); margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.saved-game-meta { font-size:10px; color:var(--text-muted); display:flex; justify-content:space-between; }
+.saved-game-actions { display:flex; gap:4px; margin-top:6px; }
+.saved-game-btn { font-size:10px; padding:3px 8px; border-radius:5px; border:1px solid var(--border-light); background:none; color:var(--text-secondary); cursor:pointer; transition:all 0.15s; }
+.saved-game-btn:hover { background:var(--bg-hover); color:var(--text-primary); }
+.saved-game-btn.del { border-color:rgba(192,64,64,0.4); color:#e07070; }
+.saved-game-btn.del:hover { background:rgba(192,64,64,0.1); }
 
 /* ===== MAIN LAYOUT ===== */
 #main { flex: 1; display: flex; overflow: hidden; min-width: 0; }
@@ -1233,7 +1229,6 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
     appId: "1:963998720041:web:aa4037707214d3777c7c38",
     measurementId: "G-HBS1RQ4WYQ"
   });
-  // 전역 변수 — var 사용으로 window 스코프에 등록
   var _fbAuth = firebase.auth();
   var _fbDb   = firebase.firestore();
   var _currentUser = null;
@@ -1250,11 +1245,8 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       if (nameEl)   nameEl.textContent   = name.split('@')[0];
     }
   });
-
   function handleLogout() {
-    _fbAuth.signOut().then(function() {
-      window.location.href = '/auth.html';
-    });
+    _fbAuth.signOut().then(function() { window.location.href = '/auth.html'; });
   }
 </script>
 </head>
@@ -1276,6 +1268,12 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       </div>
       <span class="sidebar-label">분석</span>
     </div>
+    <a class="sidebar-item" href="/play.html" title="온라인 대국" style="text-decoration:none;">
+      <div class="sidebar-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+      </div>
+      <span class="sidebar-label">대국</span>
+    </a>
     <div class="sidebar-item" onclick="switchTab('pgn')" title="PGN">
       <div class="sidebar-icon">
         <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20ZM8 15V17H16V15H8ZM8 11V13H16V11H8Z"/></svg>
@@ -1472,7 +1470,6 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
           <button class="btn-secondary" onclick="copyPGN()">복사</button>
           <button class="btn-secondary" id="btn-save-pgn" onclick="savePGN()" style="background:var(--accent-green-dark);color:#fff;border-color:var(--accent-green);">저장</button>
         </div>
-
         <div class="pgn-divider"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
           <span class="pgn-label" style="margin-bottom:0;">저장된 게임</span>
@@ -5424,39 +5421,33 @@ function copyPGN() {
   navigator.clipboard.writeText(pgn).then(()=>showToast('클립보드에 복사됨'));
 }
 
-// ══ PGN 저장 / 목록 ══════════════════════════════
 async function savePGN() {
   if (!window._fbDb)        { showToast('Firebase 연결 필요'); return; }
   if (!window._currentUser) { showToast('로그인이 필요합니다'); return; }
-
   exportPGN();
   const pgn = document.getElementById('pgn-input').value.trim();
   if (!pgn) { showToast('저장할 게임이 없습니다'); return; }
-
-  const white    = document.getElementById('info-white')?.textContent   || '-';
-  const black    = document.getElementById('info-black')?.textContent   || '-';
-  const date     = document.getElementById('info-date')?.textContent    || '-';
-  const result   = document.getElementById('info-result')?.textContent  || '*';
-  const opening  = document.getElementById('info-opening')?.textContent || '-';
-  const moveCount = game.history.length;
-
+  const white   = document.getElementById('info-white')?.textContent   || '-';
+  const black   = document.getElementById('info-black')?.textContent   || '-';
+  const date    = document.getElementById('info-date')?.textContent    || '-';
+  const result  = document.getElementById('info-result')?.textContent  || '*';
+  const opening = document.getElementById('info-opening')?.textContent || '-';
   const btn = document.getElementById('btn-save-pgn');
-  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
-
+  if (btn) { btn.disabled=true; btn.textContent='저장 중...'; }
   try {
     await window._fbDb.collection('saved_pgns').add({
       uid: window._currentUser.uid,
       title: `${white} vs ${black}`,
-      pgn, white, black, date, result, opening, moveCount,
+      pgn, white, black, date, result, opening,
+      moveCount: game.history.length,
       savedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
     showToast('✓ 게임이 저장되었습니다');
     loadSavedGames();
   } catch(e) {
     showToast('저장 실패: ' + e.message);
-    console.error(e);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '저장'; }
+    if (btn) { btn.disabled=false; btn.textContent='저장'; }
   }
 }
 
@@ -5468,72 +5459,55 @@ async function loadSavedGames() {
     return;
   }
   listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0;">불러오는 중...</div>';
-
   const render = (docs) => {
-    if (!docs.length) {
-      listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">저장된 게임이 없습니다</div>';
-      return;
-    }
-    listEl.innerHTML = '';
+    if (!docs.length) { listEl.innerHTML='<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">저장된 게임이 없습니다</div>'; return; }
+    listEl.innerHTML='';
     docs.forEach(doc => {
-      const d = doc.data();
-      const dateStr = d.savedAt ? new Date(d.savedAt.seconds * 1000).toLocaleDateString('ko-KR') : '—';
-      const item = document.createElement('div');
-      item.className = 'saved-game-item';
-      item.innerHTML = `
-        <div class="saved-game-title">${d.title || '제목 없음'}</div>
-        <div class="saved-game-meta">
-          <span>${d.result || '*'} · ${d.moveCount || 0}수</span>
-          <span>${dateStr}</span>
-        </div>
+      const d=doc.data();
+      const dateStr=d.savedAt?new Date(d.savedAt.seconds*1000).toLocaleDateString('ko-KR'):'—';
+      const item=document.createElement('div');
+      item.className='saved-game-item';
+      item.innerHTML=`
+        <div class="saved-game-title">${d.title||'제목 없음'}</div>
+        <div class="saved-game-meta"><span>${d.result||'*'} · ${d.moveCount||0}수</span><span>${dateStr}</span></div>
         <div class="saved-game-actions">
           <button class="saved-game-btn" onclick="loadSavedPGN('${doc.id}')">불러오기</button>
-          <button class="saved-game-btn del" onclick="deleteSavedPGN('${doc.id}', this)">삭제</button>
+          <button class="saved-game-btn del" onclick="deleteSavedPGN('${doc.id}',this)">삭제</button>
         </div>`;
       listEl.appendChild(item);
     });
   };
-
   try {
-    const snap = await window._fbDb.collection('saved_pgns')
-      .where('uid', '==', window._currentUser.uid)
-      .orderBy('savedAt', 'desc').limit(30).get();
-    const docs = []; snap.forEach(d => docs.push(d));
-    render(docs);
+    const snap=await window._fbDb.collection('saved_pgns').where('uid','==',window._currentUser.uid).orderBy('savedAt','desc').limit(30).get();
+    const docs=[]; snap.forEach(d=>docs.push(d)); render(docs);
   } catch(e) {
     try {
-      const snap2 = await window._fbDb.collection('saved_pgns')
-        .where('uid', '==', window._currentUser.uid).limit(30).get();
-      const docs2 = []; snap2.forEach(d => docs2.push(d));
-      docs2.sort((a,b) => (b.data().savedAt?.seconds||0) - (a.data().savedAt?.seconds||0));
+      const snap2=await window._fbDb.collection('saved_pgns').where('uid','==',window._currentUser.uid).limit(30).get();
+      const docs2=[]; snap2.forEach(d=>docs2.push(d));
+      docs2.sort((a,b)=>(b.data().savedAt?.seconds||0)-(a.data().savedAt?.seconds||0));
       render(docs2);
-    } catch(e2) {
-      listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0;">불러오기 실패</div>';
-    }
+    } catch(e2) { listEl.innerHTML='<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0;">불러오기 실패</div>'; }
   }
 }
 
 async function loadSavedPGN(docId) {
   try {
-    const doc = await window._fbDb.collection('saved_pgns').doc(docId).get();
-    if (!doc.exists) { showToast('게임을 찾을 수 없습니다'); return; }
-    document.getElementById('pgn-input').value = doc.data().pgn;
-    loadPGN();
-    showToast('게임을 불러왔습니다');
-  } catch(e) { showToast('불러오기 실패'); }
+    const doc=await window._fbDb.collection('saved_pgns').doc(docId).get();
+    if(!doc.exists){showToast('게임을 찾을 수 없습니다');return;}
+    document.getElementById('pgn-input').value=doc.data().pgn;
+    loadPGN(); showToast('게임을 불러왔습니다');
+  } catch(e){showToast('불러오기 실패');}
 }
 
-async function deleteSavedPGN(docId, btn) {
-  if (!confirm('이 게임을 삭제하시겠습니까?')) return;
+async function deleteSavedPGN(docId,btn) {
+  if(!confirm('이 게임을 삭제하시겠습니까?'))return;
   try {
     await window._fbDb.collection('saved_pgns').doc(docId).delete();
     btn.closest('.saved-game-item')?.remove();
     showToast('삭제되었습니다');
-    if (!document.querySelector('.saved-game-item')) {
-      document.getElementById('saved-games-list').innerHTML =
-        '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">저장된 게임이 없습니다</div>';
-    }
-  } catch(e) { showToast('삭제 실패'); }
+    if(!document.querySelector('.saved-game-item'))
+      document.getElementById('saved-games-list').innerHTML='<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">저장된 게임이 없습니다</div>';
+  } catch(e){showToast('삭제 실패');}
 }
 
 function setTheme(name) {
