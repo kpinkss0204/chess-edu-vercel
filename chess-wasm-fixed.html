@@ -1181,6 +1181,33 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
   border-left-color: rgba(127,166,80,0.4);
 }
 </style>
+
+<!-- Firebase 인증 체크 -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDiBFoUf2QVG9QXO34Xny0bSslFYaiwozg",
+    authDomain: "chess-education-464fc.firebaseapp.com",
+    projectId: "chess-education-464fc",
+    storageBucket: "chess-education-464fc.firebasestorage.app",
+    messagingSenderId: "963998720041",
+    appId: "1:963998720041:web:aa4037707214d3777c7c38",
+    measurementId: "G-HBS1RQ4WYQ"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  // 페이지 로드 시 인증 상태 확인
+  // 로그인 안 되어 있으면 auth.html로 이동
+  onAuthStateChanged(auth, (user) => {
+    if (!user) {
+      window.location.href = '/auth.html';
+    }
+  });
+</script>
 </head>
 <body>
 
