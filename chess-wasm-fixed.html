@@ -5488,116 +5488,42 @@ function toggleColorMode() {
 
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// 착수 사운드 시스템 — chess.com 스타일 (Web Audio API)
+// 착수 사운드 시스템 — mp3 파일 기반
 // ═══════════════════════════════════════════════════════════
+
+// mp3 사운드 캐시 (미리 로드)
+const _soundCache = {};
+const _soundFiles = {
+  move:       'sound/chess_move.mp3',
+  capture:    'sound/chess_capture.mp3',
+  castle:     'sound/chess_castle.mp3',
+  check:      'sound/chess_check.mp3',
+  checkmate:  'sound/chess_checkmate.mp3',
+  stalemate:  'sound/chess_stalemate.mp3',
+};
+
+// 페이지 로드 시 미리 캐싱
+(function preloadSounds() {
+  for (const [key, src] of Object.entries(_soundFiles)) {
+    const audio = new Audio(src);
+    audio.preload = 'auto';
+    _soundCache[key] = audio;
+  }
+})();
 
 const _audioCtx = (() => {
   try { return new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return null; }
 })();
 
-// 사운드 버퍼 캐시
-const _soundCache = {};
-
-function _getCtx() {
-  if (!_audioCtx) return null;
-  if (_audioCtx.state === 'suspended') _audioCtx.resume();
-  return _audioCtx;
-}
-
-// 노이즈 버퍼 생성 헬퍼
-function _makeNoise(ctx, duration, decayRate) {
-  const len = Math.ceil(ctx.sampleRate * duration);
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) {
-    d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * decayRate));
-  }
-  return buf;
-}
-
-// 저역통과 필터 헬퍼
-function _lpf(ctx, freq) {
-  const f = ctx.createBiquadFilter();
-  f.type = 'lowpass';
-  f.frequency.value = freq;
-  f.Q.value = 0.5;
-  return f;
-}
-
 function _playSound(type) {
   if (_soundMuted) return;
-  const ctx = _getCtx();
-  if (!ctx) return;
-  const now = ctx.currentTime;
 
-  if (type === 'move') {
-    // chess.com 이동음: 두 레이어
-    // 1) 짧은 저주파 타격 펄스 (나무 소리)
-    // 2) 약간 더 긴 잔향 노이즈
-    const dur = 0.14;
-    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) {
-      const t = i / ctx.sampleRate;
-      // 타격 층: 빠른 감쇠 노이즈
-      const hit  = Math.exp(-t * 80)  * (Math.random() * 2 - 1);
-      // 바디 층: 나무 공명 (낮은 사인 + 느린 노이즈)
-      const body = Math.exp(-t * 22)  * Math.sin(2 * Math.PI * 220 * t) * 0.6
-                 + Math.exp(-t * 30)  * (Math.random() * 2 - 1) * 0.35;
-      d[i] = hit * 0.55 + body * 0.55;
-    }
-    const src = ctx.createBufferSource(); src.buffer = buf;
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.62, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-    const filter = _lpf(ctx, 3200);
-    src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-    src.start(now);
-
-  } else if (type === 'capture') {
-    // chess.com 캡처음: 더 묵직하고 강한 충격 + 두꺼운 잔향
-    const dur = 0.22;
-    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) {
-      const t = i / ctx.sampleRate;
-      const hit  = Math.exp(-t * 60)  * (Math.random() * 2 - 1);
-      const thud = Math.exp(-t * 18)  * Math.sin(2 * Math.PI * 140 * t) * 0.7
-                 + Math.exp(-t * 12)  * Math.sin(2 * Math.PI * 95  * t) * 0.4;
-      const body = Math.exp(-t * 25)  * (Math.random() * 2 - 1) * 0.5;
-      d[i] = hit * 0.65 + thud * 0.6 + body * 0.45;
-    }
-    const src = ctx.createBufferSource(); src.buffer = buf;
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.82, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-    const filter = _lpf(ctx, 2800);
-    src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-    src.start(now);
-
-  } else if (type === 'castle') {
-    // 캐슬링: 이동음 두 번 (짧은 간격)
-    _playMoveRaw(now);
-    _playMoveRaw(now + 0.10);
-
-  } else if (type === 'check') {
-    // 체크: 이동음 + 살짝 뒤에 날카로운 경고 틱
-    _playMoveRaw(now);
-    // 경고음: chess.com의 높은 클릭 사운드
-    const t2 = now + 0.07;
-    const osc1 = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc1.type = 'triangle'; osc1.frequency.value = 1050;
-    osc2.type = 'sine';     osc2.frequency.value = 700;
-    g.gain.setValueAtTime(0.22, t2);
-    g.gain.exponentialRampToValueAtTime(0.001, t2 + 0.13);
-    osc1.connect(g); osc2.connect(g); g.connect(ctx.destination);
-    osc1.start(t2); osc1.stop(t2 + 0.13);
-    osc2.start(t2); osc2.stop(t2 + 0.13);
-
-  } else if (type === 'nav') {
-    // 방향키 탐색음: 매우 짧고 부드러운 클릭
+  // nav(탐색)는 mp3 없으니 Web Audio로 짧은 클릭음 처리
+  if (type === 'nav') {
+    const ctx = _audioCtx;
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    const now = ctx.currentTime;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.07, now);
     g.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
@@ -5605,28 +5531,14 @@ function _playSound(type) {
     osc.type = 'sine'; osc.frequency.value = 480;
     osc.connect(g); g.connect(ctx.destination);
     osc.start(now); osc.stop(now + 0.055);
+    return;
   }
-}
 
-// 캐슬링용 내부 이동음 (시간 지정 버전)
-function _playMoveRaw(startTime) {
-  const ctx = _getCtx(); if (!ctx) return;
-  const dur = 0.14;
-  const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) {
-    const t = i / ctx.sampleRate;
-    d[i] = Math.exp(-t * 80) * (Math.random() * 2 - 1) * 0.55
-         + Math.exp(-t * 22) * Math.sin(2 * Math.PI * 220 * t) * 0.33
-         + Math.exp(-t * 30) * (Math.random() * 2 - 1) * 0.19;
-  }
-  const src = ctx.createBufferSource(); src.buffer = buf;
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.62, startTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, startTime + dur);
-  const filter = _lpf(ctx, 3200);
-  src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-  src.start(startTime);
+  const audio = _soundCache[type];
+  if (!audio) return;
+  const clone = audio.cloneNode();
+  clone.volume = 1.0;
+  clone.play().catch(() => {});
 }
 
 // move 객체와 착수 전 보드/턴을 받아 적절한 사운드 재생
@@ -5635,11 +5547,14 @@ function playMoveSound(move, boardBefore, turn) {
   const boardAfter = applyMoveToBoard(boardBefore.map(r=>[...r]), move, turn);
   const enemy = turn === 'w' ? 'b' : 'w';
   const inCheck = isInCheck(boardAfter, enemy);
+  const noMoves = getAllLegalMoves(boardAfter, enemy, {wK:true,wQ:true,bK:true,bQ:true}, null).length === 0;
 
-  if (inCheck)                                              _playSound('check');
-  else if (move.castle)                                     _playSound('castle');
+  if (inCheck && noMoves)                                        _playSound('checkmate');
+  else if (!inCheck && noMoves)                                  _playSound('stalemate');
+  else if (inCheck)                                              _playSound('check');
+  else if (move.castle)                                          _playSound('castle');
   else if (boardBefore[move.to[0]][move.to[1]] || move.enPassant) _playSound('capture');
-  else                                                      _playSound('move');
+  else                                                           _playSound('move');
 }
 
 function setupKeyboard() {
