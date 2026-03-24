@@ -567,6 +567,9 @@ let _myColor = 'w', _gameId = null, _gameRef = null;
 let _sanMoves = [];
 let _wTime = 600, _bTime = 600, _timerInt = null;
 let _gameActive = false;
+let _firstMoveDone = false;          // 첫 수 여부 추적
+let _firstMoveTimer = null;          // 첫 수 10초 타이머
+let _disconnectRef = null;           // onDisconnect 참조
 
 function parseFen(fen) {
   const parts = fen.split(' ');
@@ -802,6 +805,14 @@ function doMove(move, promoPiece) {
   _board = applyMoveToBoard(_board, move, _turn);
   if (promoPiece) move.promoPiece = promoPiece;
 
+  // ── 첫 수 처리 ──
+  if (!_firstMoveDone) {
+    _firstMoveDone = true;
+    clearTimeout(_firstMoveTimer); // 10초 무승부 타이머 취소
+    // 이제부터 나가면 패배로 등록
+    setupDisconnectLoss();
+  }
+
   // 캐슬링 업데이트
   if (_board[move.to[0]][move.to[1]] === _turn+'K') {
     if (_turn==='w'){_castling.wK=false;_castling.wQ=false;}
@@ -981,6 +992,8 @@ async function startMatchmaking() {
 
 function cancelMatchmaking() {
   clearInterval(_searchInt);
+  clearTimeout(_firstMoveTimer);
+  cancelDisconnectLoss();
   if (_queueRef) { _queueRef.remove(); _queueRef = null; }
   showScreen('lobby');
 }
@@ -1011,8 +1024,21 @@ function joinGame(gameId, myColor, gameData) {
   startTimer();
   playSound('start');
 
+  // ── 첫 수 10초 타임아웃 (양측 모두) ──
+  _firstMoveDone = false;
+  _firstMoveTimer = setTimeout(() => {
+    if (_gameActive && !_firstMoveDone) {
+      // 10초 내 아무도 두지 않으면 무승부
+      if (_gameRef) _gameRef.update({ status: 'draw_no_move' });
+    }
+  }, 10000);
+
   // 수 수신
   _gameRef = _rtDb.ref('games/'+gameId);
+
+  // ── 접속 끊김 감지: 첫 수 후 나가면 패배 ──
+  // 첫 수 전에는 무승부(위 타이머), 첫 수 후에는 패배
+  _disconnectRef = null; // 첫 수 후 setupDisconnectLoss()에서 설정
   _gameRef.child('moves').on('child_added', snap => {
     const d = snap.val();
     if (!d || d.uid === _user.uid) return;
@@ -1090,14 +1116,31 @@ function hidDrawOfferBar() {
 
 function resignGame() {
   if (!_gameRef || !_gameActive) return;
+  cancelDisconnectLoss(); // 정상 기권이므로 disconnect 취소
   const status = _myColor === 'w' ? 'resign_w' : 'resign_b';
   _gameRef.update({ status });
+}
+
+// ── disconnect 패배 등록/해제 ──
+function setupDisconnectLoss() {
+  if (!_gameRef || !_user) return;
+  const status = _myColor === 'w' ? 'resign_w' : 'resign_b';
+  _disconnectRef = _gameRef;
+  _disconnectRef.onDisconnect().update({ status });
+}
+function cancelDisconnectLoss() {
+  if (_disconnectRef) {
+    _disconnectRef.onDisconnect().cancel();
+    _disconnectRef = null;
+  }
 }
 
 function endGame(status) {
   if (!_gameActive) return;
   _gameActive = false;
   clearInterval(_timerInt);
+  clearTimeout(_firstMoveTimer); // 첫 수 타이머 정리
+  cancelDisconnectLoss();        // 정상 종료이므로 disconnect 취소
   if (_gameRef) _gameRef.off();
   playSound('over');
 
@@ -1122,8 +1165,8 @@ function endGame(status) {
     emoji='😔'; title='패배'; reason='시간 초과';
   } else if (status==='stalemate') {
     emoji='🤝'; title='무승부'; reason='스테일메이트';
-  } else if (status==='draw') {
-    emoji='🤝'; title='무승부'; reason='합의 무승부';
+  } else if (status==='draw' || status==='draw_no_move') {
+    emoji='🤝'; title='무승부'; reason= status==='draw_no_move' ? '첫 수 미입력' : '합의 무승부';
   }
 
   document.getElementById('result-emoji').textContent = emoji;
