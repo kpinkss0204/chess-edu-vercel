@@ -3559,8 +3559,8 @@ class ChessGame {
     this.selectedSq = null;
     this.possibleMoves = [];
 
-    // 착수음 재생 — fenBefore로 board 복원 (state.board 제거 후)
-    playMoveSound(move, parseFenBoard((state.fenBefore||'').split(' ')[0]) || null, state.turn);
+    // 착수음 재생 — histState 전달로 fenBefore/captured 정확히 활용
+    playMoveSound(move, parseFenBoard((state.fenBefore||'').split(' ')[0]) || null, state.turn, state);
 
     this.renderBoard();
     this.renderMoveList();
@@ -3623,7 +3623,7 @@ class ChessGame {
       if (moveIdx < line.length - 1) {
         this.currentVariation.moveIdx++;
         const s = line[this.currentVariation.moveIdx];
-        playMoveSound(s.move, s.board || null, s.turn);
+        playMoveSound(s.move, s.board || null, s.turn, s);
         this._restoreVariationState(); return;
       }
       return;
@@ -3631,7 +3631,7 @@ class ChessGame {
     if (this.historyIndex < this.history.length - 1) {
       this.historyIndex++;
       const s = this.history[this.historyIndex];
-      if (s) playMoveSound(s.move, s.board || null, s.turn);
+      if (s) playMoveSound(s.move, s.board || null, s.turn, s);
       this._restoreMainState();
     }
   }
@@ -4099,7 +4099,7 @@ class ChessGame {
     this.selectedSq = null;
     this.possibleMoves = [];
 
-    playMoveSound(move, varState.board || null, varState.turn);
+    playMoveSound(move, parseFenBoard((varState.fenBefore||'').split(' ')[0]) || null, varState.turn, varState);
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
@@ -4162,7 +4162,7 @@ class ChessGame {
     this.selectedSq = null;
     this.possibleMoves = [];
 
-    playMoveSound(move, varState.board || null, varState.turn);
+    playMoveSound(move, parseFenBoard((varState.fenBefore||'').split(' ')[0]) || null, varState.turn, varState);
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
@@ -4205,6 +4205,7 @@ class ChessGame {
     const emFenAfter  = boardToFen(boardAfter, this.turn==='w'?'b':'w', castAfter, epAfter, this.halfMove+1, fmAfter);
     lineData.extraMoves.push({
       san, move, turn: this.turn,
+      captured: this.board[move.to[0]][move.to[1]] || (move.enPassant ? 'ep' : null),
       fenBefore: emFenBefore, fenAfter: emFenAfter,
       castAfter, epAfter, fmAfter,
       halfMove: this.halfMove, fullMove: this.fullMove,
@@ -4225,7 +4226,7 @@ class ChessGame {
 
     // 방금 push한 extraMove에서 착수 전 board/turn 가져오기
     const em = lineData.extraMoves[lineData.extraMoves.length - 1];
-    playMoveSound(move, em.board || null, em.turn);
+    playMoveSound(move, parseFenBoard((em.fenBefore||'').split(' ')[0]) || null, em.turn, em);
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
@@ -5761,21 +5762,79 @@ function _playSound(type) {
 }
 
 // move 객체와 착수 전 보드/턴을 받아 적절한 사운드 재생
-function playMoveSound(move, boardBefore, turn) {
+// histState: history 레코드 (fenBefore/fenAfter/castling/captured 포함) — boardBefore null 시 FEN 복원
+function playMoveSound(move, boardBefore, turn, histState) {
   if (_soundMuted || !move) return;
-  // boardBefore가 null일 수 있음 (history.board 제거 후) — 안전하게 처리
-  if (!boardBefore) { _playSound(move.castle ? 'castle' : move.enPassant ? 'capture' : 'move'); return; }
-  const boardAfter = applyMoveToBoard(boardBefore.map(r=>[...r]), move, turn);
-  const enemy = turn === 'w' ? 'b' : 'w';
-  const inCheck = isInCheck(boardAfter, enemy);
-  const noMoves = getAllLegalMoves(boardAfter, enemy, {wK:true,wQ:true,bK:true,bQ:true}, null).length === 0;
 
-  if (inCheck && noMoves)                                        _playSound('checkmate');
-  else if (!inCheck && noMoves)                                  _playSound('stalemate');
-  else if (inCheck)                                              _playSound('check');
-  else if (move.castle)                                          _playSound('castle');
-  else if (boardBefore[move.to[0]][move.to[1]] || move.enPassant) _playSound('capture');
-  else                                                           _playSound('move');
+  // ── 1. boardBefore 복원 ──────────────────────────────────────
+  let board = boardBefore;
+  let castlingBefore = { wK:true, wQ:true, bK:true, bQ:true };
+  let epBefore = null;
+  if (!board && histState && histState.fenBefore) {
+    const fp = histState.fenBefore.split(' ');
+    board          = parseFenBoard(fp[0]);
+    castlingBefore = parseFenCastling(fp[2] || '-');
+    epBefore       = parseFenEP(fp[3] || '-');
+  } else if (board && histState && histState.fenBefore) {
+    // board는 있지만 castling/ep 정보도 fenBefore에서 보완
+    const fp = histState.fenBefore.split(' ');
+    castlingBefore = parseFenCastling(fp[2] || '-');
+    epBefore       = parseFenEP(fp[3] || '-');
+  }
+
+  // ── 2. 캡처 여부 판단 ────────────────────────────────────────
+  // 우선순위: move.enPassant > board[to] > histState.captured
+  const isCapture = !!(
+    move.enPassant ||
+    (board && board[move.to[0]][move.to[1]]) ||
+    (histState && histState.captured)
+  );
+
+  // ── 3. board가 있으면 정밀 판단 (check/checkmate/stalemate) ──
+  if (board) {
+    const boardAfter = applyMoveToBoard(board.map(r=>[...r]), move, turn);
+    const enemy = turn === 'w' ? 'b' : 'w';
+    const inCheck = isInCheck(boardAfter, enemy);
+
+    const castAfter = { ...castlingBefore };
+    if (board[move.from[0]][move.from[1]] === `${turn}K`) {
+      if (turn === 'w') { castAfter.wK = false; castAfter.wQ = false; }
+      else              { castAfter.bK = false; castAfter.bQ = false; }
+    }
+    if (move.from[0]===7&&move.from[1]===7) castAfter.wK = false;
+    if (move.from[0]===7&&move.from[1]===0) castAfter.wQ = false;
+    if (move.from[0]===0&&move.from[1]===7) castAfter.bK = false;
+    if (move.from[0]===0&&move.from[1]===0) castAfter.bQ = false;
+    const epAfter = move.doublePush ? [move.to[0]-(turn==='w'?-1:1), move.to[1]] : null;
+    const noMoves = getAllLegalMoves(boardAfter, enemy, castAfter, epAfter).length === 0;
+
+    if      (inCheck && noMoves)  _playSound('checkmate');
+    else if (!inCheck && noMoves) _playSound('stalemate');
+    else if (inCheck)             _playSound('check');
+    else if (move.castle)         _playSound('castle');
+    else if (isCapture)           _playSound('capture');
+    else                          _playSound('move');
+    return;
+  }
+
+  // ── 4. board 복원 실패 → fenAfter로 check/checkmate/stalemate 판단 ──
+  if (histState && histState.fenAfter) {
+    const fp2 = histState.fenAfter.split(' ');
+    const boardAfter2 = parseFenBoard(fp2[0]);
+    const enemy = turn === 'w' ? 'b' : 'w';
+    if (boardAfter2) {
+      const inCheck2 = isInCheck(boardAfter2, enemy);
+      const cast2 = parseFenCastling(fp2[2] || '-');
+      const ep2   = parseFenEP(fp2[3] || '-');
+      const noMoves2 = getAllLegalMoves(boardAfter2, enemy, cast2, ep2).length === 0;
+      if      (inCheck2 && noMoves2)  { _playSound('checkmate'); return; }
+      else if (!inCheck2 && noMoves2) { _playSound('stalemate'); return; }
+      else if (inCheck2)              { _playSound('check');     return; }
+    }
+  }
+
+  // ── 5. 최후 fallback ─────────────────────────────────────────
+  _playSound(move.castle ? 'castle' : isCapture ? 'capture' : 'move');
 }
 
 function setupKeyboard() {
