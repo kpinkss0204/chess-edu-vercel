@@ -4577,7 +4577,11 @@ class ChessGame {
       states.push({
         board: boardAfter, turn: curTurn==='w'?'b':'w',
         castling: castAfter, enPassant: epAfter,
-        halfMove: curHM+1, fullMove: fmAfter, lastMove: matched
+        halfMove: curHM+1, fullMove: fmAfter, lastMove: matched,
+        // ★ 사운드 재생용: 착수 전 보드/턴/캡처 저장
+        boardBefore: curBoard.map(r=>[...r]),
+        turnBefore: curTurn,
+        captured: curBoard[matched.to[0]][matched.to[1]] || (matched.enPassant ? 'ep' : null),
       });
       curBoard = boardAfter;
       curTurn = curTurn==='w'?'b':'w';
@@ -4611,6 +4615,8 @@ class ChessGame {
       this.halfMove = st.halfMove;
       this.fullMove = st.fullMove;
       this.lastMove = st.lastMove;
+      // ★ 엔진라인 수 클릭 사운드 재생
+      playMoveSound(st.lastMove, st.boardBefore, st.turnBefore, st);
     } else {
       // 기준 포지션 복원
       this._applyHistState(histIdx);
