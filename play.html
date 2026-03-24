@@ -570,6 +570,9 @@ let _gameActive = false;
 let _firstMoveDone = false;          // 첫 수 여부 추적
 let _firstMoveTimer = null;          // 첫 수 10초 타이머
 let _disconnectRef = null;           // onDisconnect 참조
+let _heartbeatInt = null;            // 내 heartbeat 전송 인터벌
+let _oppHeartbeatInt = null;         // 상대 heartbeat 감시 인터벌
+let _oppLastSeen = null;             // 상대 마지막 heartbeat 시각
 
 function parseFen(fen) {
   const parts = fen.split(' ');
@@ -994,6 +997,7 @@ function cancelMatchmaking() {
   clearInterval(_searchInt);
   clearTimeout(_firstMoveTimer);
   cancelDisconnectLoss();
+  stopHeartbeat(_gameId, _myColor);
   if (_queueRef) { _queueRef.remove(); _queueRef = null; }
   showScreen('lobby');
 }
@@ -1035,6 +1039,9 @@ function joinGame(gameId, myColor, gameData) {
 
   // 수 수신
   _gameRef = _rtDb.ref('games/'+gameId);
+
+  // ── Heartbeat 시작 ──
+  startHeartbeat(gameId, myColor);
 
   // ── 접속 끊김 감지: 첫 수 후 나가면 패배 ──
   // 첫 수 전에는 무승부(위 타이머), 첫 수 후에는 패배
@@ -1135,12 +1142,58 @@ function cancelDisconnectLoss() {
   }
 }
 
+// ══════════════════════════════════════════
+// Heartbeat (상대 접속 감시)
+// ══════════════════════════════════════════
+function startHeartbeat(gameId, myColor) {
+  const oppColor = myColor === 'w' ? 'b' : 'w';
+  const myHbRef  = _rtDb.ref(`games/${gameId}/heartbeat/${myColor}`);
+  const oppHbRef = _rtDb.ref(`games/${gameId}/heartbeat/${oppColor}`);
+
+  // 내 heartbeat: 3초마다 현재 시각 기록
+  clearInterval(_heartbeatInt);
+  _heartbeatInt = setInterval(() => {
+    if (!_gameActive) return;
+    myHbRef.set(Date.now());
+  }, 3000);
+  myHbRef.set(Date.now()); // 즉시 1회
+
+  // 상대 heartbeat 감시: 상대 값이 바뀔 때마다 갱신
+  _oppLastSeen = Date.now();
+  oppHbRef.on('value', snap => {
+    if (snap.val()) _oppLastSeen = snap.val();
+  });
+
+  // 10초마다 상대가 살아있는지 체크
+  clearInterval(_oppHeartbeatInt);
+  _oppHeartbeatInt = setInterval(() => {
+    if (!_gameActive || !_firstMoveDone) return; // 첫 수 전엔 체크 안 함
+    const elapsed = Date.now() - _oppLastSeen;
+    if (elapsed > 10000) {
+      // 상대가 10초 이상 응답 없음 → 상대 패배(내 승리)
+      const status = oppColor === 'w' ? 'resign_w' : 'resign_b';
+      if (_gameRef) _gameRef.update({ status });
+    }
+  }, 3000);
+}
+
+function stopHeartbeat(gameId, myColor) {
+  clearInterval(_heartbeatInt);
+  clearInterval(_oppHeartbeatInt);
+  _heartbeatInt = null;
+  _oppHeartbeatInt = null;
+  if (gameId && myColor) {
+    _rtDb.ref(`games/${gameId}/heartbeat/${myColor}`).remove();
+  }
+}
+
 function endGame(status) {
   if (!_gameActive) return;
   _gameActive = false;
   clearInterval(_timerInt);
-  clearTimeout(_firstMoveTimer); // 첫 수 타이머 정리
-  cancelDisconnectLoss();        // 정상 종료이므로 disconnect 취소
+  clearTimeout(_firstMoveTimer);
+  cancelDisconnectLoss();
+  stopHeartbeat(_gameId, _myColor); // heartbeat 정리
   if (_gameRef) _gameRef.off();
   playSound('over');
 
