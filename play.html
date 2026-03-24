@@ -42,7 +42,7 @@ body {
   font-family: var(--font-main);
   background: var(--bg-primary);
   color: var(--text-primary);
-  display: flex;
+  display: block;
   height: 100vh;
 }
 
@@ -98,7 +98,8 @@ body {
 
 /* ── 메인 레이아웃 ── */
 #main {
-  flex: 1; display: flex; align-items: center; justify-content: center;
+  width: 100vw; height: 100vh;
+  display: flex; align-items: center; justify-content: center;
   overflow: hidden; position: relative;
 }
 
@@ -197,7 +198,7 @@ body {
 }
 
 .player-bar {
-  width: 100%; max-width: 480px;
+  width: 100%; max-width: min(560px, calc(100vw - 24px));
   display: flex; align-items: center; justify-content: space-between;
   background: var(--bg-secondary); border: 1px solid var(--border);
   border-radius: 12px; padding: 10px 16px;
@@ -222,7 +223,7 @@ body {
 
 /* ── 체스보드 ── */
 #play-board-wrap {
-  width: 100%; max-width: 480px;
+  width: 100%; max-width: min(560px, calc(100vw - 24px));
   aspect-ratio: 1; position: relative;
 }
 #play-board {
@@ -278,7 +279,8 @@ body {
 
 /* ── 하단 버튼 ── */
 .play-actions {
-  display: flex; gap: 8px; width: 100%; max-width: 480px;
+  display: flex; gap: 8px;
+  width: 100%; max-width: min(560px, calc(100vw - 24px));
 }
 .btn-resign {
   flex: 1; padding: 10px;
@@ -379,53 +381,6 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ══════════ 모바일 최적화 ══════════ */
-@media (max-width: 768px) {
-  /* 사이드바 완전 숨김 */
-  #sidebar {
-    display: none !important;
-  }
-
-  body {
-    display: block !important;
-  }
-
-  #main {
-    width: 100vw !important;
-    height: 100vh !important;
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-  }
-
-  #screen-playing {
-    padding: 6px !important;
-    gap: 6px !important;
-    width: 100vw !important;
-    box-sizing: border-box;
-  }
-
-  #play-board-wrap {
-    max-width: 100vw !important;
-    width: calc(100vw - 12px) !important;
-  }
-
-  .player-bar {
-    max-width: 100% !important;
-    width: calc(100vw - 12px) !important;
-    padding: 8px 12px !important;
-  }
-
-  .play-actions {
-    max-width: 100% !important;
-    width: calc(100vw - 12px) !important;
-  }
-
-  .sq {
-    font-size: clamp(20px, 11vw, 52px);
-  }
-}
-
 /* ── 토스트 ── */
 #toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -439,47 +394,6 @@ body {
 </style>
 </head>
 <body>
-
-<!-- SIDEBAR -->
-<nav id="sidebar">
-  <a class="sidebar-logo" href="/" title="홈">♟</a>
-  <div class="sidebar-nav">
-    <a class="sidebar-item" href="/" title="분석">
-      <div class="sidebar-icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z"/></svg>
-      </div>
-      <span class="sidebar-label">분석</span>
-    </a>
-    <div class="sidebar-item active" title="온라인 대국">
-      <div class="sidebar-icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-      </div>
-      <span class="sidebar-label">대국</span>
-    </div>
-  </div>
-  <div class="sidebar-footer">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;width:52px;">
-      <div class="sidebar-avatar" id="sidebar-avatar-letter">?</div>
-      <div class="sidebar-username" id="sidebar-username">...</div>
-    </div>
-    <a class="sidebar-item" href="/records.html" title="기록" style="text-decoration:none;">
-      <div class="sidebar-icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20ZM8 15V17H16V15H8ZM8 11V13H16V11H8Z"/></svg>
-      </div>
-      <span class="sidebar-label">기록</span>
-    </a>
-    <div class="sidebar-item logout-btn" title="로그아웃" onclick="handleLogout()">
-      <div class="sidebar-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-          <polyline points="16 17 21 12 16 7"/>
-          <line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-      </div>
-      <span class="sidebar-label">로그아웃</span>
-    </div>
-  </div>
-</nav>
 
 <!-- MAIN -->
 <div id="main">
@@ -521,7 +435,7 @@ body {
   <div id="screen-playing" style="display:none;flex-direction:column;align-items:center;gap:10px;">
 
     <!-- 상대방 바 -->
-    <div class="player-bar" style="max-width:480px;width:100%;">
+    <div class="player-bar" style="width:100%;">
       <div class="player-info-wrap">
         <div class="p-avatar" id="opp-avatar-el">?</div>
         <div>
@@ -539,7 +453,7 @@ body {
     </div>
 
     <!-- 내 바 -->
-    <div class="player-bar my-bar" style="max-width:480px;width:100%;">
+    <div class="player-bar my-bar" style="width:100%;">
       <div class="player-info-wrap">
         <div class="p-avatar me" id="my-avatar-el">?</div>
         <div>
@@ -550,7 +464,7 @@ body {
       <div class="p-timer active" id="my-timer">10:00</div>
     </div>
 
-    <div class="play-actions" style="max-width:480px;">
+    <div class="play-actions">
       <button class="btn-draw" id="btn-draw" onclick="offerDraw()">½ 무승부 제안</button>
       <button class="btn-resign" onclick="resignGame()">⚑ 기권</button>
     </div>
