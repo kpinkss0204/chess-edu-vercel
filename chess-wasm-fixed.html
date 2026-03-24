@@ -1408,7 +1408,12 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       <div class="ctrl-spacer"></div>
       <div class="eval-score" id="eval-score" title="엔진 평가">0.0</div>
       <button class="ctrl-btn" onclick="game.flipBoard()" title="보드 뒤집기 (F)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 21H2V9H7.5V7L11.5 11L7.5 15V13H4V19H7.5V21ZM22 15H16.5V13L12.5 17L16.5 21V19H22V15ZM22 3H11V5H22V3ZM13 7H11V9H13V7ZM15 7H13V9H15V7Z"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="17 1 21 5 17 9"/>
+          <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <polyline points="7 23 3 19 7 15"/>
+          <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg>
       </button>
       <button class="ctrl-btn" onclick="game.resetBoard()" title="초기화">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
