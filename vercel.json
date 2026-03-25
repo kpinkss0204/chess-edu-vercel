@@ -1,6 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/groq", "destination": "/api/groq.js" },
     { "source": "/", "destination": "/chess-wasm-fixed.html" }
   ]
 }
