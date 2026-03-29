@@ -169,12 +169,15 @@ function isValidFork(board, color, toPos, prevBoard) {
     if (t.piece[1] === 'K') return true; // 킹은 항상 위협
     // 명확한 가치 우위일 때만 인정 (등가 교환 수준 N↔B 등은 제외, 최소 150cp 차이)
     if (PIECE_VALUE[t.piece[1]] >= movedValue + 150) return true;
-    // 무방비 기물: 위협받는 기물(상대편)을 지켜주는 상대편 기물이 없는 경우
-    // defenders = 상대편(enemy) 기물이 t 칸을 지키는 수 (이동한 나이트 제외)
+    // 무방비 기물: 위협받는 기물을 지켜주는 상대편 기물이 없고,
+    // 잡으러 갔을 때 이득이어야 함 (나이트로 폰을 잡으러 가면 손해이므로 제외)
     const defenders = getAttackers(board, t.r, t.c, enemy).filter(
-      a => !(a.r === r && a.c === c) // 이동한 기물 자신은 방어자가 아님
+      a => !(a.r === r && a.c === c)
     );
-    return defenders.length === 0; // 방어자 없으면 무방비
+    if (defenders.length > 0) return false; // 방어받고 있으면 제외
+    // 무방비라도 잡으러 가면 손해인 경우 제외 (예: 나이트320으로 폰100 잡기)
+    if (PIECE_VALUE[t.piece[1]] < movedValue) return false;
+    return true; // 무방비이고 등가 이상의 기물
   });
 
   return hasRealThreat;
