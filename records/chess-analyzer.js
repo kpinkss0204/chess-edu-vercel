@@ -21,12 +21,12 @@
  *
  * 전술 이벤트(tacticEvent) 객체 형태:
  *   {
- *     type:     'fork' | 'pin' | 'oppBlunder',
+ *     type:     'fork' | 'pin' | 'oppBlunder' | 'oppFork',
  *     subtype:  'found' | 'missed',
  *     piece:    'N' | 'B' | ... (포크 기물, 핀/블런더는 ''),
  *     moveIdx:  number,    // 국면 배열 인덱스
  *     moveNum:  number,    // 체스 수 번호 (1수, 2수...)
- *     san:      string,    // 수 표기 (예: 'Nc6xd4')
+ *     san:      string,    // 수 표기
  *     color:    'w'|'b',   // 이동한 색상
  *     bestUci:  string     // 놓친 경우에만: SF 추천 최선수
  *   }
@@ -34,7 +34,7 @@
  * 의존성:
  *   - chess-engine.js   (parsePgnToStates, applyMoveToBoard, getAllLegal, ...)
  *   - chess-tactics.js  (isValidFork, detectPinCreated, doesBestMoveCreatePin)
- *   - chess-stockfish.js (analyzePosition, cpFor, cpToLabel, SF_MULTIPV, ...)
+ *   - chess-stockfish.js (analyzePosition, cpFor, cpToLabel, MISTAKE_CP, ...)
  *
  * 외부에 노출하는 주요 함수:
  *   analyzeGame(pgn, myColor, onProgress) → Promise<AnalysisResult>
@@ -46,14 +46,11 @@
  *     oppBlunderFound, oppBlunderMissed,
  *     checkmates,
  *     forkFound: {P,N,B,R,Q,K}, forkMissed: {P,N,B,R,Q,K},
+ *     oppForkCreated: {P,N,B,R,Q,K},
  *     pinFound, pinMissed,
  *     avgCpLoss,
  *     tacticEvents: TacticEvent[]
  *   }
- *
- * 설정 상수 (chess-stockfish.js에서 가져옴):
- *   FORK_CP_GAIN - 포크 기회 인정 최소 cp 이득
- *   PIN_CP_GAIN  - 핀 기회 인정 최소 cp 이득
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -73,17 +70,17 @@ async function analyzeGame(pgn, myColor, onProgress) {
   const states = parsePgnToStates(pgn);
 
   const result = {
-    totalMoves:       states.length - 1,
-    myBlunders:       0, myMistakes:   0, myInaccuracies: 0,
-    oppBlunders:      0, oppMistakes:  0,
-    oppBlunderFound:  0, oppBlunderMissed: 0,
-    checkmates:       0,
-    forkFound:        { P:0, N:0, B:0, R:0, Q:0, K:0 },
-    forkMissed:       { P:0, N:0, B:0, R:0, Q:0, K:0 },
-    oppForkCreated:   { P:0, N:0, B:0, R:0, Q:0, K:0 }, // 상대가 만든 포크
-    pinFound:         0, pinMissed: 0,
-    myCpSum:          0, myMoveCount: 0,
-    tacticEvents:     []
+    totalMoves:      states.length - 1,
+    myBlunders:      0, myMistakes:      0, myInaccuracies: 0,
+    oppBlunders:     0, oppMistakes:     0,
+    oppBlunderFound: 0, oppBlunderMissed: 0,
+    checkmates:      0,
+    forkFound:       { P:0, N:0, B:0, R:0, Q:0, K:0 },
+    forkMissed:      { P:0, N:0, B:0, R:0, Q:0, K:0 },
+    oppForkCreated:  { P:0, N:0, B:0, R:0, Q:0, K:0 },
+    pinFound:        0, pinMissed: 0,
+    myCpSum:         0, myMoveCount: 0,
+    tacticEvents:    []
   };
 
   // ── Step 1: 전체 포지션 Stockfish 분석 ────────────────────────────────────
@@ -95,14 +92,14 @@ async function analyzeGame(pgn, myColor, onProgress) {
 
   // ── Step 2: 수별 분석 ─────────────────────────────────────────────────────
   for (let i = 1; i < states.length; i++) {
-    const state  = states[i];
-    const prev   = states[i - 1];
-    const move   = state.move;
+    const state = states[i];
+    const prev  = states[i - 1];
+    const move  = state.move;
     if (!move) continue;
 
-    const mover  = prev.turn;
-    const isMe   = mover === myColor;
-    const enemy  = enemyColor(mover);
+    const mover = prev.turn;
+    const isMe  = mover === myColor;
+    const enemy = enemyColor(mover);
 
     // ── 체크메이트 ──────────────────────────────────────────────────────────
     if (isMe && isInCheck(state.board, enemy)) {
@@ -145,12 +142,9 @@ async function analyzeGame(pgn, myColor, onProgress) {
       }
     }
 
-    // ── 상대 수: 포크 생성 감지 (상대가 포크를 뒀는지) ───────────────────────
+    // ── 상대 수: 포크 생성 감지 ─────────────────────────────────────────────
     if (!isMe) {
       const movedPT_opp = prev.board[move.from[0]][move.from[1]]?.[1] || 'P';
-      // oppFork도 Stockfish 기준으로 실질적 이득이 있는 포크만 인정
-      // loss = 이 수를 둔 후 mover(상대) 입장에서의 cp 이득
-      // 상대가 FORK_CP_GAIN 이상 이득을 봤고 포크 조건도 충족할 때만 카운트
       if (loss >= FORK_CP_GAIN && isValidFork(state.board, mover, move.to, prev.board)) {
         result.oppForkCreated[movedPT_opp] = (result.oppForkCreated[movedPT_opp] || 0) + 1;
         result.tacticEvents.push(_makeTacticEvent('oppFork', 'found', movedPT_opp, i, states, mover));
@@ -158,13 +152,14 @@ async function analyzeGame(pgn, myColor, onProgress) {
       continue;
     }
 
-    // ── 포크 / 핀 (내 수일 때만) ────────────────────────────────────────────
-    const sfBest   = ana[i-1].bestmove;
+    // ── 내 수: 포크 / 핀 감지 ───────────────────────────────────────────────
+    const sfBest    = ana[i-1].bestmove;
     const actualUci = moveToUci(move);
-    const movedPT  = prev.board[move.from[0]][move.from[1]]?.[1] || 'P';
+    const movedPT   = prev.board[move.from[0]][move.from[1]]?.[1] || 'P';
 
     // ── 포크 감지 ──────────────────────────────────────────────────────────
-    // 찾은 포크: 실제 둔 수가 정교한 포크 조건 충족
+
+    // 찾은 포크: 실제 둔 수가 포크 조건 충족
     if (isValidFork(state.board, mover, move.to, prev.board)) {
       result.forkFound[movedPT] = (result.forkFound[movedPT] || 0) + 1;
       result.tacticEvents.push(_makeTacticEvent('fork', 'found', movedPT, i, states, mover));
@@ -172,8 +167,10 @@ async function analyzeGame(pgn, myColor, onProgress) {
 
     // 놓친 포크: SF 최선수가 포크이고 내가 다른 수를 뒀으며 손실이 임계값 이상
     if (sfBest && sfBest !== actualUci && sfBest !== '(none)' && loss >= FORK_CP_GAIN) {
-      const sfPT  = prev.board[8 - parseInt(sfBest[1])][sfBest.charCodeAt(0) - 97]?.[1] || 'P';
-      const sfMov = uciToMoveObj(sfBest, prev.board, prev.turn, prev.castling, prev.enPassant);
+      const sfFromR = 8 - parseInt(sfBest[1]);
+      const sfFromC = sfBest.charCodeAt(0) - 97;
+      const sfPT    = prev.board[sfFromR]?.[sfFromC]?.[1] || 'P';
+      const sfMov   = uciToMoveObj(sfBest, prev.board, prev.turn, prev.castling, prev.enPassant);
       if (sfMov) {
         const sfBoard = applyMoveToBoard(prev.board, sfMov, mover);
         const sfTo    = [8 - parseInt(sfBest[3]), sfBest.charCodeAt(2) - 97];
@@ -185,7 +182,8 @@ async function analyzeGame(pgn, myColor, onProgress) {
     }
 
     // ── 핀 감지 ────────────────────────────────────────────────────────────
-    // 찾은 핀: 이 수가 실제로 핀을 만들었는지 정교하게 판정
+
+    // 찾은 핀: 이 수가 실제로 핀을 만들었는지 판정
     if (detectPinCreated(prev.board, state.board, move, mover)) {
       result.pinFound++;
       result.tacticEvents.push(_makeTacticEvent('pin', 'found', '', i, states, mover));
@@ -193,9 +191,25 @@ async function analyzeGame(pgn, myColor, onProgress) {
 
     // 놓친 핀: SF 최선수가 핀을 만들었고 내가 다른 수를 뒀을 때
     if (sfBest && sfBest !== actualUci && sfBest !== '(none)' && loss >= PIN_CP_GAIN) {
-      if (doesBestMoveCreatePin(prev.board, sfBest, mover, prev)) {
-        result.pinMissed++;
-        result.tacticEvents.push(_makeTacticEvent('pin', 'missed', '', i, states, mover, sfBest));
+      // ── [수정] SF 최선수가 슬라이딩 기물(B/R/Q) 이동일 때만 핀 검사 진입 ──
+      // 비슬라이딩 기물이 핀을 만드는 경우(발견 핀)는 doesBestMoveCreatePin 내부에서
+      // 처리되지만, 오프닝처럼 cp 차이가 전술이 아닌 전략적 이유인 경우
+      // 불필요하게 doesBestMoveCreatePin을 호출하는 것을 사전에 걸러냄.
+      // 비슬라이딩 기물도 발견 핀을 만들 수 있으므로 완전히 제외하지는 않되,
+      // 슬라이딩 기물이 아닌 경우 핀 생성 가능성이 훨씬 낮다는 점을 이용해
+      // 추가적인 가드를 더 적용한다.
+      const sfFromR    = 8 - parseInt(sfBest[1]);
+      const sfFromC    = sfBest.charCodeAt(0) - 97;
+      const sfPieceType = prev.board[sfFromR]?.[sfFromC]?.[1];
+
+      // 슬라이딩 기물이거나 발견 핀 가능성이 있는 경우에만 진입
+      // (슬라이딩 기물: B/R/Q — 직접 핀 라인 생성)
+      // (비슬라이딩 기물: doesBestMoveCreatePin 내부에서 발견 핀 경로로 처리)
+      if (sfPieceType) {
+        if (doesBestMoveCreatePin(prev.board, sfBest, mover, prev)) {
+          result.pinMissed++;
+          result.tacticEvents.push(_makeTacticEvent('pin', 'missed', '', i, states, mover, sfBest));
+        }
       }
     }
   }
@@ -208,8 +222,17 @@ async function analyzeGame(pgn, myColor, onProgress) {
 }
 
 // ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
+
 /**
  * 전술 이벤트 객체 생성
+ * @param {string} type
+ * @param {string} subtype
+ * @param {string} piece
+ * @param {number} stateIdx
+ * @param {Array}  states
+ * @param {string} color
+ * @param {string} bestUci
+ * @returns {Object}
  */
 function _makeTacticEvent(type, subtype, piece, stateIdx, states, color, bestUci = '') {
   const s = states[stateIdx];
