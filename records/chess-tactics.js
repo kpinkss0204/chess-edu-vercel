@@ -1,120 +1,76 @@
 /**
  * chess-tactics.js
  * ─────────────────────────────────────────────────────────────────────────────
- * 전술 감지 모듈 (포크 / 절대 핀 / 상대 블런더 포착)
+ * 전술 감지 모듈 (포크 / 절대 핀)
  *
- * 담당 역할:
- *   - 포크(Fork) 감지: 나이트뿐 아니라 모든 기물에 대해 정교하게 판정
- *   - 절대 핀(Absolute Pin) 감지: 이동 원인으로 인한 핀만 인정
- *   - 상대 블런더 포착(Blunder Catch) 판정
+ * ── 설계 원칙 ──────────────────────────────────────────────────────────────
  *
- * ── 포크 정교화 설명 ────────────────────────────────────────────────────────
- * 기존 문제: 기물이 이동 후 우연히 두 개를 바라보기만 해도 포크로 집계
+ * 핀과 포크를 "카운트 증감 비교" 방식이 아닌,
+ * 체스 정의에서 직접 출발하는 기하학적 방식으로 감지합니다.
  *
- * 개선된 기준 (모두 충족해야 포크):
- *   1. 이동한 기물이 상대 기물 2개 이상을 동시에 공격
- *   2. 공격받는 기물 중 최소 하나가 "실질적 위협" 상태여야 함
- *      - 공격받는 기물이 이동한 기물보다 가치가 높거나 (등가 교환 이상)
- *      - 또는 해당 기물이 보호받지 못하는 상태 (무방비)
- *   3. 이동한 기물 자체가 상대에게 즉시 잡히지 않아야 함
- *      (잡히더라도 교환 후 이득이면 허용 — SEE 방식 간략화)
- *   4. 체크 중에 발생한 포크는 별도 검증 없이 인정
- *      (체크포크는 명백한 전술)
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * [포크 정의]
+ *   하나의 기물이 이동 후 상대 기물 2개 이상을 동시에 공격하며,
+ *   그 공격이 실질적 위협인 상태.
  *
- * ── 핀 정교화 설명 ──────────────────────────────────────────────────────────
- * 기존 문제 1: 체크/기물 교환으로 우연히 핀 카운트가 늘어도 포착
- * 기존 문제 2: 슬라이딩 기물 분기에서 piecesInBetween === 1 조건만으로
- *              판단하여 중간 기물이 아군이거나 실제 핀이 아닌 경우도 인정
+ * [포크 감지 조건 - 모두 충족해야 함]
+ *   1. 이동 후 해당 기물이 실질적 위협 대상 ≥ 2개
+ *   2. 체크포크가 아닌 경우: 이동 기물이 즉시 잡히지 않는 안전한 자리
+ *   3. [핵심] 이동 전 출발지에서 이미 같은 대상들을 위협하지 않았어야 함
+ *      → "이 수 덕분에 새로 생긴 포크"만 카운트
  *
- * 개선된 기준:
- *   1. 수를 두기 전후로 핀 개수 비교 (기존과 동일)
- *   2. 슬라이딩 기물 분기:
- *      a. 중간 기물이 적 기물인지 확인 (아군이면 핀 아님)
- *      b. 해당 기물 제거 시 킹이 실제로 체크 상태인지 재검증 (절대 핀 확인)
- *   3. 발견 핀(비슬라이딩) 분기:
- *      이동 후 보드가 체크 상태이면 false 반환
- *      (exd5+ 같이 체크가 주목적인 수에서 우연히 발생하는 핀 카운트 증가 차단)
- *   4. doesBestMoveCreatePin: SF 최선수가 체크를 거는 수이면 핀 생성 수로
- *      판정하지 않음 (체크 수 오탐 이중 방어)
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * [핀 정의]
+ *   공격자(슬라이딩 기물 B/R/Q)의 공격 라인 위에 적 기물이 정확히 1개 있고,
+ *   그 기물을 제거하면 적 킹이 공격에 노출되는 상태.
+ *
+ * [핀 감지 경로 A - 직접 핀]
+ *   이동한 기물이 B/R/Q이고,
+ *   이동 후 해당 기물 → 적 기물 → 적 킹이 일직선으로 정렬되는 경우.
+ *   단, 이동 전 출발지에서 이미 같은 핀이 있었으면 제외.
+ *   단, 이동 후 체크 상태이면 제외.
+ *
+ * [핀 감지 경로 B - 발견 핀]
+ *   이동한 기물이 자리를 비워 뒤에 있던 아군 B/R/Q의 라인이 열리며
+ *   적 기물이 새로 핀되는 경우.
+ *   단, 이동 후 체크 상태이면 제외.
  *
  * 의존성: chess-engine.js (전역 함수들 사용)
  *
  * 외부에 노출하는 주요 함수:
- *   PIECE_VALUE                                          → {P:100, N:320, ...}
- *   isValidFork(board, color, toPos, prevBoard)          → boolean
- *   detectPinCreated(prevBoard, nextBoard, move, color)  → boolean
- *   countAbsolutePins(board, color)                      → number
+ *   PIECE_VALUE
+ *   isValidFork(board, color, toPos, prevBoard)               → boolean
+ *   detectPinCreated(prevBoard, nextBoard, move, color)       → boolean
  *   doesBestMoveCreatePin(prevBoard, sfBestUci, color, prevState) → boolean
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 'use strict';
 
-// ── 기물 가치표 (센티폰 기준) ─────────────────────────────────────────────
 const PIECE_VALUE = { P:100, N:320, B:330, R:500, Q:900, K:20000 };
 
-/**
- * 특정 칸이 해당 색 기물에게 공격받고 있는지 확인
- * @param {Array} board
- * @param {number} r
- * @param {number} c
- * @param {string} attackerColor - 공격자 색상 ('w'|'b')
- * @returns {boolean}
- */
+// ── 내부 유틸 ─────────────────────────────────────────────────────────────────
+
 function isSquareAttackedBy(board, r, c, attackerColor) {
   for (let ar = 0; ar < 8; ar++) for (let ac = 0; ac < 8; ac++) {
     const p = board[ar][ac];
     if (!p || p[0] !== attackerColor) continue;
     const ms = pseudoMoves(board, ar, ac, {wK:false,wQ:false,bK:false,bQ:false}, null);
-    if (ms.some(m => m.to[0]===r && m.to[1]===c)) return true;
+    if (ms.some(m => m.to[0] === r && m.to[1] === c)) return true;
   }
   return false;
 }
 
-/**
- * 특정 칸을 공격하는 기물 목록 반환
- * @param {Array} board
- * @param {number} r
- * @param {number} c
- * @param {string} attackerColor
- * @returns {Array} [{r, c, piece}]
- */
 function getAttackers(board, r, c, attackerColor) {
-  const attackers = [];
+  const result = [];
   for (let ar = 0; ar < 8; ar++) for (let ac = 0; ac < 8; ac++) {
     const p = board[ar][ac];
     if (!p || p[0] !== attackerColor) continue;
     const ms = pseudoMoves(board, ar, ac, {wK:false,wQ:false,bK:false,bQ:false}, null);
-    if (ms.some(m => m.to[0]===r && m.to[1]===c))
-      attackers.push({ r:ar, c:ac, piece:p });
+    if (ms.some(m => m.to[0] === r && m.to[1] === c))
+      result.push({ r:ar, c:ac, piece:p });
   }
-  return attackers;
-}
-
-/**
- * 간략 정적 교환 평가 (SEE)
- * 해당 칸에서 교환이 일어날 때 공격자 color 입장에서의 이득/손해 추정
- * @param {Array}  board
- * @param {number} r
- * @param {number} c             - 교환 발생 위치
- * @param {string} color         - 먼저 잡는 색상
- * @param {string} attackerPiece - 먼저 잡는 기물 (예: 'wN')
- * @returns {number} 양수 = 이득, 음수 = 손해
- */
-function simpleSEE(board, r, c, color, attackerPiece) {
-  const target = board[r][c];
-  if (!target) return 0;
-  const gain    = PIECE_VALUE[target[1]];
-  const myValue = PIECE_VALUE[attackerPiece[1]];
-  const boardAfter = board.map(row => [...row]);
-  boardAfter[r][c] = attackerPiece;
-  const enemy = enemyColor(color);
-  const recapturers = getAttackers(boardAfter, r, c, enemy).filter(a => a.piece !== attackerPiece);
-  if (recapturers.length === 0) return gain;
-  const minRecapturer = recapturers.reduce((a, b) =>
-    PIECE_VALUE[a.piece[1]] < PIECE_VALUE[b.piece[1]] ? a : b
-  );
-  return gain - Math.max(0, PIECE_VALUE[minRecapturer.piece[1]] > myValue ? myValue : 0);
+  return result;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -122,15 +78,48 @@ function simpleSEE(board, r, c, color, attackerPiece) {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * 포크 유효성 검증 (정교한 버전)
+ * 보드의 [r,c]에 있는 기물이 실질적으로 위협하는 적 기물 목록을 반환.
  *
- * 조건:
- *   1. 이동 기물이 상대 기물 2개 이상 동시 공격
- *   2. 공격받는 기물들 중 최소 하나가 "실질적 위협"
- *      a. 킹을 공격 중이면 무조건 인정 (체크포크)
- *      b. 공격받는 기물이 이동 기물보다 150cp 이상 가치가 높음
- *      c. 공격받는 기물이 무방비이고 등가 이상의 기물
- *   3. 이동 기물이 즉시 잡힐 수 있으면 불인정 (체크포크는 예외)
+ * "실질적 위협" 기준:
+ *   - 킹이면 무조건
+ *   - 이동 기물보다 150cp 이상 비싼 기물이면 무조건
+ *   - 무방비(수비자 없음) + 이동 기물과 등가 이상이면 인정
+ */
+function _getRealThreats(board, r, c, color) {
+  const piece = board[r][c];
+  if (!piece || piece[0] !== color) return [];
+
+  const enemy      = enemyColor(color);
+  const movedValue = PIECE_VALUE[piece[1]];
+
+  const ps = pseudoMoves(board, r, c, {wK:false,wQ:false,bK:false,bQ:false}, null);
+  const threats = [];
+
+  for (const m of ps) {
+    const t = board[m.to[0]][m.to[1]];
+    if (!t || t[0] !== enemy) continue;
+
+    const tVal = PIECE_VALUE[t[1]];
+
+    if (t[1] === 'K') {
+      threats.push({ r:m.to[0], c:m.to[1], piece:t });
+    } else if (tVal >= movedValue + 150) {
+      threats.push({ r:m.to[0], c:m.to[1], piece:t });
+    } else {
+      // 무방비 + 등가 이상
+      const defenders = getAttackers(board, m.to[0], m.to[1], enemy)
+        .filter(a => !(a.r === r && a.c === c));
+      if (defenders.length === 0 && tVal >= movedValue) {
+        threats.push({ r:m.to[0], c:m.to[1], piece:t });
+      }
+    }
+  }
+
+  return threats;
+}
+
+/**
+ * 포크 유효성 검증
  *
  * @param {Array}  board     - 이동 후 보드
  * @param {string} color     - 이동한 쪽 색상
@@ -139,42 +128,37 @@ function simpleSEE(board, r, c, color, attackerPiece) {
  * @returns {boolean}
  */
 function isValidFork(board, color, toPos, prevBoard) {
-  const [r, c] = toPos;
-  const movedPiece = board[r][c];
-  if (!movedPiece) return false;
+  const [tr, tc] = toPos;
+  if (!board[tr][tc]) return false;
 
-  const enemy      = enemyColor(color);
-  const movedValue = PIECE_VALUE[movedPiece[1]];
+  const threatsAfter = _getRealThreats(board, tr, tc, color);
+  if (threatsAfter.length < 2) return false;
 
-  // 1. 이동 기물이 공격하는 상대 기물 목록 수집
-  const ps = pseudoMoves(board, r, c, {wK:false,wQ:false,bK:false,bQ:false}, null);
-  const threatened = [];
-  for (const m of ps) {
-    const t = board[m.to[0]][m.to[1]];
-    if (t && t[0] === enemy) threatened.push({ r:m.to[0], c:m.to[1], piece:t });
+  const isCheckFork = threatsAfter.some(t => t.piece[1] === 'K');
+
+  // 체크포크가 아닌 경우: 이동 기물이 즉시 잡힐 수 있으면 불인정
+  if (!isCheckFork && isSquareAttackedBy(board, tr, tc, enemyColor(color))) return false;
+
+  // [핵심] 이동 전 출발지에서 이미 같은 대상들을 위협했는지 확인
+  // → 이동 전 출발지 역추적
+  const piece = board[tr][tc];
+  let prevR = -1, prevC = -1;
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    if (r === tr && c === tc) continue;
+    if (prevBoard[r][c] === piece && board[r][c] !== piece) { prevR = r; prevC = c; break; }
+    if (prevR >= 0) break;
   }
-  if (threatened.length < 2) return false;
 
-  // 2. 체크포크 판정
-  const isCheckFork = threatened.some(t => t.piece[1] === 'K');
+  if (prevR >= 0) {
+    const threatsBefore = _getRealThreats(prevBoard, prevR, prevC, color);
+    const prevSet = new Set(threatsBefore.map(t => t.r + ',' + t.c));
 
-  // 3. 이동 기물이 즉시 잡힐 수 있으면 포크 불인정 (체크포크는 예외)
-  const isSafeSquare = !isSquareAttackedBy(board, r, c, enemy);
-  if (!isCheckFork && !isSafeSquare) return false;
+    // 이동 후 새로 위협받는 대상이 최소 1개 있어야 "새로운 포크"
+    const newThreats = threatsAfter.filter(t => !prevSet.has(t.r + ',' + t.c));
+    if (newThreats.length === 0) return false;
+  }
 
-  // 4. 위협받는 기물 중 하나라도 "실질적 위협"인지 확인
-  const hasRealThreat = threatened.some(t => {
-    if (t.piece[1] === 'K') return true;
-    if (PIECE_VALUE[t.piece[1]] >= movedValue + 150) return true;
-    const defenders = getAttackers(board, t.r, t.c, enemy).filter(
-      a => !(a.r === r && a.c === c)
-    );
-    if (defenders.length > 0) return false;
-    if (PIECE_VALUE[t.piece[1]] < movedValue) return false;
-    return true;
-  });
-
-  return hasRealThreat;
+  return true;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -182,128 +166,123 @@ function isValidFork(board, color, toPos, prevBoard) {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * 절대 핀 개수 계산
- * 적 기물을 제거했을 때 적 킹이 체크 상태인 경우만 카운트
+ * 보드에서 [r,c]의 슬라이딩 기물(B/R/Q)이 적 킹을 향한 라인 위에
+ * 절대 핀을 만들고 있는지 직접 기하학적으로 확인.
+ *
+ * 조건:
+ *   - [r,c]의 기물이 B/R/Q이어야 함
+ *   - 기물 → 킹 방향이 기물 종류에 맞아야 함 (B: 대각선, R: 직선, Q: 둘 다)
+ *   - 그 방향 라인 위에 적 기물이 정확히 1개 존재
+ *   - 그 기물 제거 시 적 킹이 체크 상태
  *
  * @param {Array}  board
- * @param {string} color - 핀을 건 쪽 색상 (상대 킹 기준)
- * @returns {number}
+ * @param {number} r
+ * @param {number} c
+ * @param {string} color - 슬라이딩 기물의 색상
+ * @returns {boolean}
  */
-function countAbsolutePins(board, color) {
-  const enemy = enemyColor(color);
-  let kr = -1, kc = -1;
-  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++)
-    if (board[r][c] === enemy + 'K') { kr = r; kc = c; }
-  if (kr < 0) return 0;
+function _isPinningFromSquare(board, r, c, color) {
+  const piece = board[r][c];
+  if (!piece || piece[0] !== color) return false;
+  const pt = piece[1];
+  if (!['B', 'R', 'Q'].includes(pt)) return false;
 
-  let pins = 0;
-  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-    const p = board[r][c];
-    if (!p || p[0] !== enemy || p[1] === 'K') continue;
-    const nb = board.map(row => [...row]);
-    nb[r][c] = null;
-    if (isInCheck(nb, enemy)) pins++;
+  const enemy = enemyColor(color);
+
+  // 적 킹 위치 탐색
+  let kr = -1, kc = -1;
+  for (let pr = 0; pr < 8; pr++) for (let pc = 0; pc < 8; pc++)
+    if (board[pr][pc] === enemy + 'K') { kr = pr; kc = pc; }
+  if (kr < 0) return false;
+
+  const directions = [];
+  if (pt === 'B' || pt === 'Q') directions.push([-1,-1],[-1,1],[1,-1],[1,1]);
+  if (pt === 'R' || pt === 'Q') directions.push([-1,0],[1,0],[0,-1],[0,1]);
+
+  for (const [dr, dc] of directions) {
+    let nr = r + dr, nc = c + dc;
+    let firstPiece = null;
+
+    while (isInBounds(nr, nc)) {
+      const sq = board[nr][nc];
+      if (sq) {
+        if (!firstPiece) {
+          // 첫 번째 기물
+          firstPiece = { r:nr, c:nc, piece:sq };
+        } else {
+          // 두 번째 기물 — 킹이고 첫 번째가 적 기물이면 핀 후보
+          if (sq === enemy + 'K' && firstPiece.piece[0] === enemy) {
+            const test = board.map(row => [...row]);
+            test[firstPiece.r][firstPiece.c] = null;
+            if (isInCheck(test, enemy)) return true;
+          }
+          break;
+        }
+      }
+      nr += dr; nc += dc;
+    }
   }
-  return pins;
+  return false;
 }
 
 /**
- * 이동으로 인해 새로운 핀이 생성되었는지 판정 (정교한 버전)
+ * 이동으로 인해 새로운 절대 핀이 생성되었는지 판정.
  *
- * 슬라이딩 기물 분기 개선:
- *   - 중간 기물이 적 기물인지 확인 (아군 기물이면 핀 아님)
- *   - 해당 기물 제거 시 킹이 실제로 체크 상태인지 재검증
- *     → 형태적 조건(piecesInBetween===1)만으로 핀 인정하던 오탐 제거
+ * [경로 A - 직접 핀]
+ *   이동한 기물이 B/R/Q이고 이동 후 핀을 만들면서,
+ *   이동 전 출발지에서는 같은 핀이 없었던 경우.
  *
- * 발견 핀 분기 개선:
- *   - 이동 후 적 킹이 체크 상태이면 false 반환
- *     → 체크가 주목적인 수(exd5+ 등)에서 위치를 비울 때
- *       핀 카운트가 우연히 증가하는 오탐 제거
+ * [경로 B - 발견 핀]
+ *   이동한 기물이 자리를 비워 뒤의 아군 B/R/Q가 새로 핀을 만드는 경우.
  *
- * @param {Array}  prevBoard - 이동 전 보드
- * @param {Array}  nextBoard - 이동 후 보드
- * @param {Object} move      - 이동 객체 {from, to, ...}
+ * 공통 제외: 이동 후 적 킹이 체크 상태이면 false (체크가 주목적인 수)
+ *
+ * @param {Array}  prevBoard
+ * @param {Array}  nextBoard
+ * @param {Object} move      - {from:[r,c], to:[r,c], ...}
  * @param {string} color     - 이동한 쪽 색상
  * @returns {boolean}
  */
 function detectPinCreated(prevBoard, nextBoard, move, color) {
-  const enemy      = enemyColor(color);
-  const pinsBefore = countAbsolutePins(prevBoard, color);
-  const pinsAfter  = countAbsolutePins(nextBoard, color);
+  const [fr, fc] = move.from;
+  const [tr, tc] = move.to;
+  const enemy     = enemyColor(color);
 
-  if (pinsAfter <= pinsBefore) return false;
-
-  const [tr, tc]   = move.to;
-  const movedPiece = nextBoard[tr][tc];
-  if (!movedPiece) return false;
-
-  const pieceType     = movedPiece[1];
-  const isSlidingPiece = ['B', 'R', 'Q'].includes(pieceType);
-
-  // 적 킹 위치 탐색
-  let kr = -1, kc = -1;
-  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++)
-    if (nextBoard[r][c] === enemy + 'K') { kr = r; kc = c; }
-  if (kr < 0) return false;
-
-  if (isSlidingPiece) {
-    // 이동 기물 → 킹 방향 벡터
-    const dr = Math.sign(kr - tr), dc = Math.sign(kc - tc);
-    if (dr === 0 && dc === 0) return false;
-
-    // 기물 종류별 방향 제한
-    const isDiagonal = dr !== 0 && dc !== 0;
-    const isStraight = dr === 0 || dc === 0;
-    if (pieceType === 'B' && !isDiagonal) return false;
-    if (pieceType === 'R' && !isStraight)  return false;
-
-    // 이동 기물 → 킹 사이 순회하며 중간 기물 수집
-    let nr = tr + dr, nc = tc + dc;
-    let pinnedR = -1, pinnedC = -1, piecesInBetween = 0;
-    while (nr !== kr || nc !== kc) {
-      if (!isInBounds(nr, nc)) break;
-      if (nextBoard[nr][nc]) {
-        piecesInBetween++;
-        pinnedR = nr;
-        pinnedC = nc;
-      }
-      nr += dr; nc += dc;
-    }
-
-    if (piecesInBetween !== 1) return false;
-
-    // ── [수정] 중간 기물이 적 기물인지 확인 (아군이면 핀 성립 불가) ──
-    const pinnedPiece = nextBoard[pinnedR][pinnedC];
-    if (!pinnedPiece || pinnedPiece[0] !== enemy) return false;
-
-    // ── [수정] 절대 핀 재검증: 해당 기물 제거 시 킹이 체크여야 진짜 핀 ──
-    const testBoard = nextBoard.map(row => [...row]);
-    testBoard[pinnedR][pinnedC] = null;
-    return isInCheck(testBoard, enemy);
-  }
-
-  // 비슬라이딩 기물: 발견 핀(discovered pin) 가능성
-  // ── [수정] 이동 후 적 킹이 체크 상태이면 발견 핀으로 인정하지 않음 ──
-  // exd5+ 처럼 체크가 주목적인 수에서 기물이 자리를 비울 때
-  // 핀 카운트가 우연히 증가하는 오탐을 차단
+  // 이동 후 적 킹이 체크이면 핀 감지 제외
   if (isInCheck(nextBoard, enemy)) return false;
 
-  // 이동 전 위치를 비웠을 때 핀이 새로 생기는지 확인 (발견 핀)
-  const [fr, fc] = move.from;
-  const boardWithoutMover = prevBoard.map(row => [...row]);
-  boardWithoutMover[fr][fc] = null;
-  const pinsWithoutMover = countAbsolutePins(boardWithoutMover, color);
+  // ── 경로 A: 직접 핀 ──────────────────────────────────────────────────────
+  const movedPiece = nextBoard[tr][tc];
+  if (movedPiece && ['B','R','Q'].includes(movedPiece[1])) {
+    if (_isPinningFromSquare(nextBoard, tr, tc, color)) {
+      // 이동 전 출발지에서 이미 같은 핀이 존재했으면 새 핀이 아님
+      if (!_isPinningFromSquare(prevBoard, fr, fc, color)) {
+        return true;
+      }
+    }
+  }
 
-  return pinsWithoutMover > pinsBefore;
+  // ── 경로 B: 발견 핀 ──────────────────────────────────────────────────────
+  // fromPos를 비웠을 때 아군 슬라이딩 기물이 새로 핀을 만드는지 확인
+  const boardWithout = prevBoard.map(row => [...row]);
+  boardWithout[fr][fc] = null;
+
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    if (r === fr && c === fc) continue; // 이미 비운 자리
+    const p = boardWithout[r][c];
+    if (!p || p[0] !== color || !['B','R','Q'].includes(p[1])) continue;
+    // 이전 보드에서는 핀 없고, fromPos를 비운 후에는 핀 있으면 발견 핀
+    if (!_isPinningFromSquare(prevBoard, r, c, color) &&
+         _isPinningFromSquare(boardWithout, r, c, color)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
- * Stockfish 베스트무브가 핀을 만드는지 확인
- *
- * ── [수정] SF 최선수가 체크를 거는 수이면 핀 생성 수로 보지 않음 ──
- * 체크가 주목적인 수는 핀 놓침이 아님에도 detectPinCreated 경로에서
- * 핀 카운트 증가가 오탐을 유발할 수 있음.
- * detectPinCreated 내부 가드와 이중으로 방어.
+ * SF 최선수가 핀을 만드는지 확인
  *
  * @param {Array}  prevBoard
  * @param {string} sfBestUci
@@ -319,7 +298,7 @@ function doesBestMoveCreatePin(prevBoard, sfBestUci, color, prevState) {
 
   const sfBoard = applyMoveToBoard(prevState.board, sfMov, color);
 
-  // ── [수정] SF 최선수가 체크를 거는 수라면 핀 생성 수로 판정하지 않음 ──
+  // SF 최선수가 체크를 거는 수면 핀 생성 수로 보지 않음
   if (isInCheck(sfBoard, enemyColor(color))) return false;
 
   return detectPinCreated(prevState.board, sfBoard, sfMov, color);
