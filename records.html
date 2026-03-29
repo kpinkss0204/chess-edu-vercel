@@ -445,9 +445,7 @@ function updateControls(){
 // ════════════════════════════════════════
 let currentPieceStyle = 'cburnett';
 const LICHESS_PIECE_BASE = 'https://lichess1.org/assets/piece/';
-
 function pieceImg(piece) {
-  // piece: 'wK', 'bP' 등 → 'wK.svg', 'bP.svg' (대소문자 그대로)
   return LICHESS_PIECE_BASE + currentPieceStyle + '/' + piece[0] + piece[1].toUpperCase() + '.svg';
 }
 
@@ -465,9 +463,7 @@ function renderViewerBoard(){
     if(piece){
       const img=document.createElement('img');
       img.className='piece-img'+(piece[0]==='b'?' black-piece':'');
-      img.src=pieceImg(piece);
-      img.alt=piece;
-      img.draggable=false;
+      img.src=pieceImg(piece);img.alt=piece;img.draggable=false;
       sq.appendChild(img);
     }
     el.appendChild(sq);
@@ -500,7 +496,6 @@ let _statsGameDetails=[];  // 게임별 전술 상세 [{doc, tacticEvents}]
 
 async function renderStats(){
   const contentEl=document.getElementById('stats-content'),subEl=document.getElementById('stats-sub');
-  // _statsCache 히트: HTML만 재렌더 (_statsGameDetails는 이미 채워져 있음)
   if(_statsCache){renderStatsHTML(_statsCache);return;}
 
   if(!_sfReady){
@@ -512,16 +507,11 @@ async function renderStats(){
     }
   }
 
-  // docs 수집: orderBy 실패 시 fallback — snap을 하나만 사용해 중복 방지
   let docs=[];
   try{
     let snap=null;
-    try{
-      snap=await _fbDb.collection('game_records').where('uid','==',_user.uid).orderBy('playedAt','desc').limit(50).get();
-    }catch(e){
-      snap=await _fbDb.collection('game_records').where('uid','==',_user.uid).limit(50).get();
-    }
-    // snap이 결정된 후 단 한 번만 push + 중복 id 차단
+    try{snap=await _fbDb.collection('game_records').where('uid','==',_user.uid).orderBy('playedAt','desc').limit(50).get();}
+    catch(e){snap=await _fbDb.collection('game_records').where('uid','==',_user.uid).limit(50).get();}
     const seenIds=new Set();
     snap.forEach(d=>{if(!seenIds.has(d.id)){seenIds.add(d.id);docs.push({id:d.id,...d.data()});}});
   }catch(e){contentEl.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div>불러오기 실패: ${e.message}</div></div>`;return;}
@@ -534,7 +524,7 @@ async function renderStats(){
   let sumMyBlunders=0,sumMyMistakes=0,sumMyInaccuracies=0;
   let sumOppBlunders=0,sumOppMistakes=0,sumOppBF=0,sumOppBM=0;
   let sumCheckmates=0,sumPinFound=0,sumPinMissed=0;
-  let sumForkFound={P:0,N:0,B:0,R:0,Q:0,K:0},sumForkMissed={P:0,N:0,B:0,R:0,Q:0,K:0};
+  let sumForkFound={P:0,N:0,B:0,R:0,Q:0,K:0},sumForkMissed={P:0,N:0,B:0,R:0,Q:0,K:0},sumOppForkCreated={P:0,N:0,B:0,R:0,Q:0,K:0};
   let sumCp=0,sumMoves=0;
   const total=docs.length;
   _statsGameDetails=[];
@@ -574,7 +564,7 @@ async function renderStats(){
         sumOppBF+=a.oppBlunderFound;sumOppBM+=a.oppBlunderMissed;
         sumCheckmates+=a.checkmates;sumPinFound+=a.pinFound;sumPinMissed+=a.pinMissed;
         sumCp+=a.myCpSum;sumMoves+=a.myMoveCount;totalMovesSum+=a.totalMoves;
-        for(const k of['P','N','B','R','Q','K']){sumForkFound[k]+=(a.forkFound[k]||0);sumForkMissed[k]+=(a.forkMissed[k]||0);}
+        for(const k of['P','N','B','R','Q','K']){sumForkFound[k]+=(a.forkFound[k]||0);sumForkMissed[k]+=(a.forkMissed[k]||0);sumOppForkCreated[k]+=(a.oppForkCreated?.[k]||0);}
         // 게임별 전술 상세 저장
         if(a.tacticEvents&&a.tacticEvents.length)_statsGameDetails.push({doc,tacticEvents:a.tacticEvents});
       }catch(e){console.warn('게임 분석 실패:',e);if(doc.moveCount)totalMovesSum+=doc.moveCount;}
@@ -590,7 +580,7 @@ async function renderStats(){
     oppBlunders:sumOppBlunders,oppMistakes:sumOppMistakes,
     oppBlunderFound:sumOppBF,oppBlunderMissed:sumOppBM,
     checkmates:sumCheckmates,
-    forkFound:sumForkFound,forkMissed:sumForkMissed,
+    forkFound:sumForkFound,forkMissed:sumForkMissed,oppForkCreated:sumOppForkCreated,
     pinFound:sumPinFound,pinMissed:sumPinMissed,
     avgCpLoss:sumMoves>0?Math.round(sumCp/sumMoves):0
   };
@@ -606,7 +596,7 @@ function openTacticModal(tacticType,tacticPiece,icon,name){
   const titleEl=document.getElementById('tmodal-title');
   const bodyEl=document.getElementById('tmodal-body');
 
-  const typeLabel={fork:'포크',pin:'절대 핀',oppBlunder:'상대 블런더 포착'}[tacticType]||tacticType;
+  const typeLabel={fork:'포크',oppFork:'상대 포크',pin:'절대 핀',oppBlunder:'상대 블런더 포착'}[tacticType]||tacticType;
   titleEl.innerHTML=`<span>${icon}</span> ${name} — ${typeLabel} 게임 목록`;
 
   // 해당 전술이 있는 게임만 필터
@@ -692,6 +682,10 @@ function renderStatsHTML(s){
   }
 
   const forkHtml=PIECES.map(p=>fvmRow(p.icon,p.name,'',s.forkFound[p.key]||0,s.forkMissed[p.key]||0,'fork',p.key)).join('');
+  const oppForkHtml=PIECES.map(p=>{
+    const cnt=s.oppForkCreated?.[p.key]||0;if(!cnt)return'';
+    return`<div class="fvm-row"><div class="fvm-piece-col"><div class="fvm-piece-icon">${p.icon}</div><div class="fvm-piece-name">${p.name}</div><div class="fvm-piece-total">${cnt}회</div></div><div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct missed">상대가 사용</span><div class="fvm-track"><div class="fvm-fill missed" style="width:100%"></div></div><span class="fvm-count">${cnt}</span></div></div></div>`;
+  }).join('');
   const pinHtml=fvmRow('📌','절대 핀','',s.pinFound,s.pinMissed,'pin','');
   const obHtml=fvmRow('🎯','상대 실수','',s.oppBlunderFound,s.oppBlunderMissed,'oppBlunder','');
   const cpColor=s.avgCpLoss<30?'var(--accent-green-bright)':s.avgCpLoss<75?'#e0b040':'#e07070';
@@ -761,9 +755,13 @@ function renderStatsHTML(s){
     <div class="fvm-section">${obHtml||'<div class="stats-note" style="padding:12px 0">상대 블런더 데이터 없음</div>'}</div>
     <div class="stats-note">※ 상대 블런더 직후 최선수로 응수 → 찾음. 놓치면 → 놓침. <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
 
-    <div class="stats-section-title">♞ 찾은 vs 놓친 포크</div>
+    <div class="stats-section-title">♞ 내가 찾은 vs 놓친 포크</div>
     <div class="fvm-section">${forkHtml||'<div class="stats-note" style="padding:12px 0">포크 데이터 없음</div>'}</div>
     <div class="stats-note">※ Stockfish 베스트 무브가 포크였는데 다른 수를 두고 ≥${FORK_CP_GAIN}cp 손실이면 "놓친 포크". <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
+
+    <div class="stats-section-title">⚔️ 상대가 사용한 포크</div>
+    <div class="fvm-section">${oppForkHtml||'<div class="stats-note" style="padding:12px 0">상대 포크 데이터 없음</div>'}</div>
+    <div class="stats-note">※ 상대가 나에게 포크를 걸었던 횟수입니다. 자주 당하는 기물 유형을 파악해보세요.</div>
 
     <div class="stats-section-title">📌 찾은 vs 놓친 핀</div>
     <div class="fvm-section">${pinHtml||'<div class="stats-note" style="padding:12px 0">핀 데이터 없음</div>'}</div>

@@ -80,6 +80,7 @@ async function analyzeGame(pgn, myColor, onProgress) {
     checkmates:       0,
     forkFound:        { P:0, N:0, B:0, R:0, Q:0, K:0 },
     forkMissed:       { P:0, N:0, B:0, R:0, Q:0, K:0 },
+    oppForkCreated:   { P:0, N:0, B:0, R:0, Q:0, K:0 }, // 상대가 만든 포크
     pinFound:         0, pinMissed: 0,
     myCpSum:          0, myMoveCount: 0,
     tacticEvents:     []
@@ -144,9 +145,17 @@ async function analyzeGame(pgn, myColor, onProgress) {
       }
     }
 
-    // ── 포크 / 핀 (내 수일 때만) ────────────────────────────────────────────
-    if (!isMe) continue;
+    // ── 상대 수: 포크 생성 감지 (상대가 포크를 뒀는지) ───────────────────────
+    if (!isMe) {
+      const movedPT_opp = prev.board[move.from[0]][move.from[1]]?.[1] || 'P';
+      if (isValidFork(state.board, mover, move.to, prev.board)) {
+        result.oppForkCreated[movedPT_opp] = (result.oppForkCreated[movedPT_opp] || 0) + 1;
+        result.tacticEvents.push(_makeTacticEvent('oppFork', 'found', movedPT_opp, i, states, mover));
+      }
+      continue;
+    }
 
+    // ── 포크 / 핀 (내 수일 때만) ────────────────────────────────────────────
     const sfBest   = ana[i-1].bestmove;
     const actualUci = moveToUci(move);
     const movedPT  = prev.board[move.from[0]][move.from[1]]?.[1] || 'P';
