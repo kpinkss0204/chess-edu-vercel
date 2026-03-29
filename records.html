@@ -591,19 +591,22 @@ async function renderStats(){
 // ════════════════════════════════════════
 // 전술 상세 모달
 // ════════════════════════════════════════
-function openTacticModal(tacticType,tacticPiece,icon,name){
+function openTacticModal(tacticType,tacticPiece,icon,name,subtypeFilter){
   const modal=document.getElementById('tactic-modal');
   const titleEl=document.getElementById('tmodal-title');
   const bodyEl=document.getElementById('tmodal-body');
 
   const typeLabel={fork:'포크',oppFork:'상대 포크',pin:'절대 핀',oppBlunder:'상대 블런더 포착'}[tacticType]||tacticType;
-  titleEl.innerHTML=`<span>${icon}</span> ${name} — ${typeLabel} 게임 목록`;
+  const subtypeLabel=subtypeFilter==='found'?'찾음':subtypeFilter==='missed'?'놓침':'';
+  titleEl.innerHTML=`<span>${icon}</span> ${name} — ${typeLabel}${subtypeLabel?' ('+subtypeLabel+')':''} 게임 목록`;
 
   // 해당 전술이 있는 게임만 필터
   const PIECE_ICONS={P:'♙',N:'♞',B:'♝',R:'♜',Q:'♛',K:'♚'};
   const matchingGames=_statsGameDetails.filter(gd=>
     gd.tacticEvents.some(ev=>
-      ev.type===tacticType&&(tacticPiece===''||ev.piece===tacticPiece)
+      ev.type===tacticType&&
+      (tacticPiece===''||ev.piece===tacticPiece)&&
+      (!subtypeFilter||ev.subtype===subtypeFilter)
     )
   );
 
@@ -624,12 +627,12 @@ function openTacticModal(tacticType,tacticPiece,icon,name){
     const whiteName=doc.whiteName||'백',blackName=doc.blackName||'흑';
 
     // 해당 게임에서 이 전술의 이벤트들
-    const evs=gd.tacticEvents.filter(ev=>ev.type===tacticType&&(tacticPiece===''||ev.piece===tacticPiece));
+    const evs=gd.tacticEvents.filter(ev=>ev.type===tacticType&&(tacticPiece===''||ev.piece===tacticPiece)&&(!subtypeFilter||ev.subtype===subtypeFilter));
     const foundEvs=evs.filter(ev=>ev.subtype==='found');
     const missedEvs=evs.filter(ev=>ev.subtype==='missed');
 
     let tagHtml='';
-    if(foundEvs.length)tagHtml+=foundEvs.map(ev=>`<span class="tg-tag found">✔ ${ev.moveNum}수${ev.piece&&ev.piece!==''?' '+PIECE_ICONS[ev.piece]:''} (${ev.san||'?'})</span>`).join('');
+    if(foundEvs.length)tagHtml+=foundEvs.map(ev=>`<span class="tg-tag found">${tacticType==='oppFork'?'⚔':'✔'} ${ev.moveNum}수${ev.piece&&ev.piece!==''?' '+PIECE_ICONS[ev.piece]:''} (${ev.san||'?'})</span>`).join('');
     if(missedEvs.length)tagHtml+=missedEvs.map(ev=>`<span class="tg-tag">✘ ${ev.moveNum}수${ev.piece&&ev.piece!==''?' '+PIECE_ICONS[ev.piece]:''} (${ev.san||'?'})</span>`).join('');
 
     html+=`<div class="tmodal-game-item" onclick="closeTacticModalAndOpen(${JSON.stringify(doc).replace(/"/g,'&quot;')})">
@@ -684,9 +687,27 @@ function renderStatsHTML(s){
   const forkHtml=PIECES.map(p=>fvmRow(p.icon,p.name,'',s.forkFound[p.key]||0,s.forkMissed[p.key]||0,'fork',p.key)).join('');
   const oppForkHtml=PIECES.map(p=>{
     const cnt=s.oppForkCreated?.[p.key]||0;if(!cnt)return'';
-    return`<div class="fvm-row"><div class="fvm-piece-col"><div class="fvm-piece-icon">${p.icon}</div><div class="fvm-piece-name">${p.name}</div><div class="fvm-piece-total">${cnt}회</div></div><div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct missed">상대가 사용</span><div class="fvm-track"><div class="fvm-fill missed" style="width:100%"></div></div><span class="fvm-count">${cnt}</span></div></div></div>`;
+    return`<div class="fvm-row clickable" onclick="openTacticModal('oppFork','${p.key}','${p.icon}','${p.name}')">
+      <div class="fvm-piece-col"><div class="fvm-piece-icon">${p.icon}</div><div class="fvm-piece-name">${p.name}</div><div class="fvm-piece-total">${cnt}회</div></div>
+      <div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct missed">상대가 사용</span><div class="fvm-track"><div class="fvm-fill missed" style="width:100%"></div></div><span class="fvm-count">${cnt}</span></div></div>
+    </div>`;
   }).join('');
-  const pinHtml=fvmRow('📌','절대 핀','',s.pinFound,s.pinMissed,'pin','');
+  const pinHtml=(()=>{
+    const found=s.pinFound,missed=s.pinMissed,tot=found+missed;
+    if(tot===0)return'';
+    const fp=Math.round(found/tot*100),mp=100-fp;
+    const rows=[
+      found>0?`<div class="fvm-row clickable" onclick="openTacticModal('pin','','📌','찾은 핀','found')">
+        <div class="fvm-piece-col"><div class="fvm-piece-icon">📌</div><div class="fvm-piece-name">찾은 핀</div><div class="fvm-piece-total">${found}회</div></div>
+        <div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct found">✔ 찾음</span><div class="fvm-track"><div class="fvm-fill found" style="width:100%"></div></div><span class="fvm-count">${found}</span></div></div>
+      </div>`:'',
+      missed>0?`<div class="fvm-row clickable" onclick="openTacticModal('pin','','📌','놓친 핀','missed')">
+        <div class="fvm-piece-col"><div class="fvm-piece-icon">📌</div><div class="fvm-piece-name">놓친 핀</div><div class="fvm-piece-total">${missed}회</div></div>
+        <div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct missed">✘ 놓침</span><div class="fvm-track"><div class="fvm-fill missed" style="width:100%"></div></div><span class="fvm-count">${missed}</span></div></div>
+      </div>`:''
+    ];
+    return rows.join('');
+  })();
   const obHtml=fvmRow('🎯','상대 실수','',s.oppBlunderFound,s.oppBlunderMissed,'oppBlunder','');
   const cpColor=s.avgCpLoss<30?'var(--accent-green-bright)':s.avgCpLoss<75?'#e0b040':'#e07070';
 
@@ -761,7 +782,7 @@ function renderStatsHTML(s){
 
     <div class="stats-section-title">⚔️ 상대가 사용한 포크</div>
     <div class="fvm-section">${oppForkHtml||'<div class="stats-note" style="padding:12px 0">상대 포크 데이터 없음</div>'}</div>
-    <div class="stats-note">※ 상대가 나에게 포크를 걸었던 횟수입니다. 자주 당하는 기물 유형을 파악해보세요.</div>
+    <div class="stats-note">※ 상대가 나에게 포크를 걸었던 횟수입니다. 자주 당하는 기물 유형을 파악해보세요. <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
 
     <div class="stats-section-title">📌 찾은 vs 놓친 핀</div>
     <div class="fvm-section">${pinHtml||'<div class="stats-note" style="padding:12px 0">핀 데이터 없음</div>'}</div>
