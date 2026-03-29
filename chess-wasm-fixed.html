@@ -1499,6 +1499,13 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
           <div class="game-info-row"><span class="game-info-label">날짜</span><span class="game-info-value" id="info-date">-</span></div>
           <div class="game-info-row"><span class="game-info-label">결과</span><span class="game-info-value" id="info-result">*</span></div>
           <div class="game-info-row"><span class="game-info-label">오프닝</span><span class="game-info-value" id="info-opening">-</span></div>
+          <div class="game-info-row" style="margin-top:6px;">
+            <span class="game-info-label" style="color:var(--accent-green-bright);font-weight:700;">내 색상</span>
+            <select id="my-color-select" style="background:var(--bg-tertiary);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:12px;padding:3px 8px;cursor:pointer;outline:none;">
+              <option value="w">⬜ 백 (White)</option>
+              <option value="b">⬛ 흑 (Black)</option>
+            </select>
+          </div>
         </div>
         <div class="pgn-divider"></div>
         <span class="pgn-label">PGN 입력</span>

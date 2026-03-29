@@ -26,12 +26,36 @@ function loadPGN() {
     game.parsePGN(pgn);
     showToast('PGN 불러오기 완료');
     switchTab('analysis');
+
+    // ── 내 색상 자동 감지 ─────────────────────────────────────────────
+    // 로그인 유저 이름과 PGN 헤더의 White/Black 이름을 비교
+    _autoDetectMyColor();
+
     // PGN 로드 후 전체 포지션 백그라운드 분석 시작
     setTimeout(() => startBgAnalysis(), 500);
   } catch(e) {
     showToast('PGN 파싱 오류: ' + e.message);
     console.error(e);
   }
+}
+
+function _autoDetectMyColor() {
+  const sel = document.getElementById('my-color-select');
+  if (!sel) return;
+  const white = (document.getElementById('info-white')?.textContent || '').toLowerCase().trim();
+  const black  = (document.getElementById('info-black')?.textContent  || '').toLowerCase().trim();
+  if (!white && !black) return;
+  // 로그인 유저 식별자
+  const user = window._currentUser;
+  if (!user) return;
+  const displayName = (user.displayName || '').toLowerCase();
+  const emailUser   = (user.email || '').split('@')[0].toLowerCase();
+  const candidates  = [displayName, emailUser].filter(Boolean);
+  const matchesWhite = candidates.some(n => white.includes(n) || n.includes(white));
+  const matchesBlack = candidates.some(n => black.includes(n)  || n.includes(black));
+  if (matchesWhite && !matchesBlack) { sel.value = 'w'; }
+  else if (matchesBlack && !matchesWhite) { sel.value = 'b'; }
+  // 둘 다 매치되거나 없으면 현재 값 유지
 }
 
 function exportPGN() {
@@ -61,17 +85,51 @@ async function savePGN() {
   const date    = document.getElementById('info-date')?.textContent    || '-';
   const result  = document.getElementById('info-result')?.textContent  || '*';
   const opening = document.getElementById('info-opening')?.textContent || '-';
+
+  // 내 색상: 선택된 값 또는 기본값 'w'
+  const myColorSel = document.getElementById('my-color-select');
+  const myColor = myColorSel ? myColorSel.value : 'w';
+
   const btn = document.getElementById('btn-save-pgn');
   if (btn) { btn.disabled=true; btn.textContent='저장 중...'; }
   try {
-    await window._fbDb.collection('saved_pgns').add({
+    const baseData = {
       uid: window._currentUser.uid,
       title: `${white} vs ${black}`,
       pgn, white, black, date, result, opening,
       moveCount: game.history.length,
       savedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // ── 기존 saved_pgns 컬렉션 저장 (하위 호환) ─────────────────────
+    await window._fbDb.collection('saved_pgns').add(baseData);
+
+    // ── game_records 컬렉션에도 저장 → records.html에서 표시됨 ────────
+    // PGN에서 날짜를 파싱해 playedAt 구성 (가능하면)
+    let playedAtVal = firebase.firestore.FieldValue.serverTimestamp();
+    if (date && date !== '-' && date !== '??') {
+      const parsed = new Date(date.replace(/\./g, '-'));
+      if (!isNaN(parsed.getTime())) playedAtVal = firebase.firestore.Timestamp.fromDate(parsed);
+    }
+
+    const myName = myColor === 'w' ? white : black;
+    const oppName = myColor === 'w' ? black : white;
+
+    await window._fbDb.collection('game_records').add({
+      uid:         window._currentUser.uid,
+      pgn,
+      result,
+      myColor,
+      whiteName:   white,
+      blackName:   black,
+      opening,
+      moveCount:   game.history.length,
+      source:      'pgn_import',        // 어디서 저장됐는지 식별
+      playedAt:    playedAtVal,
+      savedAt:     firebase.firestore.FieldValue.serverTimestamp(),
     });
-    showToast('✓ 게임이 저장되었습니다');
+
+    showToast('✓ 게임이 저장되었습니다 (기보 기록에서 확인)');
     loadSavedGames();
   } catch(e) {
     showToast('저장 실패: ' + e.message);
