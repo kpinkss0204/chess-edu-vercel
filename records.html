@@ -439,6 +439,18 @@ function updateControls(){
   if(_viewIdx===0){ne.textContent='시작';se.textContent='';}
   else{ne.textContent=`${Math.ceil(_viewIdx/2)}수 ${_states[_viewIdx-1].turn==='w'?'백':'흑'}`;se.textContent=_states[_viewIdx].san||'';}
 }
+// ════════════════════════════════════════
+// 기물 이미지 — chess-wasm-fixed 동일 방식
+// lichess CDN: https://lichess1.org/assets/piece/{style}/{piece}.svg
+// ════════════════════════════════════════
+let currentPieceStyle = 'cburnett';
+const LICHESS_PIECE_BASE = 'https://lichess1.org/assets/piece/';
+
+function pieceImg(piece) {
+  // piece: 'wK', 'bP' 등 → 'wK.svg', 'bP.svg' (대소문자 그대로)
+  return LICHESS_PIECE_BASE + currentPieceStyle + '/' + piece[0] + piece[1].toUpperCase() + '.svg';
+}
+
 function renderViewerBoard(){
   const el=document.getElementById('viewer-board');if(!el)return;el.innerHTML='';
   const state=_states[_viewIdx],board=state.board,flipped=_viewMyColor==='b',lastMove=state.move,turn=state.turn;
@@ -450,7 +462,14 @@ function renderViewerBoard(){
     if(lastMove){if(lastMove.from[0]===r&&lastMove.from[1]===c)sq.classList.add('last-from');if(lastMove.to[0]===r&&lastMove.to[1]===c)sq.classList.add('last-to');}
     if(board[r][c]===turn+'K'&&isInCheck(board,turn))sq.classList.add('in-check');
     const piece=board[r][c];
-    if(piece){const img=document.createElement('img');img.className='piece-img'+(piece.startsWith('b')?' black-piece':'');img.src=pieceImg(piece);img.alt=piece;img.draggable=false;sq.appendChild(img);}
+    if(piece){
+      const img=document.createElement('img');
+      img.className='piece-img'+(piece[0]==='b'?' black-piece':'');
+      img.src=pieceImg(piece);
+      img.alt=piece;
+      img.draggable=false;
+      sq.appendChild(img);
+    }
     el.appendChild(sq);
   }
 }
