@@ -167,7 +167,8 @@ function isValidFork(board, color, toPos, prevBoard) {
   // 4. 위협받는 기물 중 하나라도 "실질적 위협"인지 확인
   const hasRealThreat = threatened.some(t => {
     if (t.piece[1] === 'K') return true; // 킹은 항상 위협
-    if (PIECE_VALUE[t.piece[1]] > movedValue) return true; // 가치 높은 기물
+    // 명확한 가치 우위일 때만 인정 (등가 교환 수준 N↔B 등은 제외, 최소 150cp 차이)
+    if (PIECE_VALUE[t.piece[1]] >= movedValue + 150) return true;
     // 무방비 기물: 위협받는 기물(상대편)을 지켜주는 상대편 기물이 없는 경우
     // defenders = 상대편(enemy) 기물이 t 칸을 지키는 수 (이동한 나이트 제외)
     const defenders = getAttackers(board, t.r, t.c, enemy).filter(
