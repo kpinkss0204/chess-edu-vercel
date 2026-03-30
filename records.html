@@ -101,8 +101,9 @@ body{font-family:var(--font-main);background:var(--bg-primary);color:var(--text-
 .viewer-moves{width:100%;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:10px 12px;max-height:220px;overflow-y:auto}
 .viewer-moves::-webkit-scrollbar{height:3px;width:3px}
 .viewer-moves::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:2px}
-.move-tokens{display:flex;flex-wrap:wrap;gap:2px 0;line-height:1.8}
-.move-num{font-size:11px;color:var(--text-muted);margin-right:2px}
+.move-tokens{display:flex;flex-direction:column;gap:2px;line-height:1.6}
+.move-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.move-num{font-size:11px;color:var(--text-muted);margin-right:4px;min-width:28px}
 .move-san{font-size:12px;font-weight:600;color:var(--text-secondary);padding:1px 5px;border-radius:4px;cursor:pointer;transition:background .1s,color .1s}
 .move-san:hover{background:var(--bg-hover);color:var(--text-primary)}.move-san.active{background:var(--accent-green-dark);color:#fff}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -430,11 +431,27 @@ function goToMove(idx){
 }
 function renderMoveTokens(){
   const container=document.getElementById('move-tokens');container.innerHTML='';
+  let currentRow=null,currentMoveNum=0;
   for(let i=1;i<_states.length;i++){
     const san=_states[i].san,turn=_states[i-1].turn;
-    if(turn==='w'){const ns=document.createElement('span');ns.className='move-num';ns.textContent=Math.ceil(i/2)+'.';container.appendChild(ns);}
+    if(turn==='w'){
+      currentMoveNum=Math.ceil(i/2);
+      currentRow=document.createElement('div');
+      currentRow.className='move-row';
+      const num=document.createElement('span');
+      num.className='move-num';
+      num.textContent=currentMoveNum+'.';
+      currentRow.appendChild(num);
+      container.appendChild(currentRow);
+    }
     const ss=document.createElement('span');ss.className='move-san';ss.textContent=san;ss.dataset.idx=i;
-    ss.addEventListener('click',()=>goToMove(i));container.appendChild(ss);
+    ss.addEventListener('click',()=>goToMove(i));
+    if(!currentRow){
+      currentRow=document.createElement('div');
+      currentRow.className='move-row';
+      container.appendChild(currentRow);
+    }
+    currentRow.appendChild(ss);
   }
 }
 function highlightMoveToken(idx){
