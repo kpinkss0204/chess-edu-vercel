@@ -52,6 +52,7 @@
 'use strict';
 
 const FORK_CP_GAIN = 80;   // 놓친 포크 인정 최소 cp 손실
+const FORK_FOUND_MAX_CP_LOSS = 60; // "찾은 포크" 인정 최대 cp 손실 (실익 없는 포크 모양 필터)
 
 /**
  * 핀 놓침 인정 최소 cp 차이.
@@ -163,8 +164,9 @@ async function analyzeGame(pgn, myColor, onProgress) {
     // ════════════════════════════════════════════════════════════════════
 
     // [found]
+    // 포크 모양이라도 엔진 기준으로 손실이 큰 수면 "전술적 실익"이 낮다고 보고 제외.
     const actualIsFork = isValidFork(state.board, mover, move.to, prev.board);
-    if (actualIsFork) {
+    if (actualIsFork && loss <= FORK_FOUND_MAX_CP_LOSS) {
       result.forkFound[movedPT] = (result.forkFound[movedPT] || 0) + 1;
       result.tacticEvents.push(_makeTacticEvent('fork','found',movedPT,i,states,mover));
     }
@@ -231,8 +233,10 @@ async function analyzeGame(pgn, myColor, onProgress) {
     }
 
     if (needAbsMissed || needRelMissed) {
-      // 이동 전 포지션의 엔진 3개 라인을 핀 여부로 분류
-      const { pinPvs } = classifyPvsByPin(ana[i-1].pvs, prev, mover);
+      // 이동 전 포지션의 엔진 PV1만 핀 여부로 분류.
+      // PV2/3의 분류 오차로 인한 미세 오탐을 줄이기 위함.
+      const pv1Only = (ana[i-1].pvs && ana[i-1].pvs[0]) ? [ana[i-1].pvs[0]] : [];
+      const { pinPvs } = classifyPvsByPin(pv1Only, prev, mover);
 
       if (pinPvs.length > 0) {
         // 내 수 이후 실제 평가치 (mover 기준 cp)
