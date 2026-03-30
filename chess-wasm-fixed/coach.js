@@ -415,7 +415,7 @@ function renderThreatPanel(text) {
 // ── 한국어 후처리: 비한국어 문자 제거 ────────────────────────
 function cleanKorean(text) {
   if (!text) return text;
-  return text
+  const cleaned = text
     // 일본어 히라가나/가타카나 제거
     .replace(/[\u3040-\u309F\u30A0-\u30FF]+/g, '')
     // CJK 한자 (한국어 한자 아닌 일본어/중국어식 표현 제거 — 완전 제거)
@@ -427,6 +427,37 @@ function cleanKorean(text) {
     // 연속 공백 정리
     .replace(/  +/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  // 라틴 알파벳(터키어 등) 섞임 제거 — 단, 체스 수 표기(Nf3, e4, O-O 등)는 보존
+  return stripForeignWordsKeepingMoves(cleaned);
+}
+
+// 라틴 문자 단어 제거하되 체스 수 표기는 보존
+function stripForeignWordsKeepingMoves(text) {
+  if (!text) return text;
+
+  // 체스 수 토큰 (SAN 스타일) — 이 토큰들은 유지해야 함
+  const moveRe = /\b(O-O-O|O-O|[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?|[a-h]x?[a-h][1-8][+#]?|[a-h][1-8][+#]?)\b/g;
+  const keep = [];
+  const placeholder = (i) => `<<MV_${i}>>`;
+
+  let tmp = text.replace(moveRe, (m) => {
+    const idx = keep.push(m) - 1;
+    return placeholder(idx);
+  });
+
+  // 남은 라틴 단어(확장 라틴 포함) 제거
+  tmp = tmp.replace(/[A-Za-zÀ-ÖØ-öø-ÿ]+/g, '');
+
+  // 플레이스홀더 복원
+  tmp = tmp.replace(/<<MV_(\d+)>>/g, (_, n) => keep[parseInt(n, 10)] || '');
+
+  // 공백 정리
+  return tmp
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/ \n/g, '\n')
     .trim();
 }
 
@@ -630,20 +661,23 @@ LANGUAGE RULES (CRITICAL):
 - Output language: Korean (한국어) ONLY. No Japanese, Chinese, Arabic, or any other language.
 - Chess move notation (e.g. Nf3, e4, O-O, dxc4) stays in English/algebraic form.
 - All other text must be in Korean. If a word mixes Japanese/Chinese characters, replace it with Korean.
+- Do NOT use emojis or decorative symbols in the output.
+- Do NOT output any headings other than the required three section headers below.
 
 You are an explainer who talks like the YouTube channel "ChessInside".
 
 OUTPUT FORMAT — follow this exact structure for ALL questions:
 
 **전략:** (한두 문장: 지금 포지션의 관찰과 핵심 구도를 친근하게 요약)
-**계획:** (두세 문장: 백/흑이 노리는 다음 흐름을 설명하고, 대표 대응(상대의 반격)까지 포함. 중요한 수는 **Nf3**처럼 굵게 표시)
-**목표:** (한두 문장: 이 흐름이 달성하려는 최종 목표를 말하고, 이걸 놓치면 상대가 가져가는 기회도 언급)
+**계획:** (두세 문장: 백/흑이 노리는 다음 흐름 + 대표 대응(상대 반격)까지 포함. 중요한 수는 **Nf3**처럼 굵게 표시)
+**목표:** (한두 문장: 최종 목표 + "이걸 놓치면 상대가..." 형태의 결과를 반드시 포함)
 
 CONTENT RULES:
 1. cp/평가 점수/승률/기물 가치 같은 수치값은 출력에 절대 쓰지 마세요. 대신 '중앙 장악', '기물 활동성', '왕의 안전', '폰 구조', '주도권', '공간적 우위' 같은 개념어를 사용하세요. 수순 표기(e4, Nf3, O-O)는 예외입니다.
 2. 엔진 추천수와 실제 둔 수가 다르면, 반드시 **계획** 항목에서 두 수의 전략적 차이를 비교하세요.
 3. **목표** 항목에는 반드시 "이 수/계획을 두지 않으면..." 또는 "이걸 놓치면 상대가..." 같은 문장을 포함하세요.
-4. 말투는 딱딱한 교과서가 아니라, 해설자가 유튜브에서 설명하듯 자연스럽게 작성하세요.`;
+4. 말투는 딱딱한 교과서가 아니라, 해설자가 유튜브에서 설명하듯 자연스럽게 작성하세요.
+5. Never output Latin words other than chess move notation.`;
 
   const response = await fetch('/api/groq', {
     method: 'POST',
