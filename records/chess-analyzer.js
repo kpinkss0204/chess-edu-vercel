@@ -51,8 +51,9 @@
 
 'use strict';
 
-const FORK_CP_GAIN = 80;   // 놓친 포크 인정 최소 cp 손실
-const FORK_FOUND_MAX_CP_LOSS = 60; // "찾은 포크" 인정 최대 cp 손실 (실익 없는 포크 모양 필터)
+const FORK_CP_GAIN = 80;            // 놓친 포크 인정 최소 cp 손실
+const FORK_FOUND_MAX_CP_LOSS = 60;  // "찾은 포크" 인정 최대 cp 손실 (실익 없는 포크 모양 필터)
+const PIN_FOUND_MAX_CP_LOSS  = 60;  // "찾은 핀" 인정 최대 cp 손실 (블런더 핀 모양 필터)
 
 /**
  * 핀 놓침 인정 최소 cp 차이.
@@ -197,13 +198,17 @@ async function analyzeGame(pgn, myColor, onProgress) {
     // [found] 내가 실제로 둔 수가 핀 생성인지 기하학적으로 판정
     const actualPin = detectPinCreated(prev.board, state.board, move, mover);
 
-    if (actualPin.absolute) {
-      result.absPinFound++;
-      result.tacticEvents.push(_makeTacticEvent('absPin','found','',i,states,mover));
-    }
-    if (actualPin.relative) {
-      result.relPinFound++;
-      result.tacticEvents.push(_makeTacticEvent('relPin','found','',i,states,mover));
+    // cp 손실이 너무 큰(블런더/심각한 실수급) 핀 수는
+    // "전술적으로 잘 찾은 핀"으로 보지 않고 found 집계에서 제외한다.
+    if (loss <= PIN_FOUND_MAX_CP_LOSS) {
+      if (actualPin.absolute) {
+        result.absPinFound++;
+        result.tacticEvents.push(_makeTacticEvent('absPin','found','',i,states,mover));
+      }
+      if (actualPin.relative) {
+        result.relPinFound++;
+        result.tacticEvents.push(_makeTacticEvent('relPin','found','',i,states,mover));
+      }
     }
 
     // ── [missed] 엔진 3개 라인 비교 ──────────────────────────────────────
