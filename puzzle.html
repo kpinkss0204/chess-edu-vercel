@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html lang="ko" data-color-mode="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>체스 퍼즐 — 테마별 훈련</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+:root {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #242424;
+  --bg-tertiary: #2d2d2d;
+  --bg-card: #1e1e1e;
+  --bg-hover: #333333;
+  --border: #3a3a3a;
+  --border-light: #444444;
+  --text-primary: #e8e8e8;
+  --text-secondary: #a0a0a0;
+  --text-muted: #666666;
+  --accent-green: #7fa650;
+  --accent-green-bright: #a0c060;
+  --accent-green-dark: #5a8030;
+  --accent-blue: #5090d0;
+  --accent-orange: #e08030;
+  --accent-red: #c04040;
+  --accent-purple: #8855cc;
+  --accent-teal: #2aada6;
+  --sidebar-width: 72px;
+  --font-main: 'Noto Sans KR', sans-serif;
+}
+
+[data-color-mode="light"] {
+  --bg-primary: #f5f5f0;
+  --bg-secondary: #ebebE5;
+  --bg-tertiary: #e0e0d8;
+  --bg-card: #f0f0ea;
+  --bg-hover: #dcdcd4;
+  --border: #d0d0c8;
+  --border-light: #c0c0b8;
+  --text-primary: #1a1a1a;
+  --text-secondary: #4a4a4a;
+  --text-muted: #888888;
+}
+
+body {
+  font-family: var(--font-main);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ===== SIDEBAR ===== */
+#sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 4px;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.sidebar-logo {
+  width: 40px; height: 40px;
+  background: var(--accent-green);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 12px; cursor: pointer; font-size: 22px;
+  transition: background 0.2s;
+}
+.sidebar-logo:hover { background: var(--accent-green-bright); }
+
+.sidebar-nav {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 2px; width: 100%; flex: 1;
+}
+
+.sidebar-item {
+  width: 52px; height: 52px; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; gap: 3px; transition: background 0.15s; position: relative;
+  text-decoration: none;
+}
+.sidebar-item:hover { background: var(--bg-hover); }
+.sidebar-item.active { background: var(--bg-tertiary); }
+.sidebar-item.active .sidebar-icon { color: var(--accent-green-bright); }
+.sidebar-icon { width: 22px; height: 22px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
+.sidebar-label { font-size: 9px; color: var(--text-muted); text-align: center; line-height: 1; }
+.sidebar-item.active .sidebar-label { color: var(--accent-green-bright); }
+.sidebar-divider { width: 32px; height: 1px; background: var(--border); margin: 6px 0; }
+.sidebar-footer {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding-top: 8px; border-top: 1px solid var(--border); width: 100%;
+}
+.sidebar-user {
+  width: 52px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 3px; padding: 6px 0; cursor: default;
+}
+.sidebar-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff;
+  border: 2px solid var(--accent-green-dark);
+  flex-shrink: 0;
+}
+.sidebar-username {
+  font-size: 8.5px; color: var(--text-muted);
+  text-align: center; line-height: 1.2;
+  max-width: 52px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  padding: 0 2px;
+}
+.sidebar-item.logout-btn:hover { background: rgba(192,64,64,0.12); }
+.sidebar-item.logout-btn:hover .sidebar-icon { color: #e07070; }
+.sidebar-item.logout-btn:hover .sidebar-label { color: #e07070; }
+
+/* ===== MAIN ===== */
+#main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ===== PUZZLE CONTENT ===== */
+#puzzle-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* ===== TOP BAR ===== */
+#puzzle-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+#puzzle-topbar h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#puzzle-topbar h1 span.puzzle-icon {
+  font-size: 20px;
+}
+
+.topbar-sep {
+  width: 1px; height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+#puzzle-streak {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+#puzzle-streak .streak-fire { color: #f0a030; font-size: 14px; }
+#puzzle-streak .streak-num { font-weight: 700; color: var(--text-primary); }
+
+#puzzle-rating-display {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-left: auto;
+}
+#puzzle-rating-display .rating-val {
+  font-weight: 700;
+  color: var(--accent-green-bright);
+}
+
+/* ===== SCROLL WRAPPER ===== */
+#puzzle-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+}
+
+/* ===== SECTION HEADER ===== */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.section-header h2 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.section-header-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.section-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+
+/* ===== THEME GRID ===== */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 32px;
+}
+
+/* ===== THEME CARD ===== */
+.theme-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 14px 14px;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  user-select: none;
+}
+
+.theme-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--card-accent, var(--accent-green));
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+
+.theme-card:hover {
+  border-color: var(--card-accent, var(--accent-green));
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.theme-card:hover::before { opacity: 1; }
+
+.theme-card:active { transform: translateY(0); }
+
+.theme-card-icon {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.theme-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.theme-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.theme-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.theme-card-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 2px 7px;
+}
+
+.theme-card-diff {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+.diff-easy { background: rgba(127,166,80,0.15); color: var(--accent-green-bright); }
+.diff-medium { background: rgba(224,128,48,0.15); color: var(--accent-orange); }
+.diff-hard { background: rgba(192,64,64,0.15); color: #e07070; }
+.diff-expert { background: rgba(136,85,204,0.15); color: #bb88ff; }
+
+/* ===== FEATURED / DAILY ===== */
+.daily-puzzle-banner {
+  background: linear-gradient(135deg, rgba(127,166,80,0.12) 0%, rgba(80,144,208,0.12) 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+  cursor: pointer;
+  transition: all 0.18s;
+  position: relative;
+  overflow: hidden;
+}
+.daily-puzzle-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(127,166,80,0.06), rgba(80,144,208,0.06));
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+.daily-puzzle-banner:hover { border-color: var(--accent-green-dark); }
+.daily-puzzle-banner:hover::before { opacity: 1; }
+
+.daily-icon {
+  font-size: 40px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.daily-info { flex: 1; }
+.daily-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.daily-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.daily-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
+  color: #fff;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ===== QUICK STATS BAR ===== */
+.stats-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.stat-card {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+.stat-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ===== PUZZLE MODAL ===== */
+#puzzle-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 500;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+#puzzle-modal-backdrop.show {
+  display: flex;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+#puzzle-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+}
+
+#modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+#modal-theme-icon { font-size: 28px; }
+#modal-theme-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+}
+#modal-theme-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+#modal-close-btn {
+  width: 32px; height: 32px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+#modal-close-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* difficulty selector */
+#modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+
+.modal-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 10px;
+}
+
+.diff-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.diff-btn {
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-main);
+}
+.diff-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.diff-btn.selected {
+  background: var(--accent-green-dark);
+  border-color: var(--accent-green);
+  color: #fff;
+}
+
+/* puzzle set list */
+.puzzle-set-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.puzzle-set-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.puzzle-set-item:hover {
+  border-color: var(--accent-green-dark);
+  background: var(--bg-hover);
+}
+
+.puzzle-set-num {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.puzzle-set-info { flex: 1; min-width: 0; }
+.puzzle-set-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.puzzle-set-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.puzzle-set-status {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.status-new { background: rgba(127,166,80,0.15); color: var(--accent-green-bright); }
+.status-done { background: rgba(80,80,80,0.3); color: var(--text-muted); }
+.status-progress { background: rgba(224,128,48,0.15); color: var(--accent-orange); }
+
+#modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+#start-puzzle-btn {
+  flex: 1;
+  padding: 11px;
+  background: var(--accent-green);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+#start-puzzle-btn:hover { background: var(--accent-green-bright); }
+
+#random-puzzle-btn {
+  padding: 11px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-main);
+  white-space: nowrap;
+}
+#random-puzzle-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ===== PUZZLE BOARD VIEW ===== */
+#puzzle-board-view {
+  display: none;
+  flex: 1;
+  overflow: hidden;
+  flex-direction: row;
+}
+
+#puzzle-board-view.show { display: flex; }
+
+#puzzle-board-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  gap: 12px;
+  min-width: 0;
+}
+
+#puzzle-board-wrap {
+  width: min(480px, calc(100vh - 220px), calc(100vw - 380px));
+  height: min(480px, calc(100vh - 220px), calc(100vw - 380px));
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.puzzle-board-placeholder {
+  text-align: center;
+  color: var(--text-muted);
+}
+.puzzle-board-placeholder .ph-icon { font-size: 48px; margin-bottom: 12px; }
+.puzzle-board-placeholder p { font-size: 13px; line-height: 1.6; }
+
+/* chessboard grid */
+#puzzle-chessboard {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+}
+
+.chess-square {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(18px, 4vw, 36px);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.1s;
+  user-select: none;
+}
+.chess-square.light { background: #f0d9b5; }
+.chess-square.dark  { background: #b58863; }
+.chess-square.selected { background: rgba(127,166,80,0.7) !important; }
+.chess-square.highlight-move { background: rgba(127,166,80,0.45) !important; }
+.chess-square.hint { background: rgba(80,144,208,0.5) !important; }
+.chess-square.correct { background: rgba(42,173,166,0.6) !important; }
+.chess-square.wrong { background: rgba(192,64,64,0.6) !important; }
+.chess-square.last-move { background: rgba(255,200,50,0.35) !important; }
+.chess-square:hover:not(.selected) { filter: brightness(1.12); }
+
+.sq-label-file {
+  position: absolute;
+  bottom: 1px; right: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.55;
+  color: inherit;
+  line-height: 1;
+  font-family: monospace;
+  pointer-events: none;
+}
+.sq-label-rank {
+  position: absolute;
+  top: 1px; left: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.55;
+  color: inherit;
+  line-height: 1;
+  font-family: monospace;
+  pointer-events: none;
+}
+.chess-square.dark .sq-label-file,
+.chess-square.dark .sq-label-rank { color: #f0d9b5; }
+.chess-square.light .sq-label-file,
+.chess-square.light .sq-label-rank { color: #b58863; }
+
+/* puzzle side panel */
+#puzzle-side-panel {
+  width: 300px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+#psp-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.psp-theme-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--accent-green-bright);
+  background: rgba(127,166,80,0.1);
+  border: 1px solid rgba(127,166,80,0.25);
+  padding: 3px 9px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.psp-puzzle-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.psp-puzzle-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+}
+
+#psp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.psp-instruction {
+  background: linear-gradient(135deg, rgba(127,166,80,0.08), rgba(80,144,208,0.08));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.psp-instruction .inst-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+
+#puzzle-feedback {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  animation: fadeIn 0.2s ease;
+}
+#puzzle-feedback.correct {
+  display: flex;
+  background: rgba(42,173,166,0.15);
+  border: 1px solid rgba(42,173,166,0.3);
+  color: #2aada6;
+}
+#puzzle-feedback.wrong {
+  display: flex;
+  background: rgba(192,64,64,0.15);
+  border: 1px solid rgba(192,64,64,0.3);
+  color: #e07070;
+}
+
+/* move history */
+.move-history-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.move-history-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.move-chip {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.move-chip.user-move {
+  background: rgba(127,166,80,0.12);
+  border-color: rgba(127,166,80,0.3);
+  color: var(--accent-green-bright);
+}
+.move-chip.engine-move {
+  background: rgba(80,144,208,0.1);
+  border-color: rgba(80,144,208,0.25);
+  color: #80aadd;
+}
+
+#psp-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.puzzle-action-row {
+  display: flex;
+  gap: 7px;
+}
+.pz-btn {
+  flex: 1;
+  padding: 9px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-main);
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  white-space: nowrap;
+}
+.pz-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.pz-btn.primary {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: #fff;
+}
+.pz-btn.primary:hover { background: var(--accent-green-bright); border-color: var(--accent-green-bright); }
+.pz-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* progress bar */
+.puzzle-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.puzzle-progress-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.puzzle-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-green), var(--accent-green-bright));
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.puzzle-progress-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* back button */
+#back-to-themes-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 0;
+  font-family: var(--font-main);
+  transition: color 0.15s;
+}
+#back-to-themes-btn:hover { color: var(--text-primary); }
+
+/* ===== THEME LIST VIEW ===== */
+#theme-list-view {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+</style>
+
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+  firebase.initializeApp({
+    apiKey: "AIzaSyDiBFoUf2QVG9QXO34Xny0bSslFYaiwozg",
+    authDomain: "chess-education-464fc.firebaseapp.com",
+    projectId: "chess-education-464fc",
+    storageBucket: "chess-education-464fc.firebasestorage.app",
+    messagingSenderId: "963998720041",
+    appId: "1:963998720041:web:aa4037707214d3777c7c38"
+  });
+  var _fbAuth = firebase.auth();
+  var _fbDb   = firebase.firestore();
+  var _currentUser = null;
+
+  _fbAuth.onAuthStateChanged(function(user) {
+    if (!user) {
+      window.location.href = '/auth.html';
+    } else {
+      _currentUser = user;
+      var name = user.displayName || user.email || '?';
+      var avatarEl = document.getElementById('sidebar-avatar-letter');
+      var nameEl   = document.getElementById('sidebar-username');
+      if (avatarEl) avatarEl.textContent = name[0].toUpperCase();
+      if (nameEl)   nameEl.textContent   = name.split('@')[0];
+    }
+  });
+
+  function handleLogout() {
+    _fbAuth.signOut().then(function() { window.location.href = '/auth.html'; });
+  }
+
+  function toggleColorMode() {
+    var html = document.documentElement;
+    html.setAttribute('data-color-mode', html.getAttribute('data-color-mode') === 'dark' ? 'light' : 'dark');
+  }
+</script>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="sidebar-logo" title="체스" onclick="location.href='/'">♟</div>
+  <div class="sidebar-nav">
+    <a class="sidebar-item" href="/index.html" title="분석" style="text-decoration:none;">
+      <div class="sidebar-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z"/></svg>
+      </div>
+      <span class="sidebar-label">분석</span>
+    </a>
+    <a class="sidebar-item" href="/play.html" title="온라인 대국" style="text-decoration:none;">
+      <div class="sidebar-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+      </div>
+      <span class="sidebar-label">대국</span>
+    </a>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-item active" title="퍼즐">
+      <div class="sidebar-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg>
+      </div>
+      <span class="sidebar-label">퍼즐</span>
+    </div>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item" href="/records.html" title="기록" style="text-decoration:none;">
+      <div class="sidebar-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20ZM8 15V17H16V15H8ZM8 11V13H16V11H8Z"/></svg>
+      </div>
+      <span class="sidebar-label">기록</span>
+    </a>
+    <a class="sidebar-item" href="/records.html?tab=stats" title="통계" style="text-decoration:none;">
+      <div class="sidebar-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/></svg>
+      </div>
+      <span class="sidebar-label">통계</span>
+    </a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="sidebar-user" id="sidebar-user-info">
+      <div class="sidebar-avatar" id="sidebar-avatar-letter">?</div>
+      <div class="sidebar-username" id="sidebar-username">로딩중</div>
+    </div>
+    <div class="sidebar-item logout-btn" title="로그아웃" onclick="handleLogout()">
+      <div class="sidebar-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </div>
+      <span class="sidebar-label">로그아웃</span>
+    </div>
+    <div class="sidebar-item" title="테마 변경" onclick="toggleColorMode()">
+      <div class="sidebar-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20 8.69V4H15.31L12 0.69L8.69 4H4V8.69L0.69 12L4 15.31V20H8.69L12 23.31L15.31 20H20V15.31L23.31 12L20 8.69ZM12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C15.31 6 18 8.69 18 12C18 15.31 15.31 18 12 18Z"/></svg>
+      </div>
+      <span class="sidebar-label">테마</span>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- THEME LIST VIEW -->
+  <div id="theme-list-view">
+    <div id="puzzle-content">
+
+      <!-- TOP BAR -->
+      <div id="puzzle-topbar">
+        <h1><span class="puzzle-icon">🧩</span> 퍼즐 훈련</h1>
+        <div class="topbar-sep"></div>
+        <div id="puzzle-streak">
+          <span class="streak-fire">🔥</span>
+          <span class="streak-num" id="streak-count">0</span>
+          <span>연속</span>
+        </div>
+        <div id="puzzle-rating-display">
+          ⭐ 퍼즐 레이팅 <span class="rating-val" id="my-rating">1200</span>
+        </div>
+      </div>
+
+      <!-- SCROLL AREA -->
+      <div id="puzzle-scroll">
+
+        <!-- 오늘의 퍼즐 -->
+        <div class="daily-puzzle-banner" onclick="openTheme('daily')">
+          <div class="daily-icon">📅</div>
+          <div class="daily-info">
+            <div class="daily-title">오늘의 퍼즐</div>
+            <div class="daily-sub">매일 새로운 퍼즐로 실력을 점검하세요. 완료 시 특별 보너스 포인트!</div>
+          </div>
+          <div class="daily-badge">오늘 도전!</div>
+        </div>
+
+        <!-- 통계 -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">총 풀이</div>
+            <div class="stat-value" id="stat-total">0</div>
+            <div class="stat-sub">개 퍼즐</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">정답률</div>
+            <div class="stat-value" id="stat-acc">—</div>
+            <div class="stat-sub">% 정확도</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">최장 연속</div>
+            <div class="stat-value" id="stat-streak">0</div>
+            <div class="stat-sub">연속 정답</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">오늘 완료</div>
+            <div class="stat-value" id="stat-today">0</div>
+            <div class="stat-sub">개</div>
+          </div>
+        </div>
+
+        <!-- 전술 기술 -->
+        <div class="section-header">
+          <h2>⚔️ 전술 기술</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge">9개 테마</div>
+        </div>
+        <div class="theme-grid" id="grid-tactics"></div>
+
+        <!-- 오프닝 & 엔딩 -->
+        <div class="section-header">
+          <h2>📖 오프닝 & 엔딩</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge">6개 테마</div>
+        </div>
+        <div class="theme-grid" id="grid-phases"></div>
+
+        <!-- 포지셔널 -->
+        <div class="section-header">
+          <h2>🏰 포지셔널</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge">5개 테마</div>
+        </div>
+        <div class="theme-grid" id="grid-positional"></div>
+
+        <!-- 특수 상황 -->
+        <div class="section-header">
+          <h2>✨ 특수 상황</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge">4개 테마</div>
+        </div>
+        <div class="theme-grid" id="grid-special"></div>
+
+      </div><!-- /puzzle-scroll -->
+    </div><!-- /puzzle-content -->
+  </div><!-- /theme-list-view -->
+
+  <!-- PUZZLE BOARD VIEW -->
+  <div id="puzzle-board-view">
+    <div id="puzzle-board-col">
+      <div style="display:flex; align-items:center; gap:12px; width:min(480px, calc(100vw - 340px));">
+        <button id="back-to-themes-btn" onclick="exitPuzzleView()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          테마 목록
+        </button>
+        <div style="flex:1; height:1px; background:var(--border);"></div>
+        <div id="puzzle-nav-info" style="font-size:11px; color:var(--text-muted);">퍼즐 1 / 10</div>
+      </div>
+
+      <div id="puzzle-board-wrap">
+        <div id="puzzle-chessboard"></div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:10px; width:min(480px, calc(100vw - 340px));">
+        <div id="turn-indicator" style="
+          display:flex; align-items:center; gap:7px;
+          font-size:12px; color:var(--text-secondary);
+          background:var(--bg-card); border:1px solid var(--border);
+          border-radius:8px; padding:6px 12px;
+        ">
+          <div id="turn-dot" style="width:12px;height:12px;border-radius:50%;background:#fff;border:1px solid #ccc;"></div>
+          <span id="turn-text">백이 움직입니다</span>
+        </div>
+        <div style="flex:1;"></div>
+        <div id="eval-chip" style="
+          font-size:11px; color:var(--text-muted);
+          background:var(--bg-card); border:1px solid var(--border);
+          border-radius:8px; padding:6px 12px;
+          font-family:monospace;
+        ">레이팅: —</div>
+      </div>
+    </div>
+
+    <!-- SIDE PANEL -->
+    <div id="puzzle-side-panel">
+      <div id="psp-header">
+        <div class="psp-theme-tag" id="psp-theme-tag">🔀 테마</div>
+        <div class="psp-puzzle-title" id="psp-puzzle-title">퍼즐 제목</div>
+        <div class="psp-puzzle-meta">
+          <span id="psp-rating">레이팅: —</span>
+          <span>·</span>
+          <span id="psp-moves">수: —</span>
+        </div>
+      </div>
+
+      <div id="psp-body">
+        <div class="psp-instruction">
+          <span class="inst-icon">💡</span>
+          <div id="psp-instruction-text">최선의 수를 찾아보세요. 말을 클릭한 후 이동할 칸을 클릭하세요.</div>
+        </div>
+
+        <div id="puzzle-feedback"></div>
+
+        <div>
+          <div class="move-history-label">진행된 수</div>
+          <div class="move-history-list" id="move-history-list">
+            <span style="font-size:11px;color:var(--text-muted);">아직 수가 없습니다</span>
+          </div>
+        </div>
+
+        <!-- 진행률 -->
+        <div>
+          <div class="move-history-label">세트 진행률</div>
+          <div class="puzzle-progress-wrap">
+            <div class="puzzle-progress-bar-bg">
+              <div class="puzzle-progress-bar-fill" id="progress-fill" style="width:0%"></div>
+            </div>
+            <div class="puzzle-progress-label" id="progress-label">0 / 10</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="psp-footer">
+        <div class="puzzle-action-row">
+          <button class="pz-btn" id="hint-btn" onclick="showHint()">💡 힌트</button>
+          <button class="pz-btn" id="solution-btn" onclick="showSolution()">👁 정답보기</button>
+          <button class="pz-btn" id="retry-btn" onclick="retryPuzzle()" style="display:none;">🔄 다시</button>
+        </div>
+        <div class="puzzle-action-row">
+          <button class="pz-btn" onclick="prevPuzzle()">← 이전</button>
+          <button class="pz-btn primary" id="next-puzzle-btn" onclick="nextPuzzle()">다음 퍼즐 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- THEME MODAL -->
+<div id="puzzle-modal-backdrop" onclick="closeModal(event)">
+  <div id="puzzle-modal">
+    <div id="modal-header">
+      <div id="modal-theme-icon">🎯</div>
+      <div style="flex:1;">
+        <div id="modal-theme-name">테마 이름</div>
+        <div id="modal-theme-desc" style="font-size:12px;color:var(--text-secondary);margin-top:2px;">테마 설명</div>
+      </div>
+      <button id="modal-close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-body">
+      <div class="modal-section-title">난이도 선택</div>
+      <div class="diff-row" id="diff-row">
+        <button class="diff-btn selected" onclick="selectDiff(this,'beginner')">🟢 입문 (800–1200)</button>
+        <button class="diff-btn" onclick="selectDiff(this,'intermediate')">🟡 중급 (1200–1600)</button>
+        <button class="diff-btn" onclick="selectDiff(this,'advanced')">🔴 고급 (1600–2000)</button>
+        <button class="diff-btn" onclick="selectDiff(this,'expert')">🟣 전문가 (2000+)</button>
+      </div>
+      <div class="modal-section-title">퍼즐 세트</div>
+      <div class="puzzle-set-list" id="puzzle-set-list"></div>
+    </div>
+    <div id="modal-footer">
+      <button id="random-puzzle-btn" onclick="startRandom()">🎲 랜덤</button>
+      <button id="start-puzzle-btn" onclick="startSelected()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        퍼즐 시작
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===================== DATA ===================== */
+
+const THEMES = {
+  tactics: [
+    { id:'fork',        icon:'🍴', name:'포크 (Fork)',         desc:'하나의 말로 두 개 이상의 적 말을 동시에 공격하는 전술',           count:342, diff:'medium', color:'#e08030' },
+    { id:'pin',         icon:'📌', name:'핀 (Pin)',            desc:'적 말을 공격하여 뒤에 있는 더 가치 있는 말을 보호',              count:289, diff:'medium', color:'#5090d0' },
+    { id:'skewer',      icon:'🏹', name:'스큐어 (Skewer)',     desc:'가치 있는 말을 강제로 이동시켜 뒤의 말을 포획',                  count:198, diff:'hard',   color:'#c04040' },
+    { id:'discovcheck', icon:'⚡', name:'발견 체크',            desc:'한 말을 이동시켜 뒤의 말이 체크를 가하는 강력한 전술',            count:156, diff:'hard',   color:'#cc3333' },
+    { id:'sacrifice',   icon:'💥', name:'희생 (Sacrifice)',    desc:'장기적 이익을 위해 말을 의도적으로 내어주는 기술',               count:231, diff:'hard',   color:'#8855cc' },
+    { id:'zwischenzug', icon:'🌀', name:'즈비셴주크',          desc:'예상치 못한 중간 수로 상대방의 기대를 깨는 전술',                count:112, diff:'expert', color:'#2aada6' },
+    { id:'xray',        icon:'🔬', name:'X레이 어택',           desc:'말이 다른 말을 통과해 공격하는 특수 전술',                       count:87,  diff:'expert', color:'#2aada6' },
+    { id:'windmill',    icon:'🌪️', name:'윈드밀',              desc:'연속적인 체크로 상대 말을 하나씩 포획하는 전술',                  count:64,  diff:'expert', color:'#8855cc' },
+    { id:'deflection',  icon:'↗️', name:'편향 (Deflection)',   desc:'상대 말의 방어 역할을 제거하여 전술적 기회 창출',                 count:178, diff:'hard',   color:'#c04040' },
+  ],
+  phases: [
+    { id:'opening_trap', icon:'🪤', name:'오프닝 함정',        desc:'초반부에 상대방을 함정에 빠뜨리는 오프닝 전술',                  count:124, diff:'easy',   color:'#7fa650' },
+    { id:'opening_dev',  icon:'🚀', name:'오프닝 개발',        desc:'효율적인 말 전개와 센터 통제를 연습하는 퍼즐',                   count:98,  diff:'easy',   color:'#7fa650' },
+    { id:'middlegame',   icon:'⚔️', name:'미들게임 전환',      desc:'오프닝에서 미들게임으로 넘어가는 핵심 포지션',                   count:203, diff:'medium', color:'#e08030' },
+    { id:'endgame_basic',icon:'🏁', name:'기본 엔딩',          desc:'킹+폰 엔딩, 기본적인 체크메이트 패턴',                          count:167, diff:'easy',   color:'#7fa650' },
+    { id:'endgame_rook', icon:'🏰', name:'룩 엔딩',            desc:'가장 흔한 엔딩 형태인 룩 엔딩 마스터하기',                       count:145, diff:'medium', color:'#e08030' },
+    { id:'pawn_ending',  icon:'⬆️', name:'폰 엔딩',            desc:'폰 구조와 킹 포지셔닝이 핵심인 엔딩 퍼즐',                       count:189, diff:'medium', color:'#5090d0' },
+  ],
+  positional: [
+    { id:'outpost',      icon:'🗺️', name:'아웃포스트',         desc:'상대방이 공격할 수 없는 강력한 칸에 말 배치하기',                count:134, diff:'medium', color:'#5090d0' },
+    { id:'pawn_structure',icon:'🧱',name:'폰 구조',            desc:'강한 폰 구조 형성과 약점 최소화 훈련',                           count:156, diff:'medium', color:'#e08030' },
+    { id:'king_safety',  icon:'🛡️', name:'킹 안전',           desc:'자신의 킹을 보호하고 상대 킹의 약점을 찾는 훈련',               count:178, diff:'hard',   color:'#c04040' },
+    { id:'bishop_pair',  icon:'⛪', name:'비숍 쌍',            desc:'두 비숍의 장기적 우위를 활용하는 포지셔널 이해',                 count:89,  diff:'hard',   color:'#8855cc' },
+    { id:'rook_open',    icon:'🚪', name:'열린 파일',          desc:'열린 파일과 반열린 파일에서의 룩 활용법',                        count:112, diff:'medium', color:'#5090d0' },
+  ],
+  special: [
+    { id:'stalemate',    icon:'🤝', name:'스테일메이트 트릭',  desc:'질 것 같은 상황에서 스테일메이트를 유도하는 방어 기술',           count:76,  diff:'hard',   color:'#c04040' },
+    { id:'promotion',    icon:'👑', name:'폰 프로모션',        desc:'폰을 퀸으로 승격시키는 타이밍과 방법',                          count:143, diff:'medium', color:'#e08030' },
+    { id:'zugzwang',     icon:'😰', name:'추크츠방',           desc:'움직이면 불리해지는 상황을 만드는 고급 전략',                    count:58,  diff:'expert', color:'#2aada6' },
+    { id:'interference', icon:'🚧', name:'인터피어런스',       desc:'상대 말의 연결을 끊어 방어를 무너뜨리는 전술',                   count:94,  diff:'expert', color:'#8855cc' },
+  ]
+};
+
+const DAILY = {
+  id: 'daily',
+  icon: '📅',
+  name: '오늘의 퍼즐',
+  desc: '매일 새로운 퍼즐로 실력 점검',
+  color: '#7fa650'
+};
+
+/* puzzle sets per theme */
+function generateSets(themeId) {
+  const sets = [];
+  const names = [
+    '기초 패턴', '응용 연습', '실전 포지션', '고급 패턴', '마스터 챌린지',
+    '속도전', '복합 전술', '토너먼트 스타일', '그랜드마스터 컬렉션', '퍼즐 배틀'
+  ];
+  const statuses = ['new','new','progress','new','done','new','new','progress','done','new'];
+  for (let i = 0; i < 8; i++) {
+    sets.push({
+      id: `${themeId}_set_${i+1}`,
+      name: names[i] || `세트 ${i+1}`,
+      count: Math.floor(Math.random() * 8 + 5),
+      difficulty: ['800-1100','1100-1400','1400-1700','1700-2000'][Math.floor(i/2)] || '1400-1700',
+      status: statuses[i] || 'new'
+    });
+  }
+  return sets;
+}
+
+/* ============ SAMPLE PUZZLES (FEN + solution) ============ */
+const SAMPLE_PUZZLES = [
+  {
+    title: '포크 연습 #1',
+    rating: 1150,
+    fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
+    turn: 'white',
+    solution: ['f3g5'],
+    hint: '나이트로 두 개를 동시에 공격할 수 있는 칸을 찾으세요',
+    moves: 1
+  },
+  {
+    title: '핀 전술 #1',
+    rating: 1280,
+    fen: 'rnbqk2r/pppp1ppp/5n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 w kq - 4 5',
+    turn: 'white',
+    solution: ['c4f7'],
+    hint: '핀을 이용해 킹과 퀸 사이의 말을 공격하세요',
+    moves: 1
+  },
+  {
+    title: '체크메이트 #1',
+    rating: 900,
+    fen: 'r1bqkbnr/pppp1ppp/8/4p3/2BnP3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1',
+    turn: 'white',
+    solution: ['f3d4'],
+    hint: '나이트를 활성화하세요',
+    moves: 1
+  }
+];
+
+/* ============ STATE ============ */
+let state = {
+  currentTheme: null,
+  selectedDiff: 'beginner',
+  selectedSet: null,
+  currentPuzzleIdx: 0,
+  totalPuzzles: 10,
+  correctCount: 0,
+  streak: 0,
+  bestStreak: 0,
+  totalSolved: 0,
+  todaySolved: 0,
+  rating: 1200,
+  board: null,          // 8x8 piece array
+  selectedSq: null,     // selected square [r,c]
+  hintShown: false,
+  solutionShown: false,
+  puzzleSolved: false,
+  moveHistory: [],
+  currentPuzzle: null,
+};
+
+/* ============ RENDER THEME GRIDS ============ */
+function renderThemeCard(theme) {
+  const diffLabels = { easy:'입문', medium:'중급', hard:'고급', expert:'전문가' };
+  return `
+    <div class="theme-card" style="--card-accent:${theme.color}" onclick="openTheme('${theme.id}')">
+      <div class="theme-card-icon">${theme.icon}</div>
+      <div class="theme-card-name">${theme.name}</div>
+      <div class="theme-card-desc">${theme.desc}</div>
+      <div class="theme-card-meta">
+        <span class="theme-card-count">${theme.count.toLocaleString()}개</span>
+        <span class="theme-card-diff diff-${theme.diff}">${diffLabels[theme.diff]}</span>
+      </div>
+    </div>
+  `;
+}
+
+function initThemeGrids() {
+  document.getElementById('grid-tactics').innerHTML    = THEMES.tactics.map(renderThemeCard).join('');
+  document.getElementById('grid-phases').innerHTML     = THEMES.phases.map(renderThemeCard).join('');
+  document.getElementById('grid-positional').innerHTML = THEMES.positional.map(renderThemeCard).join('');
+  document.getElementById('grid-special').innerHTML    = THEMES.special.map(renderThemeCard).join('');
+}
+
+/* ============ FIND THEME ============ */
+function findTheme(id) {
+  if (id === 'daily') return DAILY;
+  for (const group of Object.values(THEMES)) {
+    const t = group.find(x => x.id === id);
+    if (t) return t;
+  }
+  return null;
+}
+
+/* ============ MODAL ============ */
+function openTheme(themeId) {
+  const theme = findTheme(themeId);
+  if (!theme) return;
+  state.currentTheme = theme;
+
+  document.getElementById('modal-theme-icon').textContent = theme.icon;
+  document.getElementById('modal-theme-name').textContent = theme.name;
+  document.getElementById('modal-theme-desc').textContent = theme.desc;
+
+  // reset diff selection
+  state.selectedDiff = 'beginner';
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelector('.diff-btn').classList.add('selected');
+
+  renderPuzzleSets(themeId);
+
+  document.getElementById('puzzle-modal-backdrop').classList.add('show');
+}
+
+function renderPuzzleSets(themeId) {
+  const sets = generateSets(themeId);
+  const statusLabel = { new:'새 퍼즐', progress:'진행 중', done:'완료' };
+  const statusClass = { new:'status-new', progress:'status-progress', done:'status-done' };
+  document.getElementById('puzzle-set-list').innerHTML = sets.map((s, i) => `
+    <div class="puzzle-set-item ${state.selectedSet === s.id ? 'selected' : ''}" onclick="selectSet(this,'${s.id}')">
+      <div class="puzzle-set-num">${i+1}</div>
+      <div class="puzzle-set-info">
+        <div class="puzzle-set-name">${s.name}</div>
+        <div class="puzzle-set-meta">📊 레이팅 ${s.difficulty} · ${s.count}개 퍼즐</div>
+      </div>
+      <span class="puzzle-set-status ${statusClass[s.status]}">${statusLabel[s.status]}</span>
+    </div>
+  `).join('');
+  state.selectedSet = sets[0]?.id || null;
+  document.querySelector('.puzzle-set-item')?.classList.add('selected');
+}
+
+function selectSet(el, id) {
+  document.querySelectorAll('.puzzle-set-item').forEach(x => x.classList.remove('selected'));
+  el.classList.add('selected');
+  state.selectedSet = id;
+}
+
+function selectDiff(btn, diff) {
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  state.selectedDiff = diff;
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('puzzle-modal-backdrop')) {
+    document.getElementById('puzzle-modal-backdrop').classList.remove('show');
+  }
+}
+
+function startSelected() {
+  closeModal();
+  enterPuzzleView();
+}
+
+function startRandom() {
+  closeModal();
+  enterPuzzleView();
+}
+
+/* ============ PUZZLE VIEW ============ */
+function enterPuzzleView() {
+  document.getElementById('theme-list-view').style.display = 'none';
+  document.getElementById('puzzle-board-view').classList.add('show');
+
+  const theme = state.currentTheme;
+  document.getElementById('psp-theme-tag').textContent = `${theme.icon} ${theme.name}`;
+  document.getElementById('psp-puzzle-title').textContent = `${theme.name} 퍼즐`;
+
+  state.currentPuzzleIdx = 0;
+  state.totalPuzzles = 10;
+  state.moveHistory = [];
+
+  loadPuzzle(state.currentPuzzleIdx);
+}
+
+function exitPuzzleView() {
+  document.getElementById('puzzle-board-view').classList.remove('show');
+  document.getElementById('theme-list-view').style.display = 'flex';
+}
+
+function loadPuzzle(idx) {
+  const puzzle = SAMPLE_PUZZLES[idx % SAMPLE_PUZZLES.length];
+  state.currentPuzzle = puzzle;
+  state.selectedSq = null;
+  state.hintShown = false;
+  state.solutionShown = false;
+  state.puzzleSolved = false;
+  state.moveHistory = [];
+
+  document.getElementById('puzzle-nav-info').textContent = `퍼즐 ${idx+1} / ${state.totalPuzzles}`;
+  document.getElementById('psp-puzzle-title').textContent = puzzle.title;
+  document.getElementById('psp-rating').textContent = `레이팅: ${puzzle.rating}`;
+  document.getElementById('psp-moves').textContent = `${puzzle.moves}수`;
+  document.getElementById('eval-chip').textContent = `레이팅: ${puzzle.rating}`;
+  document.getElementById('psp-instruction-text').textContent = '최선의 수를 찾아보세요. 말을 클릭한 후 이동할 칸을 클릭하세요.';
+
+  const turnText = puzzle.turn === 'white' ? '백이 움직입니다' : '흑이 움직입니다';
+  document.getElementById('turn-text').textContent = turnText;
+  document.getElementById('turn-dot').style.background = puzzle.turn === 'white' ? '#f0f0f0' : '#1a1a1a';
+  document.getElementById('turn-dot').style.border = puzzle.turn === 'white' ? '1px solid #bbb' : '2px solid #666';
+
+  const pct = (idx / state.totalPuzzles * 100).toFixed(0);
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = `${idx} / ${state.totalPuzzles}`;
+
+  hideFeedback();
+  updateMoveHistory();
+  document.getElementById('retry-btn').style.display = 'none';
+
+  parseFenAndDraw(puzzle.fen);
+}
+
+/* ============ BOARD RENDERING ============ */
+const PIECES = {
+  'K':'♔','Q':'♕','R':'♖','B':'♗','N':'♘','P':'♙',
+  'k':'♚','q':'♛','r':'♜','b':'♝','n':'♞','p':'♟'
+};
+const FILES = ['a','b','c','d','e','f','g','h'];
+
+function parseFenAndDraw(fen) {
+  const board = Array.from({length:8}, () => Array(8).fill(null));
+  const parts = fen.split(' ');
+  const rows = parts[0].split('/');
+
+  rows.forEach((row, r) => {
+    let c = 0;
+    for (const ch of row) {
+      if (/\d/.test(ch)) { c += +ch; }
+      else { board[r][c] = ch; c++; }
+    }
+  });
+
+  state.board = board;
+  drawBoard();
+}
+
+function drawBoard() {
+  const container = document.getElementById('puzzle-chessboard');
+  container.innerHTML = '';
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const sq = document.createElement('div');
+      const isLight = (r + c) % 2 === 0;
+      sq.className = 'chess-square ' + (isLight ? 'light' : 'dark');
+      sq.dataset.r = r;
+      sq.dataset.c = c;
+
+      // piece
+      const piece = state.board[r][c];
+      if (piece) {
+        const span = document.createElement('span');
+        span.textContent = PIECES[piece] || piece;
+        span.style.cssText = 'font-size:clamp(16px,3.5vw,32px);line-height:1;pointer-events:none;' +
+          (piece === piece.toLowerCase() ? 'color:#1a1a1a;text-shadow:0 0 2px rgba(255,255,255,0.4);' : 'color:#fff;text-shadow:0 0 2px rgba(0,0,0,0.6);');
+        sq.appendChild(span);
+      }
+
+      // labels
+      if (c === 7) {
+        const rl = document.createElement('span');
+        rl.className = 'sq-label-rank';
+        rl.textContent = 8 - r;
+        sq.appendChild(rl);
+      }
+      if (r === 7) {
+        const fl = document.createElement('span');
+        fl.className = 'sq-label-file';
+        fl.textContent = FILES[c];
+        sq.appendChild(fl);
+      }
+
+      sq.addEventListener('click', () => handleSquareClick(r, c));
+      container.appendChild(sq);
+    }
+  }
+}
+
+function getSquareEl(r, c) {
+  return document.querySelector(`.chess-square[data-r="${r}"][data-c="${c}"]`);
+}
+
+function clearHighlights() {
+  document.querySelectorAll('.chess-square').forEach(sq => {
+    sq.classList.remove('selected','highlight-move','hint','correct','wrong','last-move');
+  });
+}
+
+function handleSquareClick(r, c) {
+  if (state.puzzleSolved || state.solutionShown) return;
+
+  const piece = state.board[r][c];
+
+  if (state.selectedSq) {
+    const [sr, sc] = state.selectedSq;
+
+    if (sr === r && sc === c) {
+      // deselect
+      state.selectedSq = null;
+      clearHighlights();
+      return;
+    }
+
+    // try move
+    const fromAlg = FILES[sc] + (8 - sr);
+    const toAlg   = FILES[c]  + (8 - r);
+    const moveStr = fromAlg + toAlg;
+
+    tryMove(sr, sc, r, c, moveStr);
+  } else {
+    // select own piece
+    const puzzle = state.currentPuzzle;
+    const isWhitePiece = piece && piece === piece.toUpperCase();
+    const isBlackPiece = piece && piece === piece.toLowerCase();
+    if ((puzzle.turn === 'white' && isWhitePiece) ||
+        (puzzle.turn === 'black' && isBlackPiece)) {
+      state.selectedSq = [r, c];
+      clearHighlights();
+      getSquareEl(r, c)?.classList.add('selected');
+    }
+  }
+}
+
+function tryMove(fr, fc, tr, tc, moveStr) {
+  const puzzle = state.currentPuzzle;
+  const correct = puzzle.solution[0]; // simplified: check first move
+
+  clearHighlights();
+  state.selectedSq = null;
+
+  // animate move on board
+  const fromSq = getSquareEl(fr, fc);
+  const toSq   = getSquareEl(tr, tc);
+
+  if (moveStr === correct || moveStr.startsWith(correct.slice(0,4))) {
+    // correct
+    toSq?.classList.add('correct');
+    fromSq?.classList.add('last-move');
+
+    // update board state
+    state.board[tr][tc] = state.board[fr][fc];
+    state.board[fr][fc] = null;
+
+    const fromAlg = FILES[fc] + (8-fr);
+    const toAlg   = FILES[tc] + (8-tr);
+    state.moveHistory.push({ alg: fromAlg+'-'+toAlg, type:'user' });
+    updateMoveHistory();
+
+    setTimeout(() => {
+      drawBoard();
+      getSquareEl(fr, fc)?.classList.add('last-move');
+      getSquareEl(tr, tc)?.classList.add('last-move');
+    }, 200);
+
+    state.puzzleSolved = true;
+    state.streak++;
+    state.totalSolved++;
+    state.todaySolved++;
+    if (state.streak > state.bestStreak) state.bestStreak = state.streak;
+    updateStats();
+    showFeedback('correct', '✅ 정답입니다! 훌륭한 수입니다!');
+    document.getElementById('retry-btn').style.display = '';
+
+    // progress
+    state.correctCount++;
+    const pct = ((state.currentPuzzleIdx+1) / state.totalPuzzles * 100).toFixed(0);
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-label').textContent = `${state.currentPuzzleIdx+1} / ${state.totalPuzzles}`;
+
+  } else {
+    // wrong
+    toSq?.classList.add('wrong');
+    setTimeout(() => { toSq?.classList.remove('wrong'); }, 700);
+    state.streak = 0;
+    updateStats();
+    showFeedback('wrong', '❌ 틀렸습니다. 다시 생각해보세요.');
+    document.getElementById('retry-btn').style.display = '';
+  }
+}
+
+function showHint() {
+  if (state.puzzleSolved || state.solutionShown) return;
+  const puzzle = state.currentPuzzle;
+  document.getElementById('psp-instruction-text').textContent = '💡 힌트: ' + puzzle.hint;
+  state.hintShown = true;
+}
+
+function showSolution() {
+  const puzzle = state.currentPuzzle;
+  const move = puzzle.solution[0];
+  const fc = FILES.indexOf(move[0]);
+  const fr = 8 - parseInt(move[1]);
+  const tc = FILES.indexOf(move[2]);
+  const tr = 8 - parseInt(move[3]);
+  clearHighlights();
+  getSquareEl(fr, fc)?.classList.add('hint');
+  getSquareEl(tr, tc)?.classList.add('hint');
+  state.solutionShown = true;
+  document.getElementById('psp-instruction-text').textContent = `정답: ${move[0]}${move[1]} → ${move[2]}${move[3]}`;
+}
+
+function retryPuzzle() {
+  loadPuzzle(state.currentPuzzleIdx);
+}
+
+function nextPuzzle() {
+  state.currentPuzzleIdx = Math.min(state.currentPuzzleIdx + 1, state.totalPuzzles - 1);
+  loadPuzzle(state.currentPuzzleIdx);
+}
+
+function prevPuzzle() {
+  state.currentPuzzleIdx = Math.max(state.currentPuzzleIdx - 1, 0);
+  loadPuzzle(state.currentPuzzleIdx);
+}
+
+function showFeedback(type, msg) {
+  const el = document.getElementById('puzzle-feedback');
+  el.textContent = msg;
+  el.className = 'puzzle-feedback ' + type;
+  el.style.display = 'flex';
+}
+
+function hideFeedback() {
+  const el = document.getElementById('puzzle-feedback');
+  el.style.display = 'none';
+  el.className = 'puzzle-feedback';
+}
+
+function updateMoveHistory() {
+  const list = document.getElementById('move-history-list');
+  if (state.moveHistory.length === 0) {
+    list.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">아직 수가 없습니다</span>';
+    return;
+  }
+  list.innerHTML = state.moveHistory.map(m =>
+    `<div class="move-chip ${m.type}-move">${m.alg}</div>`
+  ).join('');
+}
+
+function updateStats() {
+  document.getElementById('streak-count').textContent = state.streak;
+  document.getElementById('my-rating').textContent = state.rating;
+  document.getElementById('stat-total').textContent = state.totalSolved;
+  document.getElementById('stat-streak').textContent = state.bestStreak;
+  document.getElementById('stat-today').textContent = state.todaySolved;
+  const acc = state.totalSolved > 0 ? Math.round(state.correctCount / state.totalSolved * 100) : 0;
+  document.getElementById('stat-acc').textContent = state.totalSolved > 0 ? acc : '—';
+}
+
+/* ============ INIT ============ */
+initThemeGrids();
+updateStats();
+</script>
+</body>
+</html>
