@@ -80,6 +80,8 @@ body {
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 12px; cursor: pointer; font-size: 22px;
   transition: background 0.2s;
+  color: inherit;
+  text-decoration: none;
 }
 .sidebar-logo:hover { background: var(--accent-green-bright); }
 
@@ -1344,7 +1346,7 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
   <svg id="mpanel-icon-close" width="24" height="24" viewBox="0 0 24 24" fill="white" style="display:none;"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
 </button>
 <nav id="sidebar">
-  <div class="sidebar-logo" title="체스 분석">♟</div>
+  <a class="sidebar-logo" href="/" title="체스 홈" style="text-decoration:none;color:inherit;">♟</a>
   <div class="sidebar-nav">
     <div class="sidebar-item active" onclick="switchTab('analysis')" title="분석">
       <div class="sidebar-icon">
