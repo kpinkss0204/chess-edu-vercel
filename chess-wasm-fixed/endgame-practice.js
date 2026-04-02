@@ -5,7 +5,7 @@
 (function () {
   var POSITIONS = {
     square_rule: {
-      fen: '8/8/8/8/3p4/8/3P4/3K4 w - - 0 1',
+      fen: '8/1p4p1/5b1p/8/P2B4/2P5/1Pk2KP1/8 w - - 2 2',
       myColor: 'w',
       title: '사각형 규칙',
     },
