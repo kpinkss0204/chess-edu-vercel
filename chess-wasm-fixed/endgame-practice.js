@@ -55,12 +55,12 @@
       title: '킹·룩 vs 킹',
     },
     rook_vs_queen: {
-      fen: '5k2/8/8/8/8/8/6r1/2K1Q3 w - - 0 1',
+      fen: '8/2QK4/8/8/8/8/3rk3/8 w - - 0 1',
       myColor: 'w',
       title: '룩 vs 퀸',
     },
     queen_vs_pawn: {
-      fen: '8/8/8/8/8/4p3/2K5/3Q4 w - - 0 1',
+      fen: '8/2QK4/8/8/8/8/3pk3/8 w - - 0 1',
       myColor: 'w',
       title: '퀸 vs 폰',
     },
