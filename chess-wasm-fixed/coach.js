@@ -316,6 +316,8 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`- 섹션 헤더는 **포지션 상황**, **약점 분석**, **최선수 분석**, **이후 수순** 4개만 사용`);
   lines.push(`- 각 섹션 2~4문장, 전체 500자 내외`);
   lines.push(`- 플레이스홀더(<<_0>> 등) 절대 금지`);
+  lines.push(`- 반드시 위에 제공된 엔진 라인의 실제 수 표기(예: e4, Nf3, Bb5, O-O)를 그대로 사용하세요. 수 표기를 생략하거나 빈칸으로 두지 마세요.`);
+  lines.push(`- 수 표기 없이 "이 수", "해당 수" 같은 모호한 표현만 쓰지 마세요. "e4를 두면", "Nf3이 핵심입니다"처럼 항상 구체적인 수를 명시하세요.`);
 
   return lines.join('\n');
 }
@@ -521,18 +523,24 @@ function cleanKorean(text) {
 function stripForeignWordsKeepingMoves(text) {
   if (!text) return text;
 
-  const moveRe = /\b(O-O-O|O-O|[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?|[a-h]x?[a-h][1-8][+#]?|[a-h][1-8][+#]?)\b/g;
-  const keep = [];
-  const placeholder = (i) => `<<MV_${i}>>`;
+  // 체스 수 표기 패턴 — 순서 중요 (긴 것부터 매칭)
+  // O-O-O, O-O, 기물수(Nf3, Bxe5 등), 폰캡처(dxe5), 일반폰수(e4, d5), 프로모션, 체크
+  const moveRe = /(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?|[a-h]x[a-h][1-8](?:=[NBRQ])?[+#]?|[a-h][1-8](?:=[NBRQ])?[+#]?)/g;
 
+  const keep = [];
+  const placeholder = (i) => `\u2060MV${String(i).padStart(4,'0')}\u2060`; // 보이지 않는 구분자 사용
+
+  // 1단계: 체스 수를 플레이스홀더로 치환
   let tmp = text.replace(moveRe, (m) => {
     const idx = keep.push(m) - 1;
     return placeholder(idx);
   });
 
+  // 2단계: 남은 라틴 문자 제거 (플레이스홀더의 숫자는 ASCII 숫자라 안전)
   tmp = tmp.replace(/[A-Za-zÀ-ÖØ-öø-ÿ]+/g, '');
 
-  tmp = tmp.replace(/<<MV_(\d+)>>/g, (_, n) => keep[parseInt(n, 10)] || '');
+  // 3단계: 플레이스홀더 복원
+  tmp = tmp.replace(/\u2060MV(\d{4})\u2060/g, (_, n) => keep[parseInt(n, 10)] || '');
 
   return tmp
     .replace(/[ \t]{2,}/g, ' ')
