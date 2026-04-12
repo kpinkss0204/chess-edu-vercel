@@ -505,49 +505,29 @@ function renderCoachSidebar(answerText) {
 }
 
 // ══════════════════════════════════════════════════════
-// 한국어 후처리: 비한국어 문자 제거
+// 한국어 후처리
 // ══════════════════════════════════════════════════════
 function cleanKorean(text) {
   if (!text) return text;
-  const cleaned = text
+  let out = text
+    // 일본어 히라가나/가타카나 제거
     .replace(/[\u3040-\u309F\u30A0-\u30FF]+/g, '')
+    // 일본어/중국어 한자 제거
     .replace(/[\u4E00-\u9FFF\u3400-\u4DBF]+/g, '')
-    .replace(/[\u0600-\u06FF]+/g, '')
-    .replace(/[\u0E00-\u0E7F\u0900-\u097F]+/g, '')
-    .replace(/  +/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  return stripForeignWordsKeepingMoves(cleaned);
-}
-
-function stripForeignWordsKeepingMoves(text) {
-  if (!text) return text;
-
-  // 체스 수 표기 패턴 — 순서 중요 (긴 것부터 매칭)
-  // O-O-O, O-O, 기물수(Nf3, Bxe5 등), 폰캡처(dxe5), 일반폰수(e4, d5), 프로모션, 체크
-  const moveRe = /(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?|[a-h]x[a-h][1-8](?:=[NBRQ])?[+#]?|[a-h][1-8](?:=[NBRQ])?[+#]?)/g;
-
-  const keep = [];
-  const placeholder = (i) => `\u2060MV${String(i).padStart(4,'0')}\u2060`; // 보이지 않는 구분자 사용
-
-  // 1단계: 체스 수를 플레이스홀더로 치환
-  let tmp = text.replace(moveRe, (m) => {
-    const idx = keep.push(m) - 1;
-    return placeholder(idx);
-  });
-
-  // 2단계: 남은 라틴 문자 제거 (플레이스홀더의 숫자는 ASCII 숫자라 안전)
-  tmp = tmp.replace(/[A-Za-zÀ-ÖØ-öø-ÿ]+/g, '');
-
-  // 3단계: 플레이스홀더 복원
-  tmp = tmp.replace(/\u2060MV(\d{4})\u2060/g, (_, n) => keep[parseInt(n, 10)] || '');
-
-  return tmp
+    // 아랍어, 태국어 등 제거
+    .replace(/[\u0600-\u06FF\u0E00-\u0E7F\u0900-\u097F]+/g, '')
+    // 공백/줄바꿈 정리
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
-    .replace(/ \n/g, '\n')
     .trim();
+
+  // ★ 라틴 문자(영문) 제거는 하지 않음
+  // 체스 수 표기(e4, Nf3, O-O 등)가 라틴 문자이므로 제거하면 수가 사라짐
+  // 대신 LLM 프롬프트에서 한국어 외 출력을 금지하여 불필요한 영문 혼입을 방지
+
+  return out;
 }
+
 
 // ══════════════════════════════════════════════════════
 // 위협 분석 패널 (기존 유지)
