@@ -28,22 +28,20 @@ function loadApiKey() {
 // 패널 열기/닫기
 function openCoach() {
   coachOpen = true;
-  document.getElementById('coach-panel').classList.add('open');
-  document.getElementById('coach-fab').classList.add('hidden');
-  document.getElementById('board-area').classList.add('coach-open');
+  const panel = document.getElementById('coach-inline');
+  if (panel) panel.style.display = 'block';
   // 패널을 열자마자 자동으로 포지션 해설 실행
   runPositionCommentary();
 }
 
 function closeCoach() {
   coachOpen = false;
-  document.getElementById('coach-panel').classList.remove('open');
-  document.getElementById('coach-fab').classList.remove('hidden');
-  document.getElementById('board-area').classList.remove('coach-open');
+  const panel = document.getElementById('coach-inline');
+  if (panel) panel.style.display = 'none';
 }
 
-function toggleCoach() {
-  if (coachOpen) closeCoach(); else openCoach();
+function closeCoachInline() {
+  closeCoach();
 }
 
 // updateCoachContext: 상단 태그 표시는 제거 (빈 함수로 유지 — 다른 곳에서 호출될 수 있음)
@@ -178,6 +176,11 @@ async function runPositionCommentary() {
   if (coachLoading) return;
   if (!coachApiKey) return;
 
+  // 인라인 패널 열기
+  const inlinePanel = document.getElementById('coach-inline');
+  if (inlinePanel) inlinePanel.style.display = 'block';
+  coachOpen = true;
+
   const responseDiv = document.getElementById('coach-response');
   if (!responseDiv) return;
 
@@ -242,6 +245,11 @@ async function askCoach() {
 
   coachLoading = true;
   document.getElementById('coach-ask-btn').disabled = true;
+
+  // 인라인 패널 열기
+  const inlinePanel = document.getElementById('coach-inline');
+  if (inlinePanel) inlinePanel.style.display = 'block';
+  coachOpen = true;
 
   const responseDiv = document.getElementById('coach-response');
   responseDiv.style.display = 'flex';
@@ -512,14 +520,14 @@ function formatPlain(escaped) {
 }
 
 // ══════════════════════════════════════════════════════
-// 오른쪽 패널에 해설 미러링
+// 인라인 패널에 해설 렌더링
 // ══════════════════════════════════════════════════════
 function renderCoachSidebar(answerText) {
-  const panel = document.getElementById('coach-sidebar');
-  const body  = document.getElementById('coach-sidebar-body');
-  if (!panel || !body) return;
-  panel.style.display = 'block';
-  body.innerHTML = formatCommentary(answerText);
+  const responseDiv = document.getElementById('coach-response');
+  if (!responseDiv) return;
+  responseDiv.style.display = 'block';
+  responseDiv.className = '';
+  responseDiv.innerHTML = formatCommentary(answerText);
 }
 
 // ══════════════════════════════════════════════════════
