@@ -1189,74 +1189,13 @@ function findMoveFromSAN(board, color, castling, enPassant, legal, san) {
 }
 
 // ===== TOKEN =====
-// 1순위: Vercel 환경변수 (서버에서 주입)
-// 2순위: localStorage에 저장된 토큰
-// 3순위: 없음 (사용자가 직접 입력)
-let lichessToken = localStorage.getItem('lichess_token') || '';
-let _envTokenLoaded = false; // 환경변수 토큰이 로드됐는지 추적
+// Vercel 환경변수에 저장된 토큰을 하드코딩으로 사용
+// 토큰 입력 UI는 완전히 숨김
+let lichessToken = 'lip_IQo6W4CT7HFHG0VDyEgR';
 
-function onTokenInput(v) { lichessToken = v.trim(); }
-
-function saveToken() {
-  const v = document.getElementById('lichess-token-input').value.trim();
-  if (!v) { alert('토큰을 입력하세요.'); return; }
-  lichessToken = v;
-  localStorage.setItem('lichess_token', v);
-  updateTokenUI();
-  fetchExplorerData();
-}
-
-function clearToken() {
-  lichessToken = '';
-  _envTokenLoaded = false;
-  localStorage.removeItem('lichess_token');
-  document.getElementById('lichess-token-input').value = '';
-  updateTokenUI();
-}
-
-function updateTokenUI() {
-  const banner   = document.getElementById('token-banner');
-  const tokenRow = document.getElementById('token-row');
-  const tokenIn  = document.getElementById('lichess-token-input');
-  if (lichessToken) {
-    banner.style.display = 'none';
-    // 환경변수 토큰이면 입력창 숨기기 (보안)
-    if (_envTokenLoaded) {
-      tokenRow.style.display = 'none';
-    } else {
-      tokenRow.style.display = 'flex';
-      tokenIn.value = lichessToken;
-      tokenIn.style.borderColor = 'var(--accent-green-dark)';
-    }
-  } else {
-    banner.style.display = 'flex';
-    tokenRow.style.display = 'flex';
-    tokenIn.style.borderColor = 'var(--border)';
-  }
-}
-
-// 초기 로드: Vercel 환경변수 토큰 우선 fetch
-(async function initToken() {
-  try {
-    const res = await fetch('/api/lichess-token');
-    if (res.ok) {
-      const { token } = await res.json();
-      if (token) {
-        lichessToken = token;
-        _envTokenLoaded = true;
-      }
-    }
-  } catch (e) {
-    // /api/lichess-token 없으면(로컬 개발 등) 무시
-    console.log('[Token] 환경변수 API 없음, localStorage 사용');
-  }
-  // 환경변수 토큰 없으면 localStorage 복원
-  if (!lichessToken) {
-    lichessToken = localStorage.getItem('lichess_token') || '';
-  }
-  updateTokenUI();
-  // 토큰 준비 후 탐색기 데이터 로드
-  fetchExplorerData();
+(function initToken() {
+  document.getElementById('token-banner').style.display = 'none';
+  document.getElementById('token-row').style.display    = 'none';
 })();
 
 // ===== LICHESS EXPLORER API =====
@@ -1320,11 +1259,11 @@ async function fetchExplorerData() {
         // 레이팅 버킷
         const ratingKey = document.getElementById('rating-select').value;
         const buckets   = RATING_BUCKETS[ratingKey] || RATING_BUCKETS['all'];
-        const ratingParams = buckets.map(r => `ratings=${r}`).join('&');
+        const ratingParams = `ratings=${buckets.join(',')}`;
 
         // 시간제
         const speed = document.getElementById('speed-select').value;
-        const speedParam = speed ? `&speeds=${speed}` : '';
+        const speedParam = speed ? `&speeds=${speed}` : '&speeds=ultraBullet,bullet,blitz,rapid,classical,correspondence';
 
         url = `https://explorer.lichess.ovh/lichess?${ratingParams}${speedParam}&topGames=5${playParam}`;
       }
