@@ -300,24 +300,27 @@ function buildCommentaryPrompt(ctx) {
 
   lines.push(``);
   lines.push(`[해설 작성 지침]`);
-  lines.push(`위 스톡피시 엔진 라인 3개를 기반으로 가장 좋은 수(1순위 라인의 첫 수)를 핵심으로 분석해주세요.`);
-  lines.push(`1순위 라인의 수순이 짧거나 정보가 부족하다면, 2순위/3순위 라인을 보조 자료로 활용하여 더 풍부하게 해설해주세요.`);
+  lines.push(`스톡피시 엔진 라인을 기반으로, 현재 포지션을 체스인사이드 스타일로 해설하세요.`);
+  lines.push(`해설은 반드시 **포지션 상황** 섹션으로 시작합니다.`);
+  lines.push(`그 뒤로는 포지션의 특성에 따라 아래 섹션들을 필요한 것만 선택해서 작성하세요:`);
   lines.push(``);
-  lines.push(`다음 4가지를 포함한 해설을 작성하세요:`);
-  lines.push(`① 현재 포지션 상황 — 지금 보드에서 어떤 일이 벌어지고 있는지 한눈에 보이게 설명`);
-  lines.push(`② 백의 약점과 흑의 약점 — 각각의 구조적/전략적 약점을 구체적으로 짚어주세요`);
-  lines.push(`③ 가장 좋은 수 분석 — 엔진 1순위 첫 수가 왜 좋은지 이유를 3~4가지 측면에서 설명 (중앙 장악, 기물 활동성, 왕 안전, 폰 구조, 공간 등)`);
-  lines.push(`④ 이후 수순 아이디어 — 엔진 라인을 바탕으로 앞으로 전개될 흐름과 양 측의 계획을 해설`);
+  lines.push(`- **약점 분석** : 백 또는 흑에게 구체적인 구조적/전략적 약점이 존재할 때만 작성. 균형 잡힌 오프닝 초반처럼 약점이 불분명하면 생략.`);
+  lines.push(`- **강점 분석** : 한쪽이 공간적 우위, 기물 활동성, 폰 구조 등에서 뚜렷한 강점을 가질 때만 작성. 특이사항이 없으면 생략.`);
+  lines.push(`- **위협 & 아이디어** : 즉각적인 위협(전술, 포크, 핀, 킹 안전 위협 등)이나 중요한 전략적 아이디어가 있을 때만 작성. 아무것도 없으면 생략.`);
+  lines.push(`- **최선수 분석** : 엔진 1순위 첫 수를 항상 분석. 왜 좋은지 2~3가지 이유를 간결하게.`);
+  lines.push(`- **이후 수순** : 앞으로 전개될 핵심 흐름과 양 측의 계획을 해설.`);
   lines.push(``);
   lines.push(`[형식 규칙]`);
-  lines.push(`- 출력 언어: 한국어만 사용 (체스 수 표기는 예외: e4, Nf3, O-O 등은 영문 유지)`);
-  lines.push(`- cp/평가점수/승률/기보 번호 같은 수치는 절대 쓰지 마세요. 수 표기(e4, Nf3)는 예외`);
-  lines.push(`- 말투: 체스인사이드처럼 편안하고 흥미롭게, 관찰 → 이유 → 결과 흐름으로`);
-  lines.push(`- 섹션 헤더는 **포지션 상황**, **약점 분석**, **최선수 분석**, **이후 수순** 4개만 사용`);
-  lines.push(`- 각 섹션 2~4문장, 전체 500자 내외`);
+  lines.push(`- 출력 언어: 한국어만 (체스 수 표기 e4, Nf3, O-O 등은 영문 유지)`);
+  lines.push(`- cp/평가점수/승률 수치 절대 금지. 수 표기(e4, Nf3)는 예외`);
+  lines.push(`- 말투: 체스인사이드처럼 편안하고 흥미롭게`);
+  lines.push(`- 섹션 헤더 형식: 반드시 **헤더명** 형태로만 쓰세요. 예: **포지션 상황**, **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순**`);
+  lines.push(`- 섹션 헤더는 항상 새 줄에서 시작하고, 헤더와 본문 사이에 줄바꿈 하나를 넣으세요.`);
+  lines.push(`- 절대로 ** 없이 평문으로 섹션 이름을 쓰지 마세요. 모든 섹션 구분은 반드시 **헤더명** 패턴만 사용합니다.`);
+  lines.push(`- 한 섹션의 본문 안에 다른 섹션 이름(약점 분석, 최선수 분석 등)을 절대 포함하지 마세요.`);
+  lines.push(`- 각 섹션 1~3문장, 전체 400~600자`);
+  lines.push(`- 반드시 엔진 라인의 실제 수 표기를 그대로 쓸 것. 수를 생략하거나 "이 수", "해당 수"처럼 모호하게 쓰지 말 것`);
   lines.push(`- 플레이스홀더(<<_0>> 등) 절대 금지`);
-  lines.push(`- 반드시 위에 제공된 엔진 라인의 실제 수 표기(예: e4, Nf3, Bb5, O-O)를 그대로 사용하세요. 수 표기를 생략하거나 빈칸으로 두지 마세요.`);
-  lines.push(`- 수 표기 없이 "이 수", "해당 수" 같은 모호한 표현만 쓰지 마세요. "e4를 두면", "Nf3이 핵심입니다"처럼 항상 구체적인 수를 명시하세요.`);
 
   return lines.join('\n');
 }
@@ -363,7 +366,7 @@ async function callCommentaryAPI(ctx) {
 Always respond ONLY in Korean (한국어). Chess move notation (e4, Nf3, O-O, dxc4) stays in English/algebraic form.
 Never output Japanese, Chinese, Arabic, or any non-Korean script.
 Never output numerical evaluation scores (cp, centipawn, win rate percentages).
-Never output section headers other than: **포지션 상황**, **약점 분석**, **최선수 분석**, **이후 수순**.
+Only use these section headers (use only what is relevant): **포지션 상황**, **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순**.
 Never output placeholders like <<_0>> or <<1>>.
 Talk like an enthusiastic chess analyst explaining to viewers: observation → reason → consequence.`;
 
@@ -428,36 +431,51 @@ function formatCommentary(text) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const SECTION_DEFS = [
-    { key: '포지션 상황', icon: '🔍', cls: 'section-pos'  },
-    { key: '약점 분석',   icon: '⚠️', cls: 'section-weak' },
-    { key: '최선수 분석', icon: '♟️', cls: 'section-best' },
-    { key: '이후 수순',   icon: '🔮', cls: 'section-plan' },
+    { key: '포지션 상황',    icon: '🔍', cls: 'section-pos'    },
+    { key: '약점 분석',      icon: '⚠️', cls: 'section-weak'   },
+    { key: '강점 분석',      icon: '💪', cls: 'section-strong' },
+    { key: '위협 & 아이디어', icon: '⚡', cls: 'section-threat' },
+    { key: '최선수 분석',    icon: '♟️', cls: 'section-best'   },
+    { key: '이후 수순',      icon: '🔮', cls: 'section-plan'   },
   ];
 
   const SECTION_KEYS = SECTION_DEFS.map(s => s.key);
 
-  // 섹션 파싱
+  // ── 개선된 섹션 파싱 ──────────────────────────────────────────────────────
+  // 전략: 모든 **헤더** 위치를 먼저 찾아 정렬한 뒤, 각 헤더 사이 본문만 추출.
+  // LLM이 본문 안에 "비공식 헤더(** 없이 평문)"를 쓸 경우 다음 ** 헤더 위치로
+  // 잘라내기 때문에 중복이 발생하지 않음.
+
+  // 1) 모든 알려진 헤더 위치 탐색
+  const allHeaderPat = new RegExp(
+    '\\*\\*(' + SECTION_KEYS.map(k => k.replace(/&/g,'&amp;').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')[:\\s：]*\\*\\*',
+    'g'
+  );
+
+  const found = []; // { key, start, bodyStart }
+  let m;
+  while ((m = allHeaderPat.exec(escaped)) !== null) {
+    found.push({ key: m[1], start: m.index, bodyStart: m.index + m[0].length });
+  }
+
   const parsed = {};
-  let remaining = escaped;
+  for (let fi = 0; fi < found.length; fi++) {
+    const { key, bodyStart } = found[fi];
+    const bodyEnd = fi + 1 < found.length ? found[fi + 1].start : escaped.length;
+    let body = escaped.slice(bodyStart, bodyEnd).trim().replace(/^[:：\s]+/, '').trim();
 
-  for (let ki = 0; ki < SECTION_KEYS.length; ki++) {
-    const key     = SECTION_KEYS[ki];
-    const nextKey = SECTION_KEYS[ki + 1];
-    const keyPat  = new RegExp('\\*\\*' + key + '[:\\s：]*\\*\\*|\\*\\*' + key + '\\*\\*');
-    const startIdx = remaining.search(keyPat);
-    if (startIdx < 0) continue;
-
-    const headerMatch = remaining.slice(startIdx).match(keyPat);
-    const bodyFrom    = startIdx + headerMatch[0].length;
-
-    let bodyEnd = remaining.length;
-    if (nextKey) {
-      const nextPat = new RegExp('\\*\\*' + nextKey);
-      const nextIdx = remaining.slice(bodyFrom).search(nextPat);
-      if (nextIdx >= 0) bodyEnd = bodyFrom + nextIdx;
+    // 본문 안에 평문으로 다른 섹션 이름이 붙어있으면 그 앞까지만 사용
+    // (예: "...공격을 준비합니다. 최선수 분석 백의 최선수는...")
+    const inlineHeaderPat = new RegExp(
+      '(?:^|\n)(' + SECTION_KEYS.map(k => k.replace(/&/g,'&amp;').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')(?:\s|$)',
+      'i'
+    );
+    const inlineMatch = body.match(inlineHeaderPat);
+    if (inlineMatch && inlineMatch.index > 0) {
+      body = body.slice(0, inlineMatch.index).trim();
     }
 
-    parsed[key] = remaining.slice(bodyFrom, bodyEnd).trim().replace(/^[:：\s]+/, '').trim();
+    if (body) parsed[key] = body;
   }
 
   if (Object.keys(parsed).length === 0) {

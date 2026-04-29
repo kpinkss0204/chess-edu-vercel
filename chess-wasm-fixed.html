@@ -739,18 +739,6 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 #coach-ask-btn:hover:not(:disabled) { background: var(--accent-green-bright); }
 #coach-ask-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.quick-btns {
-  display: flex; gap: 5px; flex-wrap: wrap;
-  flex-shrink: 0;
-}
-.quick-btn {
-  padding: 5px 10px; border-radius: 20px;
-  border: 1px solid var(--border); background: var(--bg-card);
-  color: var(--text-secondary); font-size: 11px; cursor: pointer;
-  transition: all 0.15s; font-family: var(--font-main);
-  white-space: nowrap;
-}
-.quick-btn:hover { background: var(--accent-green-dark); color: #fff; border-color: var(--accent-green); }
 
 #coach-response {
   background: var(--bg-card); border: 1px solid var(--border);
@@ -1366,6 +1354,12 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       </div>
       <span class="sidebar-label">퍼즐</span>
     </a>
+    <a class="sidebar-item" href="/opening-explorer.html" title="오프닝 탐색기" style="text-decoration:none;">
+      <div class="sidebar-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+      </div>
+      <span class="sidebar-label">탐색기</span>
+    </a>
     <div class="sidebar-divider"></div>
     <a class="sidebar-item" href="/records.html" title="기록" style="text-decoration:none;">
       <div class="sidebar-icon">
@@ -1740,15 +1734,6 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 
   <div id="coach-body">
     <div id="coach-context-display" class="coach-context-line" style="display:none;"></div>
-
-    <div class="quick-btns" id="quick-btns">
-      <button class="quick-btn" onclick="askQuick('방금 둔 수의 전략적 의도를 전략/계획/목표 구조로 설명해주세요.')">이 수의 전략적 의도?</button>
-      <button class="quick-btn" onclick="askQuick('이 수를 두지 않았다면 상대방에게 어떤 기회가 생겼을지 전략/계획/목표 구조로 설명해주세요.')">안 두면 어떻게 되나요?</button>
-      <button class="quick-btn" onclick="askQuick('엔진 추천수와 내가 실제 둔 수의 전략적 차이를 전략/계획/목표 구조로 비교 설명해주세요.')">추천수 vs 내 수 비교</button>
-      <button class="quick-btn" onclick="askQuick('현재 포지션에서 양쪽의 핵심 전략 포인트를 전략/계획/목표 구조로 설명해주세요.')">현재 핵심 전략은?</button>
-      <button class="quick-btn" onclick="askQuick('이 포지션에서 백과 흑 각각의 장단점을 전략/계획/목표 구조로 분석해주세요.')">양쪽 장단점 분석</button>
-      <button class="quick-btn" onclick="askQuick('유튜브 체스인사이드 해설 스타일로 현재 포지션을 처음 보는 사람도 이해하도록 내레이션 해주세요. 핵심 아이디어, 양쪽의 계획, 상대의 대표 대응, 그리고 이 흐름을 놓치면 생기는 결과를 전략/계획/목표 구조로 정리해 주세요.')">체스인사이드식 포지션 해설</button>
-    </div>
 
     <div class="coach-question-row">
       <textarea id="coach-input" placeholder="체스 코치에게 질문하세요... (예: 이 수에 대한 전략,의도가 뭐니?)" rows="2"></textarea>
