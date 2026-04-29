@@ -697,13 +697,17 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
   box-shadow: 0 0 0 2px var(--accent-green-bright);
 }
 
-/* ===== AI COACH INLINE (우측 패널: 엔진 분석과 기보 사이) ===== */
+/* 코치 열릴 때 보드 왼쪽 정렬로 전환 */
+#board-area.coach-open { align-items: flex-start; }
+
+/* ===== AI COACH INLINE (우측 패널: 탑무브 아래, 기보 위) ===== */
 #coach-inline {
   display: none;
-  border-top: 1px solid var(--border);
+  border-top: 2px solid var(--accent-green-dark);
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
   flex-shrink: 0;
+  overflow: hidden;
 }
 #coach-inline-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -730,7 +734,7 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 #coach-response {
   font-size: 12.5px; line-height: 1.7; color: var(--text-primary);
   word-break: break-word;
-  max-height: 260px; overflow-y: auto;
+  max-height: 200px; overflow-y: auto;
 }
 #coach-response.loading {
   display: flex; align-items: center; gap: 10px;
@@ -1478,7 +1482,7 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
           </div>
         </div>
 
-        <!-- AI 코치 인라인 패널: 엔진 분석과 기보 사이 -->
+        <!-- AI 코치 응답 패널 (탑무브 아래, 기보 위) -->
         <div id="coach-inline">
           <div id="coach-inline-header">
             <div id="coach-inline-title">
@@ -1499,7 +1503,7 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
           </div>
         </div>
 
-        <!-- AI 해설 (우측 고정 카드: 읽기 쉬운 위치) -->
+        <!-- 기보 -->
         <div id="move-list-wrap">
           <div class="move-list-header">
             <span class="move-list-title">기보</span>
