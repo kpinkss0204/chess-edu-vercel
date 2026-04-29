@@ -1238,7 +1238,7 @@ async function fetchExplorerData() {
 
       let url;
       if (currentDb === 'masters') {
-        url = `https://explorer.lichess.ovh/masters?topGames=5${playParam}`;
+        url = `/api/explorer?db=masters&topGames=5${playParam}`;
       } else {
         // 레이팅 버킷
         const ratingKey = document.getElementById('rating-select').value;
@@ -1249,15 +1249,12 @@ async function fetchExplorerData() {
         const speed = document.getElementById('speed-select').value;
         const speedParam = speed ? `&speeds=${speed}` : '&speeds=ultraBullet,bullet,blitz,rapid,classical,correspondence';
 
-        url = `https://explorer.lichess.ovh/lichess?${ratingParams}${speedParam}&topGames=5${playParam}`;
+        url = `/api/explorer?db=lichess&${ratingParams}${speedParam}&topGames=5${playParam}`;
       }
 
       console.log('[Explorer] fetching:', url);
 
       // 토큰이 아직 로드 안 됐으면 기다림
-      await ensureToken();
-      // explorer.lichess.ovh 는 Authorization 헤더 대신 token 쿼리 파라미터 사용
-      if (lichessToken) url += `&token=${lichessToken}`;
       const headers = { 'Accept': 'application/json' };
 
       const resp = await fetch(url, { signal: fetchController.signal, headers });
