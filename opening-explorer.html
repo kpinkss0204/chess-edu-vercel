@@ -1238,7 +1238,7 @@ async function fetchExplorerData() {
 
       let url;
       if (currentDb === 'masters') {
-        url = `https://explorer.lichess.ovh/masters?topGames=5${playParam}`;
+        url = `https://lichess.org/api/opening-explorer/masters?topGames=5${playParam}`;
       } else {
         // 레이팅 버킷
         const ratingKey = document.getElementById('rating-select').value;
@@ -1249,7 +1249,7 @@ async function fetchExplorerData() {
         const speed = document.getElementById('speed-select').value;
         const speedParam = speed ? `&speeds=${speed}` : '&speeds=ultraBullet,bullet,blitz,rapid,classical,correspondence';
 
-        url = `https://explorer.lichess.ovh/lichess?${ratingParams}${speedParam}&topGames=5${playParam}`;
+        url = `https://lichess.org/api/opening-explorer/lichess?${ratingParams}${speedParam}&topGames=5${playParam}`;
       }
 
       console.log('[Explorer] fetching:', url);
