@@ -201,7 +201,7 @@ body {
 }
 
 .player-bar {
-  width: 100%; max-width: min(560px, calc(100vw - 24px));
+  width: min(calc(100vh - 216px), calc(100vw - 32px));
   display: flex; align-items: center; justify-content: space-between;
   background: var(--bg-secondary); border: 1px solid var(--border);
   border-radius: 12px; padding: 10px 16px;
@@ -226,8 +226,12 @@ body {
 
 /* ── 체스보드 ── */
 #play-board-wrap {
-  width: 100%; max-width: min(560px, calc(100vw - 24px));
-  aspect-ratio: 1; position: relative;
+  /* 세로: 100vh - 플레이어바2개 - gap - 버튼행 - 패딩 약 216px */
+  /* 가로: 100vw - 좌우패딩 32px */
+  width: min(calc(100vh - 216px), calc(100vw - 32px));
+  height: min(calc(100vh - 216px), calc(100vw - 32px));
+  flex-shrink: 0;
+  position: relative;
 }
 #play-board {
   width: 100%; height: 100%;
@@ -283,7 +287,7 @@ body {
 /* ── 하단 버튼 ── */
 .play-actions {
   display: flex; gap: 8px;
-  width: 100%; max-width: min(560px, calc(100vw - 24px));
+  width: min(calc(100vh - 216px), calc(100vw - 32px));
 }
 .btn-resign {
   flex: 1; padding: 10px;
