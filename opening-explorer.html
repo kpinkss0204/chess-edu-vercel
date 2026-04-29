@@ -1157,20 +1157,30 @@ function findMoveFromSAN(board, color, castling, enPassant, legal, san) {
 // /api/lichess-token (Vercel Serverless Function) 에서 토큰을 가져옴
 // 토큰은 Vercel 환경변수 LICHESS_TOKEN 에 저장되어 있음
 let lichessToken = '';
+let tokenReady = false; // 토큰 로드 완료 여부
 
-(async function initToken() {
-  try {
-    const res = await fetch('/api/lichess-token');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.token) lichessToken = data.token;
-    }
-  } catch (e) {
-    console.warn('[Token] /api/lichess-token 요청 실패:', e);
+// 토큰을 가져오는 함수 (중복 호출 방지)
+let tokenPromise = null;
+async function ensureToken() {
+  if (tokenReady) return lichessToken;
+  if (!tokenPromise) {
+    tokenPromise = fetch('/api/lichess-token')
+      .then(res => res.ok ? res.json() : {})
+      .then(data => {
+        if (data.token) lichessToken = data.token;
+        tokenReady = true;
+      })
+      .catch(e => {
+        console.warn('[Token] /api/lichess-token 요청 실패:', e);
+        tokenReady = true;
+      });
   }
-  // 토큰 로드 완료 후 탐색기 데이터 로드
-  fetchExplorerData();
-})();
+  await tokenPromise;
+  return lichessToken;
+}
+
+// 초기 로드 시 토큰 미리 fetch
+ensureToken().then(() => fetchExplorerData());
 
 // ===== LICHESS EXPLORER API =====
 let fetchController = null;
@@ -1244,6 +1254,8 @@ async function fetchExplorerData() {
 
       console.log('[Explorer] fetching:', url);
 
+      // 토큰이 아직 로드 안 됐으면 기다림
+      await ensureToken();
       const headers = { 'Accept': 'application/json' };
       if (lichessToken) headers['Authorization'] = `Bearer ${lichessToken}`;
 
