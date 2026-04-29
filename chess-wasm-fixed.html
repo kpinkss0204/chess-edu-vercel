@@ -2090,60 +2090,78 @@ function updateOpeningBadge(uciMoves) {
   }
 }
 
-// game.js가 로드된 후 수 이동 훅에 오프닝 업데이트를 연결
-// game.js의 makeMove / loadPGN / prevMove / nextMove / goToStart / goToEnd 후 호출됨
-document.addEventListener('DOMContentLoaded', function() {
-  // game 객체가 준비된 후 패치
-  const _patch = setInterval(function(){
-    if(typeof game === 'undefined' || !game) return;
-    clearInterval(_patch);
-    // game 객체의 수 이동 후 오프닝 업데이트 훅
-    const _hookFns = ['makeMove','prevMove','nextMove','goToStart','goToEnd','flipBoard','resetBoard','loadPGN'];
-    _hookFns.forEach(fn => {
-      const orig = game[fn];
-      if(typeof orig === 'function') {
-        game[fn] = function() {
-          const result = orig.apply(this, arguments);
-          try {
-            // game 객체에서 현재까지의 UCI 수 목록 가져오기
-            // game.moves 배열이 {from, to, promotion} 형태라 가정
-            const moves = (game.moves || []).slice(0, game.currentMoveIndex + 1);
-            const uciArr = moves.map(m => {
-              if(!m || !m.from || !m.to) return null;
-              const fromSq = typeof m.from === 'string' ? m.from : (m.from[1]!==undefined ? 'abcdefgh'[m.from[1]]+(8-m.from[0]) : null);
-              const toSq   = typeof m.to   === 'string' ? m.to   : (m.to[1]  !==undefined ? 'abcdefgh'[m.to[1]]  +(8-m.to[0])   : null);
-              if(!fromSq || !toSq) return null;
-              return fromSq + toSq + (m.promotion||'');
-            }).filter(Boolean);
-            updateOpeningBadge(uciArr);
-          } catch(e) {}
-          return result;
-        };
-      }
-    });
-    // loadPGN standalone function hook
-    const origLoadPGN = window.loadPGN;
-    if(typeof origLoadPGN === 'function') {
-      window.loadPGN = function() {
-        const r = origLoadPGN.apply(this, arguments);
-        setTimeout(() => {
-          try {
-            const moves = (game.moves || []).slice(0, game.currentMoveIndex + 1);
-            const uciArr = moves.map(m => {
-              if(!m || !m.from || !m.to) return null;
-              const fromSq = typeof m.from === 'string' ? m.from : ('abcdefgh'[m.from[1]]+(8-m.from[0]));
-              const toSq   = typeof m.to   === 'string' ? m.to   : ('abcdefgh'[m.to[1]]  +(8-m.to[0]));
-              if(!fromSq || !toSq) return null;
-              return fromSq + toSq + (m.promotion||'');
-            }).filter(Boolean);
-            updateOpeningBadge(uciArr);
-          } catch(e) {}
-        }, 200);
-        return r;
-      };
+// game.js 로드 완료 후 ChessGame.prototype.renderMoveList를 패치해
+// 매번 기보가 갱신될 때 오프닝 배지를 업데이트한다.
+// game.history[i].move = { from:[r,c], to:[r,c], promoPiece? }
+// game.historyIndex = 현재 보고 있는 수 인덱스 (-1 = 시작)
+(function patchGameWhenReady() {
+  const FILES = 'abcdefgh';
+
+  function getOpeningFromGame(g) {
+    if (!g || !g.history) return null;
+    const endIdx = g.historyIndex >= 0 ? g.historyIndex : g.history.length - 1;
+    // 최대 20수까지만 체크
+    const limit = Math.min(endIdx + 1, 20);
+    const uciArr = [];
+    for (let i = 0; i < limit; i++) {
+      const s = g.history[i];
+      if (!s || !s.move) break;
+      const m = s.move;
+      const from = FILES[m.from[1]] + (8 - m.from[0]);
+      const to   = FILES[m.to[1]]   + (8 - m.to[0]);
+      uciArr.push(from + to + (m.promoPiece ? m.promoPiece.toLowerCase() : ''));
     }
-  }, 300);
-});
+    return detectOpening(uciArr);
+  }
+
+  function tryPatch() {
+    // ChessGame 클래스가 정의되고 game 인스턴스가 생성됐을 때 패치
+    if (typeof ChessGame === 'undefined') { setTimeout(tryPatch, 200); return; }
+
+    const origRender = ChessGame.prototype.renderMoveList;
+    if (!origRender || origRender._openingPatched) return;
+
+    ChessGame.prototype.renderMoveList = function() {
+      origRender.apply(this, arguments);
+      try {
+        const op = getOpeningFromGame(this);
+        const badge = document.getElementById('opening-badge');
+        const ecoEl = document.getElementById('opening-eco');
+        const nameEl = document.getElementById('opening-name');
+        const varEl  = document.getElementById('opening-variation');
+        if (!badge) return;
+
+        if (op) {
+          badge.classList.remove('hidden');
+          ecoEl.textContent  = op.eco;
+          nameEl.textContent = op.name;
+          if (op.variation) {
+            varEl.textContent = op.variation;
+            badge.classList.add('has-variation');
+          } else {
+            varEl.textContent = '';
+            badge.classList.remove('has-variation');
+          }
+          // PGN 탭 오프닝 필드 동기화
+          const infoOpening = document.getElementById('info-opening');
+          if (infoOpening) {
+            infoOpening.textContent = op.eco + ' ' + op.name + (op.variation ? ', ' + op.variation : '');
+          }
+        } else {
+          badge.classList.add('hidden');
+        }
+      } catch(e) {}
+    };
+    ChessGame.prototype.renderMoveList._openingPatched = true;
+  }
+
+  // 스크립트가 game.js보다 먼저 로드될 수 있으므로 DOMContentLoaded 이후 시도
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryPatch);
+  } else {
+    tryPatch();
+  }
+})();
 </script>
 
 <!-- ===== JS 모듈 분리 ===== -->
