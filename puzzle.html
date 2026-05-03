@@ -1430,12 +1430,14 @@ const LICHESS_THEME_MAP = {
   daily:       null,
 };
 
-// 난이도 → 레이팅 범위
-const DIFF_RATING = {
-  beginner:     { min: 800,  max: 1200 },
-  intermediate: { min: 1200, max: 1600 },
-  advanced:     { min: 1600, max: 2000 },
-  expert:       { min: 2000, max: 2800 },
+// 난이도 → Lichess difficulty 문자열
+// GET /api/puzzle/batch/{angle}?nb=10&difficulty=normal
+// angle = 테마명 (path param), difficulty = easiest|easier|normal|harder|hardest
+const DIFF_MAP = {
+  beginner:     'easiest',
+  intermediate: 'normal',
+  advanced:     'harder',
+  expert:       'hardest',
 };
 
 let _lichessToken = null;
@@ -1452,27 +1454,25 @@ async function getLichessToken() {
   return _lichessToken;
 }
 
-// Lichess에서 퍼즐 여러 개 가져오기 (NDJSON 스트림)
+// Lichess에서 퍼즐 배치 가져오기
+// 실제 엔드포인트: GET /api/puzzle/batch/{angle}?nb=10&difficulty=normal
+// angle은 URL path에 들어감 (themes 쿼리 파라미터 아님!)
 async function fetchLichessPuzzles(themeId, diff, count = 10) {
   const token = await getLichessToken();
-  const lichessTheme = LICHESS_THEME_MAP[themeId];
-  const { min, max } = DIFF_RATING[diff] || DIFF_RATING.beginner;
+  const lichessTheme = LICHESS_THEME_MAP[themeId] || 'mix';
+  const difficulty   = DIFF_MAP[diff] || 'normal';
 
-  // Lichess Puzzle Stream API: GET /api/puzzle/next with theme
-  // 실제 배치용: /api/puzzle/batch?nb=10&themes=fork&...
-  const params = new URLSearchParams({ nb: count });
-  if (lichessTheme) params.set('themes', lichessTheme);
-  params.set('diffMin', min);
-  params.set('diffMax', max);
-
+  const params = new URLSearchParams({ nb: count, difficulty });
   const headers = { 'Accept': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`https://lichess.org/api/puzzle/batch?${params}`, { headers });
-  if (!res.ok) throw new Error(`Lichess API error: ${res.status}`);
+  // ✅ 올바른 엔드포인트: /api/puzzle/batch/{angle}
+  const url = `https://lichess.org/api/puzzle/batch/${encodeURIComponent(lichessTheme)}?${params}`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`Lichess API ${res.status}: ${url}`);
   const json = await res.json();
 
-  // json.puzzles = [{ puzzle: { id, rating, solution:[], themes:[] }, game: { pgn, ... } }]
+  // 응답: { puzzles: [{ puzzle: { id, initialFen, solution, themes, rating }, game: {...} }] }
   return (json.puzzles || []).map(p => parseLichessPuzzle(p, themeId));
 }
 
