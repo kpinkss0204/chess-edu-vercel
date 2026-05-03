@@ -1509,6 +1509,7 @@ function parseLichessPuzzle(raw, themeId) {
   const themes = puzzleData.themes || [];
   const themeLabel = THEME_LABEL_MAP[themeId] || themes[0] || themeId;
 
+  console.log('[puzzle] parsed:', puzzleData.id, '| fen:', fen, '| opMove:', solutionUCI[0], '| solution:', solutionUCI.slice(1), '| turn:', puzzleTurn);
   return {
     lichessId: puzzleData.id || '',
     title: `${themeLabel} #${puzzleData.id || '?'}`,
@@ -1783,7 +1784,15 @@ function loadPuzzle(idx) {
   // FEN 파싱 후 상대방의 첫 수 자동으로 적용
   parseFenAndDraw(puzzle.fen);
   if (puzzle.opponentMove) {
-    setTimeout(() => applyOpponentMove(puzzle.opponentMove), 400);
+    const targetIdx = idx;
+    const opMove = puzzle.opponentMove;
+    setTimeout(() => {
+      // 같은 퍼즐이 아직 로드된 경우에만 실행
+      if (state.currentPuzzleIdx === targetIdx) {
+        console.log('[puzzle] applying opponent move:', opMove);
+        applyOpponentMove(opMove);
+      }
+    }, 500);
   }
 
   // Lichess 링크 표시
@@ -1804,15 +1813,20 @@ function uciToCoords(uci) {
   return { fr, fc, tr, tc };
 }
 
-function applyMoveToBoard(uci, isPromotion) {
+function applyMoveToBoard(uci) {
+  if (!uci || uci.length < 4) return null;
   const { fr, fc, tr, tc } = uciToCoords(uci);
+  if (fr < 0 || fr > 7 || fc < 0 || fc > 7 || tr < 0 || tr > 7 || tc < 0 || tc > 7) return null;
   const piece = state.board[fr][fc];
-  if (!piece) return;
+  if (!piece) return { fr, fc, tr, tc };
+
+  // 앙파상: 폰이 대각선으로 이동하는데 목적지가 비어있는 경우 (이동 전에 체크!)
+  const isEnPassant = (piece === 'P' || piece === 'p') && fc !== tc && !state.board[tr][tc];
+
   state.board[tr][tc] = piece;
   state.board[fr][fc] = null;
 
-  // 앙파상
-  if ((piece === 'P' || piece === 'p') && fc !== tc && !state.board[tr][tc]) {
+  if (isEnPassant) {
     state.board[fr][tc] = null;
   }
   // 캐슬링
@@ -1833,17 +1847,19 @@ function applyMoveToBoard(uci, isPromotion) {
 }
 
 function applyOpponentMove(uci) {
+  console.log('[puzzle] applyOpponentMove:', uci, '| board null?', !state.board);
   const coords = applyMoveToBoard(uci);
-  if (!coords) return;
-  const { fr, fc, tr, tc } = coords;
+  // coords가 없어도 (말이 없는 칸 등) 보드는 항상 그린다
   drawBoard();
-  getSquareEl(fr, fc)?.classList.add('last-move');
-  getSquareEl(tr, tc)?.classList.add('last-move');
-
-  const fromAlg = FILES[fc] + (8-fr);
-  const toAlg   = FILES[tc] + (8-tr);
-  state.moveHistory.push({ alg: fromAlg+'-'+toAlg, type:'engine' });
-  updateMoveHistory();
+  if (coords) {
+    const { fr, fc, tr, tc } = coords;
+    getSquareEl(fr, fc)?.classList.add('last-move');
+    getSquareEl(tr, tc)?.classList.add('last-move');
+    const fromAlg = FILES[fc] + (8-fr);
+    const toAlg   = FILES[tc] + (8-tr);
+    state.moveHistory.push({ alg: fromAlg+'-'+toAlg, type:'engine' });
+    updateMoveHistory();
+  }
 }
 
 /* ============ BOARD RENDERING ============ */
@@ -1854,6 +1870,11 @@ const PIECES = {
 const FILES = ['a','b','c','d','e','f','g','h'];
 
 function parseFenAndDraw(fen) {
+  if (!fen || typeof fen !== 'string') {
+    console.error('[puzzle] parseFenAndDraw: invalid FEN', fen);
+    return;
+  }
+  fen = fen.trim();
   const board = Array.from({length:8}, () => Array(8).fill(null));
   const parts = fen.split(' ');
   const rows = parts[0].split('/');
@@ -1861,12 +1882,17 @@ function parseFenAndDraw(fen) {
   rows.forEach((row, r) => {
     let c = 0;
     for (const ch of row) {
-      if (/\d/.test(ch)) { c += +ch; }
-      else { board[r][c] = ch; c++; }
+      if (/[1-8]/.test(ch)) { c += +ch; }
+      else if ('KQRBNPkqrbnp'.includes(ch)) { board[r][c] = ch; c++; }
     }
   });
 
   state.board = board;
+  const pieceCount = board.flat().filter(Boolean).length;
+  console.log('[puzzle] FEN parsed:', parts[0], '| pieces:', pieceCount);
+  if (pieceCount === 0) {
+    console.error('[puzzle] WARNING: No pieces parsed from FEN! Raw FEN:', JSON.stringify(fen));
+  }
   drawBoard();
 }
 
