@@ -648,6 +648,29 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { color: var(--text-secondary); font-size: 14px; }
 
+/* ===== BOARD SVG OVERLAY (위협 화살표/하이라이트) ===== */
+#board-wrap {
+  position: relative;
+}
+#board-svg-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  overflow: visible;
+}
+/* 위협 표시 토글 버튼 활성화 */
+#threat-overlay-btn.active {
+  color: rgba(224,80,80,0.92) !important;
+  border-color: rgba(224,80,80,0.6) !important;
+  background: rgba(224,80,80,0.1) !important;
+}
+#threat-overlay-btn:not(.active) {
+  color: var(--text-muted) !important;
+  border-color: var(--border) !important;
+}
+
 /* Drag support */
 .piece-img {
   cursor: grab;
@@ -1503,6 +1526,24 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       </div>
       <div id="board-wrap">
         <div id="chessboard"></div>
+        <svg id="board-svg-overlay" viewBox="0 0 8 8" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow-threat" markerWidth="4" markerHeight="4"
+              refX="2.5" refY="2" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(224,80,80,0.92)"/>
+            </marker>
+            <marker id="arrow-best" markerWidth="4" markerHeight="4"
+              refX="2.5" refY="2" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(80,144,208,0.92)"/>
+            </marker>
+            <marker id="arrow-good" markerWidth="4" markerHeight="4"
+              refX="2.5" refY="2" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(127,166,80,0.85)"/>
+            </marker>
+          </defs>
+          <g id="svg-highlights"></g>
+          <g id="svg-arrows"></g>
+        </svg>
       </div>
     </div>
 
@@ -1533,6 +1574,12 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       </button>
       <div class="ctrl-spacer"></div>
       <div class="eval-score" id="eval-score" title="엔진 평가">0.0</div>
+      <!-- 위협 표시 토글 버튼 -->
+      <button id="threat-overlay-btn" class="ctrl-btn active" onclick="toggleThreatOverlay()"
+        title="위협 표시 켜기/끄기"
+        style="width:auto;padding:0 10px;font-size:11px;font-weight:700;gap:4px;display:flex;align-items:center;color:rgba(224,80,80,0.85);border-color:rgba(224,80,80,0.4);">
+        🎯 위협
+      </button>
       <!-- AI 코치 버튼 -->
       <button id="coach-open-btn" onclick="toggleCoachPanel()" title="AI 코치 패널 열기/닫기">
         🧠 AI 코치
@@ -2193,6 +2240,241 @@ function updateOpeningBadge(uciMoves) {
   }
 
   // 스크립트가 game.js보다 먼저 로드될 수 있으므로 DOMContentLoaded 이후 시도
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryPatch);
+  } else {
+    tryPatch();
+  }
+})();
+</script>
+
+<!-- ===== 보드 위협 시각화 오버레이 ===== -->
+<script>
+// ── 위협 표시 상태 ─────────────────────────────────────────────
+let _threatOverlayEnabled = true; // 기본값: 켜짐 (이미지처럼 토글 버튼으로 제어)
+let _lastOverlayFen = '';
+
+// 보드가 뒤집혔는지 확인 (game.flipped 참조)
+function _isFlipped() {
+  return (typeof game !== 'undefined' && game.flipped) ? true : false;
+}
+
+// 체스 좌표 → SVG viewBox(0~8) 좌표 변환
+// viewBox="0 0 8 8"이고, 각 칸이 1×1
+function _squareToSVG(file, rank) {
+  // file: 0=a~7=h, rank: 0=1~7=8 (board array 기준: row=0은 rank8)
+  const flipped = _isFlipped();
+  const svgCol = flipped ? (7 - file) : file;
+  const svgRow = flipped ? (7 - rank) : rank;
+  // 각 칸의 중심: col+0.5, row+0.5
+  return { cx: svgCol + 0.5, cy: svgRow + 0.5, col: svgCol, row: svgRow };
+}
+
+// UCI 수 문자열("e2e4")을 파일/랭크 인덱스로 변환
+function _uciToFileRank(uci) {
+  if (!uci || uci.length < 4) return null;
+  const FILES = 'abcdefgh';
+  const fromFile = FILES.indexOf(uci[0]);
+  const fromRank = parseInt(uci[1]) - 1; // 0-indexed (1=0, 8=7)
+  const toFile   = FILES.indexOf(uci[2]);
+  const toRank   = parseInt(uci[3]) - 1;
+  if (fromFile < 0 || toFile < 0) return null;
+  return { fromFile, fromRank, toFile, toRank };
+}
+
+// SVG 화살표 그리기: from, to는 { cx, cy } SVG 좌표
+function _makeSVGArrow(from, to, color, markerId, strokeW, opacity) {
+  const dx = to.cx - from.cx;
+  const dy = to.cy - from.cy;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 0.01) return null;
+
+  // 화살촉 공간 확보: 끝점을 약간 당김
+  const shrink = 0.38;
+  const ex = to.cx - dx / len * shrink;
+  const ey = to.cy - dy / len * shrink;
+  // 시작점: 중앙에서 살짝 뒤
+  const startShrink = 0.18;
+  const sx = from.cx + dx / len * startShrink;
+  const sy = from.cy + dy / len * startShrink;
+
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', sx);
+  line.setAttribute('y1', sy);
+  line.setAttribute('x2', ex);
+  line.setAttribute('y2', ey);
+  line.setAttribute('stroke', color);
+  line.setAttribute('stroke-width', strokeW || 0.13);
+  line.setAttribute('stroke-opacity', opacity || 0.88);
+  line.setAttribute('marker-end', `url(#${markerId})`);
+  line.setAttribute('stroke-linecap', 'round');
+  return line;
+}
+
+// SVG 칸 하이라이트
+function _makeSVGHighlight(file, rank, color, opacity) {
+  const pos = _squareToSVG(file, rank);
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', pos.col);
+  rect.setAttribute('y', pos.row);
+  rect.setAttribute('width', 1);
+  rect.setAttribute('height', 1);
+  rect.setAttribute('fill', color);
+  rect.setAttribute('fill-opacity', opacity || 0.3);
+  rect.setAttribute('rx', 0.04);
+  return rect;
+}
+
+// 오버레이 전체 클리어
+function clearBoardOverlay() {
+  const hl = document.getElementById('svg-highlights');
+  const ar = document.getElementById('svg-arrows');
+  if (hl) hl.innerHTML = '';
+  if (ar) ar.innerHTML = '';
+}
+
+/**
+ * 위협 오버레이 그리기
+ * @param {Object} pvDataNow - 현재 pvData 스냅샷
+ * @param {string} turn - 현재 차례 ('w' | 'b')
+ */
+function drawThreatOverlay(pvDataNow, turn) {
+  if (!_threatOverlayEnabled) { clearBoardOverlay(); return; }
+
+  const hlEl = document.getElementById('svg-highlights');
+  const arEl = document.getElementById('svg-arrows');
+  if (!hlEl || !arEl) return;
+
+  hlEl.innerHTML = '';
+  arEl.innerHTML = '';
+
+  if (!pvDataNow) return;
+
+  // PV1~3 최대 3개 화살표 표시
+  const pvKeys = [1, 2, 3].filter(k => pvDataNow[k] && pvDataNow[k].pvUci && pvDataNow[k].pvUci.length > 0);
+
+  pvKeys.forEach((pvIdx) => {
+    const pv = pvDataNow[pvIdx];
+    if (!pv || !pv.pvUci || pv.pvUci.length === 0) return;
+
+    const firstMove = pv.pvUci[0];
+    const coords = _uciToFileRank(firstMove);
+    if (!coords) return;
+
+    const { fromFile, fromRank, toFile, toRank } = coords;
+
+    // 랭크 변환: rank 1~8 → board row 0~7 (rank=1 → row=7, rank=8 → row=0)
+    const fromSVG = _squareToSVG(fromFile, 7 - fromRank);
+    const toSVG   = _squareToSVG(toFile,   7 - toRank);
+
+    if (pvIdx === 1) {
+      // 최선수: 출발/도착 하이라이트 + 굵은 파란 화살표
+      const fromHl = _makeSVGHighlight(fromFile, 7 - fromRank, 'rgba(80,144,208,0.55)', 0.55);
+      const toHl   = _makeSVGHighlight(toFile,   7 - toRank,   'rgba(80,144,208,0.35)', 0.35);
+      if (fromHl) hlEl.appendChild(fromHl);
+      if (toHl)   hlEl.appendChild(toHl);
+
+      const arrow = _makeSVGArrow(fromSVG, toSVG, 'rgba(80,144,208,0.92)', 'arrow-best', 0.16, 0.92);
+      if (arrow) arEl.appendChild(arrow);
+
+      // 두 번째 수 (상대 응수 예상) - 빨간 위협 화살표
+      if (pv.pvUci[1]) {
+        const c2 = _uciToFileRank(pv.pvUci[1]);
+        if (c2) {
+          const f2 = _squareToSVG(c2.fromFile, 7 - c2.fromRank);
+          const t2 = _squareToSVG(c2.toFile,   7 - c2.toRank);
+          const arrow2 = _makeSVGArrow(f2, t2, 'rgba(224,80,80,0.75)', 'arrow-threat', 0.10, 0.75);
+          if (arrow2) arEl.appendChild(arrow2);
+        }
+      }
+    } else if (pvIdx === 2) {
+      // 2번째 후보수: 초록 화살표 (얇음)
+      const arrow = _makeSVGArrow(fromSVG, toSVG, 'rgba(127,166,80,0.7)', 'arrow-good', 0.11, 0.7);
+      if (arrow) arEl.appendChild(arrow);
+    } else if (pvIdx === 3) {
+      // 3번째 후보수: 더 연한 화살표
+      const arrow = _makeSVGArrow(fromSVG, toSVG, 'rgba(160,160,80,0.45)', 'arrow-good', 0.09, 0.45);
+      if (arrow) arEl.appendChild(arrow);
+    }
+  });
+}
+
+// pvData를 UCI 형식으로 가져오는 헬퍼
+// engine.js의 processPvData에서 pv.pv는 UCI 수 배열로 저장됨
+function syncOverlayFromPvData() {
+  if (!_threatOverlayEnabled) { clearBoardOverlay(); return; }
+  if (typeof pvData === 'undefined') return;
+
+  // pvData[i].pv가 UCI 수 배열 (engine.js processPvData 참고)
+  // pvUci 필드로 정규화해서 drawThreatOverlay에 전달
+  const normalized = {};
+  for (const [k, v] of Object.entries(pvData)) {
+    if (!v) continue;
+    normalized[parseInt(k)] = {
+      ...v,
+      pvUci: v.pv || []  // v.pv = UCI moves array from engine
+    };
+  }
+
+  drawThreatOverlay(normalized, (typeof game !== 'undefined') ? game.turn : 'w');
+}
+
+// 위협 오버레이 토글 버튼 핸들러
+function toggleThreatOverlay() {
+  _threatOverlayEnabled = !_threatOverlayEnabled;
+  const btn = document.getElementById('threat-overlay-btn');
+  if (btn) {
+    btn.classList.toggle('active', _threatOverlayEnabled);
+    btn.title = _threatOverlayEnabled ? '위협 표시 끄기' : '위협 표시 켜기';
+  }
+  if (_threatOverlayEnabled) {
+    syncOverlayFromPvData();
+  } else {
+    clearBoardOverlay();
+  }
+}
+
+// engine.js의 renderTopMoves 패치: pvData 갱신 후 오버레이도 업데이트
+(function patchRenderTopMoves() {
+  function tryPatch() {
+    if (typeof renderTopMoves === 'undefined') { setTimeout(tryPatch, 300); return; }
+    if (renderTopMoves._overlayPatched) return;
+
+    const _orig = renderTopMoves;
+    window.renderTopMoves = function(msg) {
+      _orig.apply(this, arguments);
+      // pvData가 갱신된 직후 오버레이 업데이트
+      // pvData는 engine.js에서 전역으로 관리됨
+      // pvData[i].pv 는 SAN 배열, rawPvStore나 pvData[i]에 UCI가 있는지 확인
+      try {
+        // pvData에 UCI 데이터 주입: engine.js의 pvData[i].pvUci 필드를 활용
+        // (engine.js parseInfoLine에서 pv가 UCI 배열로 저장됨)
+        syncOverlayFromPvData();
+      } catch(e) {}
+    };
+    window.renderTopMoves._overlayPatched = true;
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryPatch);
+  } else {
+    tryPatch();
+  }
+})();
+
+// game.renderBoard 패치: 보드가 다시 그려질 때 (뒤집기 등) 오버레이도 갱신
+(function patchRenderBoard() {
+  function tryPatch() {
+    if (typeof ChessGame === 'undefined') { setTimeout(tryPatch, 300); return; }
+    if (ChessGame.prototype.renderBoard && ChessGame.prototype.renderBoard._overlayPatched) return;
+
+    const _orig = ChessGame.prototype.renderBoard;
+    if (!_orig) return;
+    ChessGame.prototype.renderBoard = function() {
+      _orig.apply(this, arguments);
+      try { syncOverlayFromPvData(); } catch(e) {}
+    };
+    ChessGame.prototype.renderBoard._overlayPatched = true;
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', tryPatch);
   } else {
