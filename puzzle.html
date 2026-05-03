@@ -2155,7 +2155,12 @@ function tryMove(fr, fc, tr, tc, moveStr) {
 function showHint() {
   if (state.puzzleSolved || state.solutionShown) return;
   const puzzle = state.currentPuzzle;
-  document.getElementById('psp-instruction-text').textContent = '💡 힌트: ' + puzzle.hint;
+  const move = puzzle.solution[state.solutionMoveIdx] || puzzle.solution[0];
+  if (!move) return;
+  const { fr, fc } = uciToCoords(move);
+  clearHighlights();
+  getSquareEl(fr, fc)?.classList.add('hint');
+  document.getElementById('psp-instruction-text').textContent = '💡 이 기물을 사용하세요';
   state.hintShown = true;
 }
 
