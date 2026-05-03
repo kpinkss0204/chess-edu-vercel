@@ -1590,8 +1590,13 @@ let state = {
   puzzleSolved: false,
   moveHistory: [],
   currentPuzzle: null,
-  puzzles: [],           // Lichess에서 불러온 퍼즐 배열
-  solutionMoveIdx: 0,    // 멀티-무브 진행 인덱스
+  puzzles: [],
+  solutionMoveIdx: 0,
+  savedBoard: null,       // 틀렸을 때 되돌리기용 보드 스냅샷
+  savedMoveHistory: [],
+  lastMoveSq: null,       // 마지막 수 좌표 [fr,fc,tr,tc]
+  wrongMove: false,       // 틀린 수 상태 (클릭 시 복원)
+  waitingEngine: false,   // 엔진 응수 대기 중
 };
 
 /* ============ RENDER THEME GRIDS ============ */
@@ -1776,6 +1781,11 @@ function loadPuzzle(idx) {
   state.puzzleSolved = false;
   state.solutionMoveIdx = 0;
   state.moveHistory = [];
+  state.savedBoard = null;
+  state.savedMoveHistory = [];
+  state.lastMoveSq = null;
+  state.wrongMove = false;
+  state.waitingEngine = false;
 
   document.getElementById('puzzle-nav-info').textContent = `퍼즐 ${idx+1} / ${state.totalPuzzles}`;
   document.getElementById('psp-puzzle-title').textContent = puzzle.title;
@@ -1797,8 +1807,11 @@ function loadPuzzle(idx) {
   updateMoveHistory();
   document.getElementById('retry-btn').style.display = 'none';
 
-  // FEN 파싱 후 상대방의 첫 수 자동으로 적용
+  // FEN 파싱 후 보드 저장 (초기 상태 보존)
   parseFenAndDraw(puzzle.fen);
+  // 파싱 직후 저장
+  state.savedBoard = state.board ? state.board.map(row => [...row]) : null;
+  state.savedMoveHistory = [];
   if (puzzle.opponentMove) {
     const targetIdx = idx;
     const opMove = puzzle.opponentMove;
@@ -1964,38 +1977,89 @@ function clearHighlights() {
   });
 }
 
+// 현재 사용자 턴 계산 (solutionMoveIdx 기준으로 동적 계산)
+function getCurrentTurn() {
+  const puzzle = state.currentPuzzle;
+  if (!puzzle) return 'white';
+  // 사용자 수(홀수 인덱스=0,2,4...)와 엔진 수(1,3,5...) 번갈아가며
+  // solutionMoveIdx가 0이면 사용자 차례, 1이면 엔진, 2이면 사용자...
+  // 사용자는 puzzle.turn에서 시작, 엔진은 반대
+  const movesDone = state.solutionMoveIdx; // 사용자+엔진 합산 진행 수
+  return movesDone % 2 === 0 ? puzzle.turn : (puzzle.turn === 'white' ? 'black' : 'white');
+}
+
 function handleSquareClick(r, c) {
   if (state.puzzleSolved || state.solutionShown) return;
+  if (state.waitingEngine) return; // 엔진 응수 대기 중
 
   const piece = state.board[r][c];
+  const currentTurn = getCurrentTurn();
+
+  if (state.wrongMove) {
+    // 틀린 수 후 아무 칸 클릭 → 보드 되돌리기
+    state.wrongMove = false;
+    restoreBoard();
+    hideFeedback();
+    return;
+  }
 
   if (state.selectedSq) {
     const [sr, sc] = state.selectedSq;
 
     if (sr === r && sc === c) {
-      // deselect
       state.selectedSq = null;
       clearHighlights();
       return;
     }
 
-    // try move
+    // 같은 색 말을 다시 클릭하면 선택 변경
+    const isOwnPiece = piece && (
+      (currentTurn === 'white' && piece === piece.toUpperCase()) ||
+      (currentTurn === 'black' && piece === piece.toLowerCase())
+    );
+    if (isOwnPiece) {
+      state.selectedSq = [r, c];
+      clearHighlights();
+      getSquareEl(r, c)?.classList.add('selected');
+      return;
+    }
+
     const fromAlg = FILES[sc] + (8 - sr);
     const toAlg   = FILES[c]  + (8 - r);
-    const moveStr = fromAlg + toAlg;
-
-    tryMove(sr, sc, r, c, moveStr);
+    tryMove(sr, sc, r, c, fromAlg + toAlg);
   } else {
-    // select own piece
-    const puzzle = state.currentPuzzle;
-    const isWhitePiece = piece && piece === piece.toUpperCase();
-    const isBlackPiece = piece && piece === piece.toLowerCase();
-    if ((puzzle.turn === 'white' && isWhitePiece) ||
-        (puzzle.turn === 'black' && isBlackPiece)) {
+    // 내 말 선택
+    const isOwnPiece = piece && (
+      (currentTurn === 'white' && piece === piece.toUpperCase()) ||
+      (currentTurn === 'black' && piece === piece.toLowerCase())
+    );
+    if (isOwnPiece) {
       state.selectedSq = [r, c];
       clearHighlights();
       getSquareEl(r, c)?.classList.add('selected');
     }
+  }
+}
+
+function saveBoard() {
+  // 현재 보드 상태 스냅샷 저장
+  state.savedBoard = state.board.map(row => [...row]);
+  state.savedMoveHistory = [...state.moveHistory];
+}
+
+function restoreBoard() {
+  // 저장된 보드로 복원
+  if (state.savedBoard) {
+    state.board = state.savedBoard.map(row => [...row]);
+    state.moveHistory = [...state.savedMoveHistory];
+    drawBoard();
+    // 마지막 수 하이라이트 복원
+    if (state.lastMoveSq) {
+      const [fr, fc, tr, tc] = state.lastMoveSq;
+      getSquareEl(fr, fc)?.classList.add('last-move');
+      getSquareEl(tr, tc)?.classList.add('last-move');
+    }
+    updateMoveHistory();
   }
 }
 
@@ -2009,30 +2073,29 @@ function tryMove(fr, fc, tr, tc, moveStr) {
   const fromSq = getSquareEl(fr, fc);
   const toSq   = getSquareEl(tr, tc);
 
-  // 정답 판정: uci 첫 4글자 비교 (프로모션 제외 우선)
   const isCorrect = expectedMove && (
     moveStr === expectedMove ||
     moveStr.slice(0,4) === expectedMove.slice(0,4)
   );
 
   if (isCorrect) {
-    toSq?.classList.add('correct');
-    fromSq?.classList.add('last-move');
+    // 이동 전 보드 저장
+    saveBoard();
+    state.lastMoveSq = [fr, fc, tr, tc];
 
     applyMoveToBoard(expectedMove);
+
+    // 정답 하이라이트
+    drawBoard();
+    getSquareEl(fr, fc)?.classList.add('last-move');
+    getSquareEl(tr, tc)?.classList.add('correct');
 
     const fromAlg = FILES[fc] + (8-fr);
     const toAlg   = FILES[tc] + (8-tr);
     state.moveHistory.push({ alg: fromAlg+'-'+toAlg, type:'user' });
     state.solutionMoveIdx++;
+    updateMoveHistory();
 
-    setTimeout(() => {
-      drawBoard();
-      getSquareEl(fr, fc)?.classList.add('last-move');
-      getSquareEl(tr, tc)?.classList.add('last-move');
-    }, 200);
-
-    // 모든 정답 수를 맞췄는지 확인
     if (state.solutionMoveIdx >= puzzle.solution.length) {
       // 퍼즐 완료!
       state.puzzleSolved = true;
@@ -2041,30 +2104,40 @@ function tryMove(fr, fc, tr, tc, moveStr) {
       state.todaySolved++;
       if (state.streak > state.bestStreak) state.bestStreak = state.streak;
       updateStats();
-      showFeedback('correct', '✅ 정답입니다! 훌륭한 수입니다!');
-      document.getElementById('retry-btn').style.display = '';
-      state.correctCount++;
-      const pct = ((state.currentPuzzleIdx+1) / state.totalPuzzles * 100).toFixed(0);
-      document.getElementById('progress-fill').style.width = pct + '%';
-      document.getElementById('progress-label').textContent = `${state.currentPuzzleIdx+1} / ${state.totalPuzzles}`;
+      setTimeout(() => {
+        showFeedback('correct', '✅ 정답입니다! 훌륭한 수입니다!');
+        document.getElementById('retry-btn').style.display = '';
+        state.correctCount++;
+        const pct = ((state.currentPuzzleIdx+1) / state.totalPuzzles * 100).toFixed(0);
+        document.getElementById('progress-fill').style.width = pct + '%';
+        document.getElementById('progress-label').textContent = `${state.currentPuzzleIdx+1} / ${state.totalPuzzles}`;
+      }, 300);
     } else {
       // 엔진 응수 자동 실행
+      state.waitingEngine = true;
       const engineMove = puzzle.solution[state.solutionMoveIdx];
       state.solutionMoveIdx++;
       setTimeout(() => {
         applyOpponentMove(engineMove);
+        // 엔진 수 후 보드 저장 (틀렸을 때 이 시점으로 복원)
+        saveBoard();
+        state.lastMoveSq = null;
         updateMoveHistory();
         document.getElementById('psp-instruction-text').textContent = '계속하세요! 다음 최선의 수를 찾아보세요.';
+        state.waitingEngine = false;
       }, 600);
     }
-    updateMoveHistory();
   } else {
-    toSq?.classList.add('wrong');
-    setTimeout(() => { toSq?.classList.remove('wrong'); }, 700);
+    // 틀린 수: 말을 실제로 이동 후 빨간 표시, 클릭 시 되돌리기
+    applyMoveToBoard(moveStr);
+    drawBoard();
+    getSquareEl(fr, fc)?.classList.add('last-move');
+    getSquareEl(tr, tc)?.classList.add('wrong');
+
+    state.wrongMove = true;
     state.streak = 0;
     updateStats();
-    showFeedback('wrong', '❌ 틀렸습니다. 다시 생각해보세요.');
-    document.getElementById('retry-btn').style.display = '';
+    showFeedback('wrong', '❌ 틀렸습니다. 보드를 클릭하면 되돌아갑니다.');
   }
 }
 
