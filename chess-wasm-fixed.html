@@ -648,27 +648,31 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { color: var(--text-secondary); font-size: 14px; }
 
-/* ===== BOARD SVG OVERLAY (위협 화살표/하이라이트) ===== */
-#board-wrap {
-  position: relative;
-}
+/* ===== BOARD SVG OVERLAY ===== */
+#board-wrap { position: relative; }
 #board-svg-overlay {
-  position: absolute;
-  top: 0; left: 0;
+  position: absolute; top: 0; left: 0;
   width: 100%; height: 100%;
-  pointer-events: none;
-  z-index: 10;
-  overflow: visible;
+  pointer-events: none; z-index: 10; overflow: visible;
 }
-/* 위협 표시 토글 버튼 활성화 */
-#threat-overlay-btn.active {
-  color: rgba(224,80,80,0.92) !important;
-  border-color: rgba(224,80,80,0.6) !important;
-  background: rgba(224,80,80,0.1) !important;
+
+/* 위협/최선수 오버레이 토글 버튼 */
+.overlay-ctrl-btn {
+  height: 36px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-secondary);
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; gap: 4px;
+  transition: all 0.15s; font-family: var(--font-main);
+  color: var(--text-muted); white-space: nowrap;
 }
-#threat-overlay-btn:not(.active) {
-  color: var(--text-muted) !important;
-  border-color: var(--border) !important;
+.overlay-ctrl-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.overlay-ctrl-btn.active-threat {
+  color: #e05050; border-color: rgba(224,80,80,0.5);
+  background: rgba(224,80,80,0.08);
+}
+.overlay-ctrl-btn.active-best {
+  color: #5090d0; border-color: rgba(80,144,208,0.5);
+  background: rgba(80,144,208,0.08);
 }
 
 /* Drag support */
@@ -1528,17 +1532,17 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
         <div id="chessboard"></div>
         <svg id="board-svg-overlay" viewBox="0 0 8 8" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <marker id="arrow-threat" markerWidth="4" markerHeight="4"
-              refX="2.5" refY="2" orient="auto" markerUnits="strokeWidth">
-              <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(224,80,80,0.92)"/>
+            <marker id="arr-threat" markerWidth="6" markerHeight="6"
+              refX="3" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0.5 L5,3 L0,5.5 L1.5,3 Z" fill="rgba(220,60,60,0.95)"/>
             </marker>
-            <marker id="arrow-best" markerWidth="4" markerHeight="4"
-              refX="2.5" refY="2" orient="auto" markerUnits="strokeWidth">
-              <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(80,144,208,0.92)"/>
+            <marker id="arr-best" markerWidth="6" markerHeight="6"
+              refX="3" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0.5 L5,3 L0,5.5 L1.5,3 Z" fill="rgba(80,144,208,0.95)"/>
             </marker>
-            <marker id="arrow-good" markerWidth="4" markerHeight="4"
-              refX="2.5" refY="2" orient="auto" markerUnits="strokeWidth">
-              <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(127,166,80,0.85)"/>
+            <marker id="arr-alt" markerWidth="6" markerHeight="6"
+              refX="3" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0.5 L5,3 L0,5.5 L1.5,3 Z" fill="rgba(127,166,80,0.85)"/>
             </marker>
           </defs>
           <g id="svg-highlights"></g>
@@ -1574,11 +1578,15 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       </button>
       <div class="ctrl-spacer"></div>
       <div class="eval-score" id="eval-score" title="엔진 평가">0.0</div>
-      <!-- 위협 표시 토글 버튼 -->
-      <button id="threat-overlay-btn" class="ctrl-btn active" onclick="toggleThreatOverlay()"
-        title="위협 표시 켜기/끄기"
-        style="width:auto;padding:0 10px;font-size:11px;font-weight:700;gap:4px;display:flex;align-items:center;color:rgba(224,80,80,0.85);border-color:rgba(224,80,80,0.4);">
+      <!-- 위협 표시 버튼 -->
+      <button id="threat-overlay-btn" class="overlay-ctrl-btn active-threat"
+        onclick="setOverlayMode('threat')" title="위협 표시: 상대방 최강 위협을 보드에 표시">
         🎯 위협
+      </button>
+      <!-- 최선수 표시 버튼 -->
+      <button id="best-overlay-btn" class="overlay-ctrl-btn"
+        onclick="setOverlayMode('best')" title="최선수 표시: 엔진 추천수를 보드에 표시">
+        💡 최선수
       </button>
       <!-- AI 코치 버튼 -->
       <button id="coach-open-btn" onclick="toggleCoachPanel()" title="AI 코치 패널 열기/닫기">
@@ -2248,84 +2256,180 @@ function updateOpeningBadge(uciMoves) {
 })();
 </script>
 
-<!-- ===== 보드 위협 시각화 오버레이 ===== -->
+<!-- ===== 보드 오버레이: 위협(Null-Move) & 최선수 화살표 ===== -->
 <script>
-// ── 위협 표시 상태 ─────────────────────────────────────────────
-let _threatOverlayEnabled = true; // 기본값: 켜짐 (이미지처럼 토글 버튼으로 제어)
-let _lastOverlayFen = '';
+// ── 오버레이 모드: 'threat' | 'best' | 'off' ──────────────────
+let _overlayMode = 'threat';   // 기본: 위협 표시
 
-// 보드가 뒤집혔는지 확인 (game.flipped 참조)
+// ── 위협 분석 상태 ────────────────────────────────────────────
+let _threatWorker   = null;    // 위협 전용 별도 Worker
+let _threatWorkerReady = false;
+let _threatAnalysisId  = 0;
+let _currentThreatUci  = null; // 가장 최근 위협 수 (UCI)
+let _lastThreatFen     = '';   // 마지막 위협 분석한 FEN
+let _threatPending     = null; // 다음 분석 대기 FEN
+
+// ── FEN Null-Move 변환 ────────────────────────────────────────
+// "현재 플레이어 턴을 건너뛰고 상대방에게 2연타 기회를 준다"
+// 체크 상태면 null을 반환 (위협 분석 불가)
+function buildNullMoveFen(fen) {
+  const parts = fen.trim().split(' ');
+  if (parts.length < 4) return null;
+
+  const board    = parts[0];
+  const turn     = parts[1];
+  const castling = parts[2];
+  // en-passant는 null-move 후 무효화
+  const halfMove = parseInt(parts[4] || '0') + 1;
+  const fullMove = turn === 'b' ? parseInt(parts[5] || '1') + 1 : parseInt(parts[5] || '1');
+
+  // 체크 상태 확인: parseFenBoard + isInCheck 사용 (chess.js)
+  try {
+    const b = parseFenBoard(board);
+    if (b && isInCheck(b, turn)) return null; // 체크 중이면 위협 분석 불가
+  } catch(e) {}
+
+  const newTurn = turn === 'w' ? 'b' : 'w';
+  return `${board} ${newTurn} ${castling} - ${halfMove} ${fullMove}`;
+}
+
+// ── 위협 전용 Worker 초기화 ───────────────────────────────────
+async function initThreatWorker() {
+  if (_threatWorker) return;
+  try {
+    const url = await getStockfishBlobUrl();
+    const w = new Worker(url);
+    let ready = false;
+    w.onmessage = (e) => {
+      const line = typeof e.data === 'string' ? e.data.trim() : '';
+      if (!line) return;
+      if (!ready) {
+        if (line.includes('uciok')) {
+          w.postMessage('setoption name Threads value 1');
+          w.postMessage('setoption name Hash value 16');
+          w.postMessage('setoption name UCI_AnalyseMode value true');
+          w.postMessage('isready');
+        } else if (line.includes('readyok')) {
+          ready = true;
+          _threatWorkerReady = true;
+          _threatWorker = w;
+          console.log('[ThreatWorker] 준비 완료');
+          // 대기 중인 분석 즉시 실행
+          if (_threatPending) {
+            const f = _threatPending; _threatPending = null;
+            _runThreatAnalysis(f);
+          }
+        }
+      } else {
+        _handleThreatWorkerMsg(line);
+      }
+    };
+    w.onerror = (e) => console.warn('[ThreatWorker] 오류:', e.message);
+    setTimeout(() => w.postMessage('uci'), 200);
+  } catch(e) {
+    console.warn('[ThreatWorker] 초기화 실패:', e.message);
+  }
+}
+
+// ── 위협 Worker 메시지 처리 ───────────────────────────────────
+let _threatBestMove = null;
+let _threatMyId = 0;
+
+function _handleThreatWorkerMsg(line) {
+  if (line.startsWith('bestmove')) {
+    const m = line.match(/^bestmove (\S+)/);
+    const uci = (m && m[1] !== '(none)') ? m[1] : null;
+    if (_threatMyId === _threatAnalysisId) {
+      _currentThreatUci = uci;
+      _drawOverlay();
+    }
+  }
+}
+
+// ── 위협 분석 실행 ────────────────────────────────────────────
+function _runThreatAnalysis(nullFen) {
+  if (!_threatWorkerReady || !_threatWorker) {
+    _threatPending = nullFen;
+    return;
+  }
+  _threatAnalysisId++;
+  _threatMyId = _threatAnalysisId;
+  _currentThreatUci = null;
+
+  _threatWorker.postMessage('stop');
+  _threatWorker.postMessage('setoption name MultiPV value 1');
+  _threatWorker.postMessage(`position fen ${nullFen}`);
+  _threatWorker.postMessage('go depth 12 movetime 500');
+}
+
+// ── FEN 변경 감지 → 위협 분석 트리거 ─────────────────────────
+function triggerThreatIfNeeded(fen) {
+  if (!fen || fen === _lastThreatFen) return;
+  _lastThreatFen = fen;
+  _currentThreatUci = null;
+
+  if (_overlayMode !== 'threat') return;
+
+  const nullFen = buildNullMoveFen(fen);
+  if (!nullFen) {
+    // 체크 중 → 위협 표시 불가, 오버레이 클리어
+    clearBoardOverlay();
+    return;
+  }
+  _runThreatAnalysis(nullFen);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SVG 오버레이 그리기
+// ═══════════════════════════════════════════════════════════════
 function _isFlipped() {
   return (typeof game !== 'undefined' && game.flipped) ? true : false;
 }
 
-// 체스 좌표 → SVG viewBox(0~8) 좌표 변환
-// viewBox="0 0 8 8"이고, 각 칸이 1×1
-function _squareToSVG(file, rank) {
-  // file: 0=a~7=h, rank: 0=1~7=8 (board array 기준: row=0은 rank8)
+// UCI 좌표 → SVG 좌표 (중심)
+function _uciSqToSVG(file, rank1to8) {
+  // file: 0=a~7=h  rank1to8: 1~8
   const flipped = _isFlipped();
-  const svgCol = flipped ? (7 - file) : file;
-  const svgRow = flipped ? (7 - rank) : rank;
-  // 각 칸의 중심: col+0.5, row+0.5
-  return { cx: svgCol + 0.5, cy: svgRow + 0.5, col: svgCol, row: svgRow };
+  const col = flipped ? (7 - file) : file;
+  const row = flipped ? (rank1to8 - 1) : (8 - rank1to8);
+  return { cx: col + 0.5, cy: row + 0.5, col, row };
 }
 
-// UCI 수 문자열("e2e4")을 파일/랭크 인덱스로 변환
-function _uciToFileRank(uci) {
+function _parseUci(uci) {
   if (!uci || uci.length < 4) return null;
   const FILES = 'abcdefgh';
-  const fromFile = FILES.indexOf(uci[0]);
-  const fromRank = parseInt(uci[1]) - 1; // 0-indexed (1=0, 8=7)
-  const toFile   = FILES.indexOf(uci[2]);
-  const toRank   = parseInt(uci[3]) - 1;
-  if (fromFile < 0 || toFile < 0) return null;
-  return { fromFile, fromRank, toFile, toRank };
+  const ff = FILES.indexOf(uci[0]), fr = parseInt(uci[1]);
+  const tf = FILES.indexOf(uci[2]), tr = parseInt(uci[3]);
+  if (ff < 0 || tf < 0 || isNaN(fr) || isNaN(tr)) return null;
+  return { ff, fr, tf, tr };
 }
 
-// SVG 화살표 그리기: from, to는 { cx, cy } SVG 좌표
-function _makeSVGArrow(from, to, color, markerId, strokeW, opacity) {
-  const dx = to.cx - from.cx;
-  const dy = to.cy - from.cy;
-  const len = Math.sqrt(dx * dx + dy * dy);
+function _makeSVGArrow(fromSVG, toSVG, color, markerId, sw) {
+  const dx = toSVG.cx - fromSVG.cx, dy = toSVG.cy - fromSVG.cy;
+  const len = Math.sqrt(dx*dx + dy*dy);
   if (len < 0.01) return null;
-
-  // 화살촉 공간 확보: 끝점을 약간 당김
-  const shrink = 0.38;
-  const ex = to.cx - dx / len * shrink;
-  const ey = to.cy - dy / len * shrink;
-  // 시작점: 중앙에서 살짝 뒤
-  const startShrink = 0.18;
-  const sx = from.cx + dx / len * startShrink;
-  const sy = from.cy + dy / len * startShrink;
-
+  // 끝점 당기기 (화살촉 공간)
+  const shrink = 0.42, startShrink = 0.2;
+  const ex = toSVG.cx - dx/len*shrink, ey = toSVG.cy - dy/len*shrink;
+  const sx = fromSVG.cx + dx/len*startShrink, sy = fromSVG.cy + dy/len*startShrink;
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', sx);
-  line.setAttribute('y1', sy);
-  line.setAttribute('x2', ex);
-  line.setAttribute('y2', ey);
+  line.setAttribute('x1', sx); line.setAttribute('y1', sy);
+  line.setAttribute('x2', ex); line.setAttribute('y2', ey);
   line.setAttribute('stroke', color);
-  line.setAttribute('stroke-width', strokeW || 0.13);
-  line.setAttribute('stroke-opacity', opacity || 0.88);
-  line.setAttribute('marker-end', `url(#${markerId})`);
+  line.setAttribute('stroke-width', sw || 0.14);
   line.setAttribute('stroke-linecap', 'round');
+  line.setAttribute('marker-end', `url(#${markerId})`);
   return line;
 }
 
-// SVG 칸 하이라이트
-function _makeSVGHighlight(file, rank, color, opacity) {
-  const pos = _squareToSVG(file, rank);
+function _makeSVGHighlight(col, row, fill, opacity) {
   const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  rect.setAttribute('x', pos.col);
-  rect.setAttribute('y', pos.row);
-  rect.setAttribute('width', 1);
-  rect.setAttribute('height', 1);
-  rect.setAttribute('fill', color);
-  rect.setAttribute('fill-opacity', opacity || 0.3);
-  rect.setAttribute('rx', 0.04);
+  rect.setAttribute('x', col); rect.setAttribute('y', row);
+  rect.setAttribute('width', 1); rect.setAttribute('height', 1);
+  rect.setAttribute('fill', fill); rect.setAttribute('fill-opacity', opacity);
   return rect;
 }
 
-// 오버레이 전체 클리어
 function clearBoardOverlay() {
   const hl = document.getElementById('svg-highlights');
   const ar = document.getElementById('svg-arrows');
@@ -2333,154 +2437,162 @@ function clearBoardOverlay() {
   if (ar) ar.innerHTML = '';
 }
 
-/**
- * 위협 오버레이 그리기
- * @param {Object} pvDataNow - 현재 pvData 스냅샷
- * @param {string} turn - 현재 차례 ('w' | 'b')
- */
-function drawThreatOverlay(pvDataNow, turn) {
-  if (!_threatOverlayEnabled) { clearBoardOverlay(); return; }
-
+function _drawOverlay() {
   const hlEl = document.getElementById('svg-highlights');
   const arEl = document.getElementById('svg-arrows');
   if (!hlEl || !arEl) return;
+  hlEl.innerHTML = ''; arEl.innerHTML = '';
 
-  hlEl.innerHTML = '';
-  arEl.innerHTML = '';
+  if (_overlayMode === 'off') return;
 
-  if (!pvDataNow) return;
+  if (_overlayMode === 'threat') {
+    _drawThreatArrow(hlEl, arEl);
+  } else if (_overlayMode === 'best') {
+    _drawBestArrows(hlEl, arEl);
+  }
+}
 
-  // PV1~3 최대 3개 화살표 표시
-  const pvKeys = [1, 2, 3].filter(k => pvDataNow[k] && pvDataNow[k].pvUci && pvDataNow[k].pvUci.length > 0);
+// ── 위협 화살표 (빨간) ────────────────────────────────────────
+function _drawThreatArrow(hlEl, arEl) {
+  if (!_currentThreatUci) return;
+  const c = _parseUci(_currentThreatUci);
+  if (!c) return;
 
-  pvKeys.forEach((pvIdx) => {
-    const pv = pvDataNow[pvIdx];
-    if (!pv || !pv.pvUci || pv.pvUci.length === 0) return;
+  const from = _uciSqToSVG(c.ff, c.fr);
+  const to   = _uciSqToSVG(c.tf, c.tr);
 
-    const firstMove = pv.pvUci[0];
-    const coords = _uciToFileRank(firstMove);
-    if (!coords) return;
+  // 하이라이트
+  const fhl = _makeSVGHighlight(from.col, from.row, 'rgba(220,60,60,0.45)', 0.45);
+  const thl = _makeSVGHighlight(to.col,   to.row,   'rgba(220,60,60,0.3)',  0.3);
+  if (fhl) hlEl.appendChild(fhl);
+  if (thl) hlEl.appendChild(thl);
 
-    const { fromFile, fromRank, toFile, toRank } = coords;
+  // 화살표
+  const arrow = _makeSVGArrow(from, to, 'rgba(220,60,60,0.95)', 'arr-threat', 0.16);
+  if (arrow) arEl.appendChild(arrow);
+}
 
-    // 랭크 변환: rank 1~8 → board row 0~7 (rank=1 → row=7, rank=8 → row=0)
-    const fromSVG = _squareToSVG(fromFile, 7 - fromRank);
-    const toSVG   = _squareToSVG(toFile,   7 - toRank);
+// ── 최선수 화살표 (파랑 + 보조 초록) ─────────────────────────
+function _drawBestArrows(hlEl, arEl) {
+  if (typeof pvData === 'undefined') return;
 
-    if (pvIdx === 1) {
-      // 최선수: 출발/도착 하이라이트 + 굵은 파란 화살표
-      const fromHl = _makeSVGHighlight(fromFile, 7 - fromRank, 'rgba(80,144,208,0.55)', 0.55);
-      const toHl   = _makeSVGHighlight(toFile,   7 - toRank,   'rgba(80,144,208,0.35)', 0.35);
-      if (fromHl) hlEl.appendChild(fromHl);
-      if (toHl)   hlEl.appendChild(toHl);
-
-      const arrow = _makeSVGArrow(fromSVG, toSVG, 'rgba(80,144,208,0.92)', 'arrow-best', 0.16, 0.92);
-      if (arrow) arEl.appendChild(arrow);
-
-      // 두 번째 수 (상대 응수 예상) - 빨간 위협 화살표
-      if (pv.pvUci[1]) {
-        const c2 = _uciToFileRank(pv.pvUci[1]);
-        if (c2) {
-          const f2 = _squareToSVG(c2.fromFile, 7 - c2.fromRank);
-          const t2 = _squareToSVG(c2.toFile,   7 - c2.toRank);
-          const arrow2 = _makeSVGArrow(f2, t2, 'rgba(224,80,80,0.75)', 'arrow-threat', 0.10, 0.75);
-          if (arrow2) arEl.appendChild(arrow2);
-        }
-      }
-    } else if (pvIdx === 2) {
-      // 2번째 후보수: 초록 화살표 (얇음)
-      const arrow = _makeSVGArrow(fromSVG, toSVG, 'rgba(127,166,80,0.7)', 'arrow-good', 0.11, 0.7);
-      if (arrow) arEl.appendChild(arrow);
-    } else if (pvIdx === 3) {
-      // 3번째 후보수: 더 연한 화살표
-      const arrow = _makeSVGArrow(fromSVG, toSVG, 'rgba(160,160,80,0.45)', 'arrow-good', 0.09, 0.45);
-      if (arrow) arEl.appendChild(arrow);
+  [[1, 'rgba(80,144,208,0.95)', 'arr-best',  0.16, 'rgba(80,144,208,0.5)', 0.5],
+   [2, 'rgba(127,166,80,0.8)',  'arr-alt',   0.12, 'rgba(127,166,80,0.3)', 0.3],
+   [3, 'rgba(160,160,60,0.55)', 'arr-alt',   0.09, null, 0]
+  ].forEach(([pvIdx, color, markerId, sw, hlColor, hlOp]) => {
+    const pv = pvData[pvIdx];
+    if (!pv || !pv.pv || !pv.pv[0]) return;
+    const c = _parseUci(pv.pv[0]);
+    if (!c) return;
+    const from = _uciSqToSVG(c.ff, c.fr);
+    const to   = _uciSqToSVG(c.tf, c.tr);
+    if (hlColor && pvIdx === 1) {
+      const fhl = _makeSVGHighlight(from.col, from.row, hlColor, hlOp);
+      const thl = _makeSVGHighlight(to.col, to.row, 'rgba(80,144,208,0.3)', 0.3);
+      if (fhl) hlEl.appendChild(fhl);
+      if (thl) hlEl.appendChild(thl);
     }
+    const arrow = _makeSVGArrow(from, to, color, markerId, sw);
+    if (arrow) arEl.appendChild(arrow);
   });
 }
 
-// pvData를 UCI 형식으로 가져오는 헬퍼
-// engine.js의 processPvData에서 pv.pv는 UCI 수 배열로 저장됨
-function syncOverlayFromPvData() {
-  if (!_threatOverlayEnabled) { clearBoardOverlay(); return; }
-  if (typeof pvData === 'undefined') return;
-
-  // pvData[i].pv가 UCI 수 배열 (engine.js processPvData 참고)
-  // pvUci 필드로 정규화해서 drawThreatOverlay에 전달
-  const normalized = {};
-  for (const [k, v] of Object.entries(pvData)) {
-    if (!v) continue;
-    normalized[parseInt(k)] = {
-      ...v,
-      pvUci: v.pv || []  // v.pv = UCI moves array from engine
-    };
-  }
-
-  drawThreatOverlay(normalized, (typeof game !== 'undefined') ? game.turn : 'w');
-}
-
-// 위협 오버레이 토글 버튼 핸들러
-function toggleThreatOverlay() {
-  _threatOverlayEnabled = !_threatOverlayEnabled;
-  const btn = document.getElementById('threat-overlay-btn');
-  if (btn) {
-    btn.classList.toggle('active', _threatOverlayEnabled);
-    btn.title = _threatOverlayEnabled ? '위협 표시 끄기' : '위협 표시 켜기';
-  }
-  if (_threatOverlayEnabled) {
-    syncOverlayFromPvData();
+// ── 오버레이 모드 전환 ────────────────────────────────────────
+function setOverlayMode(mode) {
+  // 같은 버튼 재클릭 → off 토글
+  if (_overlayMode === mode) {
+    _overlayMode = 'off';
   } else {
+    _overlayMode = mode;
+  }
+
+  // 버튼 스타일 동기화
+  const tBtn = document.getElementById('threat-overlay-btn');
+  const bBtn = document.getElementById('best-overlay-btn');
+  if (tBtn) { tBtn.classList.toggle('active-threat', _overlayMode === 'threat'); }
+  if (bBtn) { bBtn.classList.toggle('active-best',   _overlayMode === 'best'); }
+
+  if (_overlayMode === 'off') {
     clearBoardOverlay();
+    return;
+  }
+
+  if (_overlayMode === 'threat') {
+    // 위협 Worker 초기화 (아직 안 됐으면)
+    if (!_threatWorker && !_threatWorkerReady) {
+      initThreatWorker();
+    }
+    // 현재 FEN으로 즉시 위협 분석
+    const fen = _getCurrentFen();
+    if (fen) { _lastThreatFen = ''; triggerThreatIfNeeded(fen); }
+  } else if (_overlayMode === 'best') {
+    _drawOverlay();
   }
 }
 
-// engine.js의 renderTopMoves 패치: pvData 갱신 후 오버레이도 업데이트
+function _getCurrentFen() {
+  try {
+    if (typeof game !== 'undefined' && game.board) {
+      return boardToFen(game.board, game.turn, game.castling, game.enPassant,
+                        game.halfMove || 0, game.fullMove || 1);
+    }
+  } catch(e) {}
+  return null;
+}
+
+// ── renderTopMoves 패치: 최선수 오버레이 갱신 + 위협 트리거 ──
 (function patchRenderTopMoves() {
   function tryPatch() {
     if (typeof renderTopMoves === 'undefined') { setTimeout(tryPatch, 300); return; }
     if (renderTopMoves._overlayPatched) return;
-
     const _orig = renderTopMoves;
-    window.renderTopMoves = function(msg) {
+    window.renderTopMoves = function() {
       _orig.apply(this, arguments);
-      // pvData가 갱신된 직후 오버레이 업데이트
-      // pvData는 engine.js에서 전역으로 관리됨
-      // pvData[i].pv 는 SAN 배열, rawPvStore나 pvData[i]에 UCI가 있는지 확인
       try {
-        // pvData에 UCI 데이터 주입: engine.js의 pvData[i].pvUci 필드를 활용
-        // (engine.js parseInfoLine에서 pv가 UCI 배열로 저장됨)
-        syncOverlayFromPvData();
+        if (_overlayMode === 'best') _drawOverlay();
+        else if (_overlayMode === 'threat') {
+          // FEN 변경 감지
+          const fen = _getCurrentFen();
+          if (fen) triggerThreatIfNeeded(fen);
+        }
       } catch(e) {}
     };
     window.renderTopMoves._overlayPatched = true;
   }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', tryPatch);
-  } else {
-    tryPatch();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tryPatch);
+  else tryPatch();
 })();
 
-// game.renderBoard 패치: 보드가 다시 그려질 때 (뒤집기 등) 오버레이도 갱신
+// ── ChessGame.renderBoard 패치: 보드 갱신(뒤집기 포함) 시 재렌더 ──
 (function patchRenderBoard() {
   function tryPatch() {
     if (typeof ChessGame === 'undefined') { setTimeout(tryPatch, 300); return; }
-    if (ChessGame.prototype.renderBoard && ChessGame.prototype.renderBoard._overlayPatched) return;
-
     const _orig = ChessGame.prototype.renderBoard;
-    if (!_orig) return;
+    if (!_orig || _orig._overlayPatched) return;
     ChessGame.prototype.renderBoard = function() {
       _orig.apply(this, arguments);
-      try { syncOverlayFromPvData(); } catch(e) {}
+      try {
+        if (_overlayMode === 'threat') {
+          const fen = _getCurrentFen();
+          if (fen) { _lastThreatFen = ''; triggerThreatIfNeeded(fen); }
+        } else {
+          _drawOverlay();
+        }
+      } catch(e) {}
     };
     ChessGame.prototype.renderBoard._overlayPatched = true;
   }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', tryPatch);
-  } else {
-    tryPatch();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tryPatch);
+  else tryPatch();
 })();
+
+// ── 초기 위협 Worker 로드 (엔진 초기화 후) ───────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // 메인 엔진 로드 후 약간 여유를 두고 위협 Worker 초기화
+  setTimeout(() => {
+    if (typeof getStockfishBlobUrl === 'function') initThreatWorker();
+  }, 3000);
+});
 </script>
 
 <!-- ===== JS 모듈 분리 ===== -->
