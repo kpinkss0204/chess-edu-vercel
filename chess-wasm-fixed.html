@@ -649,11 +649,20 @@ body {
 .loading-text { color: var(--text-secondary); font-size: 14px; }
 
 /* ===== BOARD SVG OVERLAY ===== */
-#board-wrap { position: relative; }
+#board-wrap {
+  position: relative;
+  /* board-wrap이 chessboard와 정확히 같은 크기여야 함 */
+  display: flex;
+  align-items: stretch;
+}
 #board-svg-overlay {
-  position: absolute; top: 0; left: 0;
+  position: absolute;
+  top: 0; left: 0;
   width: 100%; height: 100%;
-  pointer-events: none; z-index: 10; overflow: visible;
+  pointer-events: none;
+  z-index: 10;
+  /* viewBox와 실제 크기를 정확히 매핑 */
+  overflow: visible;
 }
 
 /* 위협/최선수 오버레이 토글 버튼 */
@@ -1530,19 +1539,35 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
       </div>
       <div id="board-wrap">
         <div id="chessboard"></div>
-        <svg id="board-svg-overlay" viewBox="0 0 8 8" xmlns="http://www.w3.org/2000/svg">
+        <svg id="board-svg-overlay"
+             viewBox="0 0 800 800"
+             preserveAspectRatio="none"
+             xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <marker id="arr-threat" markerWidth="6" markerHeight="6"
-              refX="3" refY="3" orient="auto" markerUnits="strokeWidth">
-              <path d="M0,0.5 L5,3 L0,5.5 L1.5,3 Z" fill="rgba(220,60,60,0.95)"/>
+            <!-- 위협(빨강) 화살촉: userSpaceOnUse → 픽셀 정확 -->
+            <marker id="arr-threat"
+              markerUnits="userSpaceOnUse"
+              markerWidth="24" markerHeight="24"
+              refX="12" refY="12"
+              orient="auto">
+              <path d="M2,4 L22,12 L2,20 L7,12 Z"
+                    fill="rgba(220,55,55,0.95)" stroke="none"/>
             </marker>
-            <marker id="arr-best" markerWidth="6" markerHeight="6"
-              refX="3" refY="3" orient="auto" markerUnits="strokeWidth">
-              <path d="M0,0.5 L5,3 L0,5.5 L1.5,3 Z" fill="rgba(80,144,208,0.95)"/>
+            <marker id="arr-best"
+              markerUnits="userSpaceOnUse"
+              markerWidth="24" markerHeight="24"
+              refX="12" refY="12"
+              orient="auto">
+              <path d="M2,4 L22,12 L2,20 L7,12 Z"
+                    fill="rgba(70,130,200,0.95)" stroke="none"/>
             </marker>
-            <marker id="arr-alt" markerWidth="6" markerHeight="6"
-              refX="3" refY="3" orient="auto" markerUnits="strokeWidth">
-              <path d="M0,0.5 L5,3 L0,5.5 L1.5,3 Z" fill="rgba(127,166,80,0.85)"/>
+            <marker id="arr-alt"
+              markerUnits="userSpaceOnUse"
+              markerWidth="20" markerHeight="20"
+              refX="10" refY="10"
+              orient="auto">
+              <path d="M2,3 L18,10 L2,17 L6,10 Z"
+                    fill="rgba(100,160,60,0.85)" stroke="none"/>
             </marker>
           </defs>
           <g id="svg-highlights"></g>
@@ -2386,13 +2411,15 @@ function _isFlipped() {
   return (typeof game !== 'undefined' && game.flipped) ? true : false;
 }
 
-// UCI 좌표 → SVG 좌표 (중심)
+// ── 좌표 계산 (viewBox 800×800, 칸 하나 = 100×100) ──────────
+// UCI file(0~7=a~h), rank(1~8) → SVG 중심 픽셀 좌표
 function _uciSqToSVG(file, rank1to8) {
-  // file: 0=a~7=h  rank1to8: 1~8
   const flipped = _isFlipped();
-  const col = flipped ? (7 - file) : file;
-  const row = flipped ? (rank1to8 - 1) : (8 - rank1to8);
-  return { cx: col + 0.5, cy: row + 0.5, col, row };
+  // 정규 방향: file=0(a) → SVG col=0, rank=8 → SVG row=0
+  const col = flipped ? (7 - file)        : file;
+  const row = flipped ? (rank1to8 - 1)    : (8 - rank1to8);
+  // 칸 중앙 (각 칸 100×100)
+  return { px: col * 100 + 50, py: row * 100 + 50, col, row };
 }
 
 function _parseUci(uci) {
@@ -2404,29 +2431,44 @@ function _parseUci(uci) {
   return { ff, fr, tf, tr };
 }
 
-function _makeSVGArrow(fromSVG, toSVG, color, markerId, sw) {
-  const dx = toSVG.cx - fromSVG.cx, dy = toSVG.cy - fromSVG.cy;
+// ── SVG 화살표 생성 ──────────────────────────────────────────
+// from/to: { px, py }  sw: stroke-width(px)
+function _makeSVGArrow(from, to, color, markerId, sw) {
+  const dx = to.px - from.px, dy = to.py - from.py;
   const len = Math.sqrt(dx*dx + dy*dy);
-  if (len < 0.01) return null;
-  // 끝점 당기기 (화살촉 공간)
-  const shrink = 0.42, startShrink = 0.2;
-  const ex = toSVG.cx - dx/len*shrink, ey = toSVG.cy - dy/len*shrink;
-  const sx = fromSVG.cx + dx/len*startShrink, sy = fromSVG.cy + dy/len*startShrink;
+  if (len < 1) return null;
+
+  const ux = dx / len, uy = dy / len;
+
+  // 출발: 기물 이미지가 44px 반경이므로 그것보다 조금 더 들어서 시작
+  const startOffset = 22;
+  // 도착: 화살촉 기준점(refX=12)이 선 끝에 오도록 — userSpaceOnUse 마커
+  const endOffset = 14;
+
+  const sx = from.px + ux * startOffset;
+  const sy = from.py + uy * startOffset;
+  const ex = to.px   - ux * endOffset;
+  const ey = to.py   - uy * endOffset;
+
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', sx); line.setAttribute('y1', sy);
-  line.setAttribute('x2', ex); line.setAttribute('y2', ey);
+  line.setAttribute('x1', sx.toFixed(2)); line.setAttribute('y1', sy.toFixed(2));
+  line.setAttribute('x2', ex.toFixed(2)); line.setAttribute('y2', ey.toFixed(2));
   line.setAttribute('stroke', color);
-  line.setAttribute('stroke-width', sw || 0.14);
+  line.setAttribute('stroke-width', sw || 14);
   line.setAttribute('stroke-linecap', 'round');
   line.setAttribute('marker-end', `url(#${markerId})`);
   return line;
 }
 
+// ── 칸 하이라이트 생성 ────────────────────────────────────────
 function _makeSVGHighlight(col, row, fill, opacity) {
   const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  rect.setAttribute('x', col); rect.setAttribute('y', row);
-  rect.setAttribute('width', 1); rect.setAttribute('height', 1);
-  rect.setAttribute('fill', fill); rect.setAttribute('fill-opacity', opacity);
+  rect.setAttribute('x', col * 100);
+  rect.setAttribute('y', row * 100);
+  rect.setAttribute('width', 100);
+  rect.setAttribute('height', 100);
+  rect.setAttribute('fill', fill);
+  rect.setAttribute('fill-opacity', opacity);
   return rect;
 }
 
@@ -2461,14 +2503,14 @@ function _drawThreatArrow(hlEl, arEl) {
   const from = _uciSqToSVG(c.ff, c.fr);
   const to   = _uciSqToSVG(c.tf, c.tr);
 
-  // 하이라이트
-  const fhl = _makeSVGHighlight(from.col, from.row, 'rgba(220,60,60,0.45)', 0.45);
-  const thl = _makeSVGHighlight(to.col,   to.row,   'rgba(220,60,60,0.3)',  0.3);
+  // 하이라이트 (출발·도착 칸)
+  const fhl = _makeSVGHighlight(from.col, from.row, 'rgba(220,55,55,0.45)', 0.45);
+  const thl = _makeSVGHighlight(to.col,   to.row,   'rgba(220,55,55,0.28)', 0.28);
   if (fhl) hlEl.appendChild(fhl);
   if (thl) hlEl.appendChild(thl);
 
-  // 화살표
-  const arrow = _makeSVGArrow(from, to, 'rgba(220,60,60,0.95)', 'arr-threat', 0.16);
+  // 화살표 (sw=14px, 칸 100px 기준)
+  const arrow = _makeSVGArrow(from, to, 'rgba(220,55,55,0.95)', 'arr-threat', 14);
   if (arrow) arEl.appendChild(arrow);
 }
 
@@ -2476,9 +2518,10 @@ function _drawThreatArrow(hlEl, arEl) {
 function _drawBestArrows(hlEl, arEl) {
   if (typeof pvData === 'undefined') return;
 
-  [[1, 'rgba(80,144,208,0.95)', 'arr-best',  0.16, 'rgba(80,144,208,0.5)', 0.5],
-   [2, 'rgba(127,166,80,0.8)',  'arr-alt',   0.12, 'rgba(127,166,80,0.3)', 0.3],
-   [3, 'rgba(160,160,60,0.55)', 'arr-alt',   0.09, null, 0]
+  [
+    [1, 'rgba(70,130,200,0.95)', 'arr-best', 14,  'rgba(70,130,200,0.45)', 0.45],
+    [2, 'rgba(100,160,60,0.85)', 'arr-alt',  11,  'rgba(100,160,60,0.28)', 0.28],
+    [3, 'rgba(140,150,50,0.6)',  'arr-alt',   8,  null, 0],
   ].forEach(([pvIdx, color, markerId, sw, hlColor, hlOp]) => {
     const pv = pvData[pvIdx];
     if (!pv || !pv.pv || !pv.pv[0]) return;
@@ -2486,9 +2529,9 @@ function _drawBestArrows(hlEl, arEl) {
     if (!c) return;
     const from = _uciSqToSVG(c.ff, c.fr);
     const to   = _uciSqToSVG(c.tf, c.tr);
-    if (hlColor && pvIdx === 1) {
+    if (hlColor) {
       const fhl = _makeSVGHighlight(from.col, from.row, hlColor, hlOp);
-      const thl = _makeSVGHighlight(to.col, to.row, 'rgba(80,144,208,0.3)', 0.3);
+      const thl = _makeSVGHighlight(to.col, to.row, hlColor, hlOp * 0.6);
       if (fhl) hlEl.appendChild(fhl);
       if (thl) hlEl.appendChild(thl);
     }
