@@ -11,10 +11,14 @@ const _CDN_WASM = 'https://unpkg.com/stockfish@18.0.0/src/stockfish-18-single.wa
 
 // 로드 소스 목록 (우선순위 순)
 const STOCKFISH_SOURCES = [
-  // 로컬 호스팅 우선 (Firebase에 stockfish/ 폴더 배포 시)
+  // 로컬 호스팅 우선 (public/stockfish/ 폴더 배포 시)
   { js: '/stockfish/stockfish-18-single.js',
     wasm: '/stockfish/stockfish-18-single.wasm',
     label: '로컬' },
+  // 로컬 파일이 없거나 너무 작으면 CDN으로 자동 폴백
+  { js: _CDN_JS,
+    wasm: _CDN_WASM,
+    label: 'CDN' },
 ];
 
 // Blob Worker URL 캐시
@@ -22,25 +26,13 @@ let _stockfishBlobUrl = null;
 let _stockfishBlobPromise = null;
 
 /**
- * Stockfish JS를 fetch → 3개 패치 적용 → Blob URL 반환
+ * Stockfish JS URL 결정:
+ *  1) 로컬 경로로 HEAD 요청 → 파일 존재 + 크기 충분(>50KB)하면 로컬 URL 사용
+ *  2) 로컬 파일 없거나 너무 작으면 CDN URL 사용
  *
- * [왜 3개 패치인가]
- *  Stockfish single-file WASM Worker는 내부에서 3곳에서 URL을 자체 계산:
- *
- *  패치1) var Te;
- *    → document.currentScript?.src (Worker 내부엔 document 없음 → undefined)
- *    → wasm base path 계산에 사용됨
- *    → Te = CDN_JS_URL 로 강제 설정
- *
- *  패치2) ,a=decodeURIComponent(e[0]||location.origin+location.pathname.replace(/\.js$/i,".wasm"))
- *    → hash가 없을 때 현재 파일 기반으로 wasm URL 계산
- *    → Blob Worker에선 location.pathname = Blob URL → 계산 실패
- *    → CDN wasm URL로 직접 교체
- *
- *  패치3) self.location.origin+self.location.pathname+"#"+a+",worker"
- *    → 멀티스레드 Worker 재생성 시 자신의 JS URL을 self.location으로 계산
- *    → Blob Worker에선 self.location.origin = "null", pathname = blob 경로 → "nullnull/..."
- *    → CDN JS URL로 직접 교체
+ * [왜 크기를 확인하는가]
+ *  배포 환경에 stub(21KB) 파일만 있고 실제 WASM 로더가 없는 경우를 걸러내기 위함.
+ *  진짜 stockfish-18-single.js는 수백KB 이상이어야 정상 동작.
  */
 async function getStockfishBlobUrl() {
   if (_stockfishBlobUrl) return _stockfishBlobUrl;
@@ -48,13 +40,25 @@ async function getStockfishBlobUrl() {
 
   _stockfishBlobPromise = (async () => {
     let lastErr;
-    for (const {js: src, label} of STOCKFISH_SOURCES) {
+    for (const { js: src, wasm, label } of STOCKFISH_SOURCES) {
       try {
         console.log(`[Stockfish] 로드 시도 (${label}):`, src);
-        // 로컬 파일은 Worker에서 직접 로드 가능
-        // self.location이 https라서 wasm 경로도 자동으로 올바르게 계산됨
+
+        // CDN이 아닌 로컬 경로는 fetch HEAD로 존재 여부 + 크기를 확인
+        if (label !== 'CDN') {
+          const res = await fetch(src, { method: 'HEAD' }).catch(() => null);
+          if (!res || !res.ok) {
+            throw new Error(`파일 없음 (HTTP ${res ? res.status : 'network error'})`);
+          }
+          // Content-Length로 크기 확인 — 50KB 미만이면 stub으로 간주
+          const cl = parseInt(res.headers.get('content-length') || '0', 10);
+          if (cl > 0 && cl < 50 * 1024) {
+            throw new Error(`파일 너무 작음 (${(cl/1024).toFixed(1)}KB) — stub 파일로 판단, CDN으로 폴백`);
+          }
+        }
+
         _stockfishBlobUrl = src;
-        console.log(`[Stockfish] Worker URL 준비 완료 (${label})`);
+        console.log(`[Stockfish] Worker URL 준비 완료 (${label}):`, src);
         return _stockfishBlobUrl;
       } catch (e) {
         console.warn(`[Stockfish] 실패 (${label}):`, e.message);
