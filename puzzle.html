@@ -2090,6 +2090,38 @@ function getLegalMovesFrom(r, c) {
   } catch(e) { return []; }
 }
 
+// 특정 칸에서 이동 가능한 목적지를 UCI 문자열 Set으로 반환
+function getLegalUciFrom(r, c) {
+  try {
+    let fen = '';
+    for (let row = 0; row < 8; row++) {
+      let empty = 0;
+      for (let col = 0; col < 8; col++) {
+        const p = state.board[row][col];
+        if (p) { if (empty) { fen += empty; empty = 0; } fen += p; }
+        else empty++;
+      }
+      if (empty) fen += empty;
+      if (row < 7) fen += '/';
+    }
+    const turn = state.currentPuzzle.turn === 'white' ? 'w' : 'b';
+    const ch = new Chess(fen + ' ' + turn + ' - - 0 1');
+    const fromSq = FILES[c] + (8 - r);
+    const moves = ch.moves({ square: fromSq, verbose: true });
+    // 프로모션: 퀸 프로모션(q)만 기본으로 허용 (UCI 끝에 q)
+    const uciSet = new Set();
+    moves.forEach(m => {
+      const uci = m.from + m.to + (m.promotion || '');
+      uciSet.add(uci);
+      // 프로모션 수는 q 버전만 추가 (퍼즐 정답과 매칭)
+      if (m.promotion && m.promotion !== 'q') {
+        uciSet.add(m.from + m.to + 'q');
+      }
+    });
+    return uciSet;
+  } catch(e) { return new Set(); }
+}
+
 function showMoveDots(moves) {
   moves.forEach(({ tr, tc, capture }) => {
     const sq = getSquareEl(tr, tc);
@@ -2183,6 +2215,18 @@ function tryMove(fr, fc, tr, tc, moveStr) {
 
   clearHighlights();
   state.selectedSq = null;
+
+  // ── 합법 수 검증: 체스 룰상 불가능한 이동은 즉시 차단 ──────────────────
+  const legalUcis = getLegalUciFrom(fr, fc);
+  const baseMoveStr = moveStr.slice(0, 4); // 프로모션 제외 4자리
+  const isLegal = legalUcis.has(moveStr) ||
+                  legalUcis.has(baseMoveStr) ||
+                  legalUcis.has(baseMoveStr + 'q'); // 퀸 프로모션 기본 허용
+  if (!isLegal) {
+    // 룰 위반 — 조용히 선택만 해제 (피드백 없이)
+    return;
+  }
+  // ────────────────────────────────────────────────────────────────────────
 
   const fromSq = getSquareEl(fr, fc);
   const toSq   = getSquareEl(tr, tc);
