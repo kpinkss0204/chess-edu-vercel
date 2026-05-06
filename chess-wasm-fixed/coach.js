@@ -722,6 +722,21 @@ async function runThreatAnalysis() {
   lastThreatFen   = fenKey;
 
   try {
+    // 체크메이트 즉시 감지 — API 호출 없이 클라이언트에서 바로 처리
+    const mover    = ctx.turn === 'w' ? '백' : '흑';
+    const isMate   = ctx.bestMove && ctx.bestMove.includes('#');
+
+    if (isMate) {
+      const mateText = [
+        `**핵심 계획:** ${mover}은 ${ctx.bestMove}로 즉각 체크메이트를 만들 수 있습니다.`,
+        `**문제점:** 즉각적인 체크메이트가 있어 문제점 없음.`,
+        `**최선책:** ${ctx.bestMove}를 바로 두어 게임을 끝내세요.`,
+      ].join('
+');
+      renderThreatPanel(mateText);
+      return;
+    }
+
     const answer  = await callThreatAPI(ctx);
     const cleaned = cleanKorean(answer);
     renderThreatPanel(cleaned);
@@ -735,22 +750,40 @@ async function runThreatAnalysis() {
 }
 
 async function callThreatAPI(ctx) {
+  const mover     = ctx.turn === 'w' ? '백(White)' : '흑(Black)';
+  const opponent  = ctx.turn === 'w' ? '흑(Black)' : '백(White)';
+
+  // 체크메이트/즉승 여부 감지: 엔진 1순위 수에 # 포함 여부
+  const isMate    = ctx.bestMove && ctx.bestMove.includes('#');
+  // 엔진 1순위 수에 + 포함 (체크) 여부
+  const isCheck   = ctx.bestMove && (ctx.bestMove.includes('+') || isMate);
+
   const THREAT_SYSTEM = `You are a Korean chess analyst. Output ONLY in Korean (한국어).
 Never use Japanese, Chinese characters, Arabic, or any non-Korean script.
 Chess move notation (Nf3, e4, dxc4, O-O) stays in algebraic form.
 
-Output format — use EXACTLY these three section headers:
-**핵심 계획:** (백/흑의 주요 위협과 공격 아이디어 1~2문장)
-**문제점:** (상대방이 대응할 수 있는 반격 또는 방어 수단 1~2문장)
-**최선책:** (최선의 대응 수순 또는 해결책 1~2문장. 구체적인 수를 포함할 것)
+CRITICAL RULES:
+- The side to move is ${mover}. ALL analysis must be from ${mover}'s perspective.
+- **핵심 계획** = ${mover}의 공격 아이디어 또는 위협. 절대 ${opponent}의 수를 이 섹션에 쓰지 말 것.
+- **문제점** = ${mover}가 직면한 실제 어려움 또는 ${opponent}의 반격 수단. 만약 ${mover}에게 즉각적인 체크메이트(#)나 결정적 수가 있다면 문제점이 없으므로 "즉각적인 결정타가 있어 문제점 없음"이라고 쓸 것.
+- **최선책** = ${mover}의 최선의 수순 (엔진 최선수 기반).
+- 절대로 차례가 아닌 쪽의 수를 '핵심 계획'에 쓰지 말 것.
+- 체크메이트 수가 있으면 **핵심 계획**에 반드시 체크메이트 가능성을 명시할 것.
 
-Keep each section to 1-2 sentences. Total response under 300 characters.`;
+Output format — use EXACTLY these three section headers:
+**핵심 계획:** (${mover}의 주요 위협과 공격 아이디어 1~2문장)
+**문제점:** (${mover}가 직면한 어려움. 즉승이 있으면 "문제점 없음" 명시)
+**최선책:** (${mover}의 최선 수순 1~2문장. 구체적인 수 표기 포함)
+
+Keep each section to 1-2 sentences. Total response under 350 characters.`;
 
   const userMsg = [
     `현재 포지션을 분석해주세요.`,
-    `차례: ${ctx.turn === 'w' ? '백(White)' : '흑(Black)'}`,
+    `차례: ${mover} — 반드시 ${mover}의 관점에서만 분석하세요.`,
+    isMate  ? `⚠️ 엔진이 즉각 체크메이트 수를 발견했습니다: ${ctx.bestMove}` : '',
+    isCheck && !isMate ? `엔진 최선수(체크): ${ctx.bestMove}` : '',
+    !isCheck ? (ctx.bestMove ? `엔진 최선수: ${ctx.bestMove}${ctx.bestLine ? ' → ' + ctx.bestLine : ''}` : '') : '',
     ctx.lastMoveSan ? `방금 둔 수: ${ctx.lastMoveSan}` : '',
-    ctx.bestMove    ? `엔진 최선수: ${ctx.bestMove}${ctx.bestLine ? ' → ' + ctx.bestLine : ''}` : '',
     ctx.pgnMoves    ? `기보: ${ctx.pgnMoves}` : '',
     `FEN: ${ctx.fen}`,
   ].filter(Boolean).join('\n');
