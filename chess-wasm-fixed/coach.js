@@ -937,19 +937,21 @@ function renderBestSeqBar(moves, activeIdx, ctx) {
   let turn    = ctx.turn;
 
   moves.forEach((san, i) => {
-    if (turn === 'w' || i === 0) {
-      html += `<span class="best-seq-num">${moveNum}${turn === 'b' && i === 0 ? '...' : '.'}</span>`;
-      if (turn === 'w') {}
+    // 수 번호: 백 차례마다, 또는 첫 수가 흑일 때
+    if (turn === 'w') {
+      html += `<span class="best-seq-num">${moveNum}.</span>`;
+    } else if (i === 0) {
+      html += `<span class="best-seq-num">${moveNum}...</span>`;
     }
 
-    let pieceCode = null;
     const color = turn;
+    let pieceCode;
     if (san === 'O-O' || san === 'O-O-O') pieceCode = color + 'K';
     else if (san && 'NBRQK'.includes(san[0])) pieceCode = color + san[0];
     else pieceCode = color + 'P';
     const imgTag = `<img src="${pieceImg(pieceCode)}" alt="">`;
 
-    html += `<span class="best-seq-move${i === activeIdx ? ' active' : ''}" 
+    html += `<span class="best-seq-move${i === activeIdx ? ' active' : ''}"
       onclick="runBestMoveExplain(${i})" title="${san}">${imgTag}${san}</span>`;
 
     if (turn === 'b') moveNum++;
@@ -1009,44 +1011,55 @@ function renderBestExplain(text, focusMove, moves, activeIdx, ctx) {
   const escaped = text
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  const lines       = escaped.split('\n').map(l => l.trim()).filter(Boolean);
-  let   titleLine   = '';
+  // 이유 줄 파싱 (• / - / 숫자. 로 시작하는 줄)
+  const lines = escaped.split('\n').map(l => l.trim()).filter(Boolean);
   const reasonLines = [];
-
   for (const line of lines) {
     if (line.startsWith('•') || line.startsWith('-') || line.startsWith('·') || line.match(/^\d+\./)) {
       const txt = line.replace(/^[•\-·]\s*/, '').replace(/^\d+\.\s*/, '');
-      reasonLines.push(txt);
-    } else if (!titleLine) {
-      titleLine = line;
+      if (txt) reasonLines.push(txt);
     }
   }
+  // 이유가 없으면 모든 줄을 이유로
+  if (reasonLines.length === 0) {
+    lines.forEach(l => { if (l) reasonLines.push(l); });
+  }
 
-  const color = ctx.turn;
-  let pieceCode = null;
+  // 기물 아이콘 결정 (focusIdx 기준 차례 계산)
+  let turnForFocus = ctx.turn;
+  for (let k = 0; k < activeIdx; k++) turnForFocus = turnForFocus === 'w' ? 'b' : 'w';
+  const color = turnForFocus;
+  let pieceCode;
   if (focusMove === 'O-O' || focusMove === 'O-O-O') pieceCode = color + 'K';
   else if (focusMove && 'NBRQK'.includes(focusMove[0])) pieceCode = color + focusMove[0];
   else pieceCode = color + 'P';
-  const imgTag = `<img src="${pieceImg(pieceCode)}" style="width:16px;height:16px;vertical-align:middle;margin-right:2px;">`;
+  const pieceImg_ = `<img src="${pieceImg(pieceCode)}" alt="${focusMove}">`;
 
-  const iconClasses = ['reason-positive','reason-neutral','reason-good','reason-warning'];
+  // 아이콘 색상 순서: 파랑 → 반투명파랑 → 초록 → 노랑
+  const iconCls = ['reason-positive','reason-neutral','reason-good','reason-warning'];
 
-  let html = `<div class="best-explain-title"><span class="be-move">${imgTag}${focusMove}</span>이/가 좋은 이유:</div>`;
-  html += '<div class="best-reason-list">';
+  // 타이틀: "[기물아이콘 Qa1]이/가 좋은 이유:"
+  let html = `
+    <div class="best-explain-title">
+      <span class="be-move-chip">${pieceImg_}${focusMove}</span>이/가 좋은 이유:
+    </div>
+    <div class="best-reason-list">`;
 
-  if (reasonLines.length > 0) {
-    reasonLines.slice(0, 4).forEach((reason, i) => {
-      const cls = iconClasses[i % iconClasses.length];
-      html += `<div class="best-reason-item">
+  const highlight = s => s.replace(
+    /(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?|[a-h][1-8][+#]?)/g,
+    m => m.length >= 2 ? `<strong>${m}</strong>` : m
+  );
+
+  reasonLines.slice(0, 4).forEach((reason, i) => {
+    const cls = iconCls[i % iconCls.length];
+    html += `
+      <div class="best-reason-item">
         <div class="best-reason-icon ${cls}"></div>
-        <span>${reason.replace(/(O-O-O|O-O|[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8][+#=]?)/g, '<strong>$1</strong>')}</span>
+        <span>${highlight(reason)}<span class="best-reason-plus">+</span></span>
       </div>`;
-    });
-  } else {
-    html += `<div class="best-reason-item"><div class="best-reason-icon reason-positive"></div><span>${escaped}</span></div>`;
-  }
+  });
 
-  html += '</div>';
+  html += `</div>`;
   contentEl.innerHTML = html;
 }
 
