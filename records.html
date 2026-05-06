@@ -374,6 +374,10 @@ body{font-family:var(--font-main);background:var(--bg-primary);color:var(--text-
     <div class="list-header">
       <div class="list-title">기보 기록</div>
       <div class="list-sub" id="list-sub">불러오는 중...</div>
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <button id="tab-records-btn" onclick="switchTab('records')" style="flex:1;padding:6px 0;border:1px solid var(--accent-green-dark);border-radius:8px;background:var(--bg-tertiary);color:var(--accent-green-bright);font-size:12px;font-family:var(--font-main);cursor:pointer;font-weight:600;">기보 목록</button>
+        <button id="tab-stats-btn" onclick="switchTab('stats')" style="flex:1;padding:6px 0;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text-secondary);font-size:12px;font-family:var(--font-main);cursor:pointer;font-weight:600;">통계 분석</button>
+      </div>
     </div>
     <div id="records-list">
       <div class="empty-state"><div class="empty-icon">♟</div><div>기록을 불러오는 중입니다...</div></div>
@@ -801,8 +805,19 @@ function showToast(msg,duration=2500){const t=document.getElementById('toast');t
 function switchTab(tab){
   const lp=document.getElementById('list-panel'),vp=document.getElementById('viewer-panel'),sp=document.getElementById('stats-panel');
   const rb=document.getElementById('tab-records-btn'),sb=document.getElementById('tab-stats-btn');
-  if(tab==='records'){rb.classList.add('active');sb.classList.remove('active');lp.style.display='';vp.style.display='';sp.style.display='none';}
-  else{sb.classList.add('active');rb.classList.remove('active');lp.style.display='none';vp.style.display='none';sp.style.display='block';renderStats();}
+  if(tab==='records'){
+    if(rb)rb.classList.add('active');
+    if(sb)sb.classList.remove('active');
+    if(lp)lp.style.display='';
+    if(vp)vp.style.display='';
+    if(sp)sp.style.display='none';
+  }else{
+    if(sb)sb.classList.add('active');
+    if(rb)rb.classList.remove('active');
+    if(lp)lp.style.display='none';
+    if(vp)vp.style.display='none';
+    if(sp){sp.style.display='block';renderStats();}
+  }
 }
 
 // ════════════════════════════════════════
