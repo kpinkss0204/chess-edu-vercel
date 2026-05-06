@@ -146,6 +146,21 @@ function buildChessContext() {
     else if (v < -1) advantageDesc = '흑이 약간 우세';
   }
 
+  // 최선수 설명 패널 데이터 수집 (이미 분석된 경우)
+  let bestExplainData = null;
+  try {
+    const beEl = document.getElementById('best-explain-content');
+    if (beEl && lastBestExplainFen) {
+      const reasonItems = beEl.querySelectorAll('.best-reason-item span');
+      const reasons = Array.from(reasonItems).map(el => el.innerText.trim()).filter(Boolean);
+      const titleEl = beEl.querySelector('.best-explain-title');
+      const title   = titleEl ? titleEl.innerText.trim() : null;
+      if (reasons.length > 0) {
+        bestExplainData = { move: bestExplainMoves[0] || null, title, reasons };
+      }
+    }
+  } catch(e) { /* 무시 */ }
+
   // 위협 패널에서 마지막으로 분석된 위협 데이터 포함
   let threatData = null;
   try {
@@ -177,6 +192,7 @@ function buildChessContext() {
     phase, moveCount, advantageDesc,
     fullMove: game.fullMove,
     threatData,
+    bestExplainData,
   };
 }
 
@@ -263,9 +279,19 @@ async function runPositionCommentary() {
     if (!freshCtx.threatData && !threatLoading) {
       responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 중...`;
       await runThreatAnalysis();
-      // 분석 완료 대기
       const tStart2 = Date.now();
       while (threatLoading && Date.now() - tStart2 < 4000) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+      freshCtx = buildChessContext();
+    }
+
+    // 최선수 이유 분석이 없으면 백그라운드에서 먼저 실행 후 결과 기다림
+    if (!freshCtx.bestExplainData && !bestExplainLoading && pvData && pvData[1] && pvData[1].moves && pvData[1].moves.length > 0) {
+      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 최선수 이유 분석 중...`;
+      await runBestMoveExplain(0);
+      const bStart = Date.now();
+      while (bestExplainLoading && Date.now() - bStart < 4000) {
         await new Promise(r => setTimeout(r, 300));
       }
       freshCtx = buildChessContext();
@@ -385,6 +411,17 @@ function buildCommentaryPrompt(ctx) {
     if (ctx.threatData.sol)  lines.push(`최선책(Solution): ${ctx.threatData.sol}`);
   }
 
+  // 최선수 이유 분석 데이터
+  if (ctx.bestExplainData) {
+    lines.push(``);
+    lines.push(`[최선수 이유 분석 데이터 — 최선수 분석 섹션에 반드시 반영할 것]`);
+    lines.push(`최선수: ${ctx.bestExplainData.move || ctx.bestMove}`);
+    if (ctx.bestExplainData.reasons && ctx.bestExplainData.reasons.length > 0) {
+      lines.push(`이 수가 좋은 이유:`);
+      ctx.bestExplainData.reasons.forEach((r, i) => lines.push(`  ${i+1}. ${r}`));
+    }
+  }
+
   if (ctx.pgnMoves) lines.push(`전체 기보: ${ctx.pgnMoves}`);
   lines.push(`FEN: ${ctx.fen}`);
 
@@ -398,7 +435,7 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`- **약점 분석** : 백 또는 흑에게 구체적인 구조적/전략적 약점이 존재할 때만 작성. 균형 잡힌 오프닝 초반처럼 약점이 불분명하면 생략.`);
   lines.push(`- **강점 분석** : 한쪽이 공간적 우위, 기물 활동성, 폰 구조 등에서 뚜렷한 강점을 가질 때만 작성. 특이사항이 없으면 생략.`);
   lines.push(`- **위협 & 아이디어** : 즉각적인 위협(전술, 포크, 핀, 킹 안전 위협 등)이나 중요한 전략적 아이디어가 있을 때만 작성. 아무것도 없으면 생략.`);
-  lines.push(`- **최선수 분석** : 엔진 1순위 첫 수를 항상 분석. 왜 좋은지 2~3가지 이유를 간결하게.`);
+  lines.push(`- **최선수 분석** : 엔진 1순위 첫 수를 항상 분석. 최선수 이유 분석 데이터가 있으면 그 이유들을 자연스러운 문장으로 풀어서 설명하고, 이후 수순과 연결하세요. 데이터가 없으면 엔진 라인에서 직접 이유 2~3가지를 도출하세요.`);
   lines.push(`- **이후 수순** : 앞으로 전개될 핵심 흐름과 양 측의 계획을 해설.`);
   lines.push(``);
   lines.push(`[형식 규칙]`);
