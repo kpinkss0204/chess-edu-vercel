@@ -146,6 +146,29 @@ function buildChessContext() {
     else if (v < -1) advantageDesc = '흑이 약간 우세';
   }
 
+  // 위협 패널에서 마지막으로 분석된 위협 데이터 포함
+  let threatData = null;
+  try {
+    const tEl = document.getElementById('threat-content');
+    if (tEl) {
+      const ideaEl = tEl.querySelector('.threat-label-idea');
+      const probEl = tEl.querySelector('.threat-label-prob');
+      const solEl  = tEl.querySelector('.threat-label-sol');
+      const getBody = (labelEl) => {
+        if (!labelEl) return null;
+        const section = labelEl.closest('.threat-section');
+        const body = section && section.querySelector('.threat-section-body');
+        return body ? body.innerText.trim() : null;
+      };
+      const idea = getBody(ideaEl);
+      const prob = getBody(probEl);
+      const sol  = getBody(solEl);
+      if (idea || prob || sol) {
+        threatData = { idea, prob, sol };
+      }
+    }
+  } catch(e) { /* 무시 */ }
+
   return {
     turn, fen, bestMove, bestLine, line2, line3, evaluation, depth, cpFromWhite,
     lastMove, lastMoveSan, lastMoveAnnotation,
@@ -153,6 +176,7 @@ function buildChessContext() {
     pgnMoves: pgnMoves.trim(),
     phase, moveCount, advantageDesc,
     fullMove: game.fullMove,
+    threatData,
   };
 }
 
@@ -222,7 +246,30 @@ async function runPositionCommentary() {
     }
 
     // 최신 컨텍스트 다시 빌드 (라인이 갱신됐을 수 있음)
-    const freshCtx = buildChessContext();
+    let freshCtx = buildChessContext();
+
+    // 위협 패널이 아직 로딩 중이면 완료까지 대기 (최대 4초)
+    if (threatLoading) {
+      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 완료 대기 중...`;
+      const tStart = Date.now();
+      while (threatLoading && Date.now() - tStart < 4000) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+      // 위협 데이터가 반영된 최신 컨텍스트로 재빌드
+      freshCtx = buildChessContext();
+    }
+
+    // 위협 패널이 비어있으면 백그라운드에서 먼저 위협 분석 실행 후 결과 기다림
+    if (!freshCtx.threatData && !threatLoading) {
+      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 중...`;
+      await runThreatAnalysis();
+      // 분석 완료 대기
+      const tStart2 = Date.now();
+      while (threatLoading && Date.now() - tStart2 < 4000) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+      freshCtx = buildChessContext();
+    }
 
     responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> AI 해설 생성 중...`;
 
@@ -329,12 +376,22 @@ function buildCommentaryPrompt(ctx) {
   if (ctx.line2)    lines.push(`[엔진 2순위 라인] ${ctx.line2}`);
   if (ctx.line3)    lines.push(`[엔진 3순위 라인] ${ctx.line3}`);
 
+  // 위협 패널 데이터 (체스인사이드 Idea→Problem→Solution 구조)
+  if (ctx.threatData) {
+    lines.push(``);
+    lines.push(`[위협 분석 데이터 — 해설에 반드시 반영할 것]`);
+    if (ctx.threatData.idea) lines.push(`핵심 계획(Idea): ${ctx.threatData.idea}`);
+    if (ctx.threatData.prob) lines.push(`문제점(Problem): ${ctx.threatData.prob}`);
+    if (ctx.threatData.sol)  lines.push(`최선책(Solution): ${ctx.threatData.sol}`);
+  }
+
   if (ctx.pgnMoves) lines.push(`전체 기보: ${ctx.pgnMoves}`);
   lines.push(`FEN: ${ctx.fen}`);
 
   lines.push(``);
   lines.push(`[해설 작성 지침]`);
-  lines.push(`스톡피시 엔진 라인을 기반으로, 현재 포지션을 체스인사이드 스타일로 해설하세요.`);
+  lines.push(`스톡피시 엔진 라인과 위협 분석 데이터(핵심 계획/문제점/최선책)를 함께 참고하여, 체스인사이드 스타일로 해설하세요.`);
+  lines.push(`위협 분석 데이터가 있다면 **위협 & 아이디어** 섹션에 반드시 녹여서 작성하세요. 핵심 계획→문제점→최선책 흐름을 자연스러운 한국어로 풀어서 설명하세요.`);
   lines.push(`해설은 반드시 **포지션 상황** 섹션으로 시작합니다.`);
   lines.push(`그 뒤로는 포지션의 특성에 따라 아래 섹션들을 필요한 것만 선택해서 작성하세요:`);
   lines.push(``);
@@ -377,6 +434,14 @@ function buildCoachPrompt(ctx, question) {
   if (ctx.bestLine) lines.push(`[엔진 1순위 라인] ${ctx.bestLine}`);
   if (ctx.line2)    lines.push(`[엔진 2순위 라인] ${ctx.line2}`);
   if (ctx.line3)    lines.push(`[엔진 3순위 라인] ${ctx.line3}`);
+
+  if (ctx.threatData) {
+    lines.push(``);
+    lines.push(`[위협 분석 데이터]`);
+    if (ctx.threatData.idea) lines.push(`핵심 계획(Idea): ${ctx.threatData.idea}`);
+    if (ctx.threatData.prob) lines.push(`문제점(Problem): ${ctx.threatData.prob}`);
+    if (ctx.threatData.sol)  lines.push(`최선책(Solution): ${ctx.threatData.sol}`);
+  }
 
   if (ctx.pgnMoves) lines.push(`전체 기보: ${ctx.pgnMoves}`);
   lines.push(`FEN: ${ctx.fen}`);
@@ -614,8 +679,8 @@ async function runThreatAnalysis() {
 
   const panel     = document.getElementById('threat-panel');
   const contentEl = document.getElementById('threat-content');
-  panel.style.display = 'block';
-  contentEl.innerHTML = '<div class="threat-loading">⚡ 위협 분석 중...</div>';
+  if (panel) panel.style.display = 'block';
+  if (contentEl) contentEl.innerHTML = '<div class="threat-loading">⚡ 위협 분석 중...</div>';
   threatLoading   = true;
   lastThreatFen   = fenKey;
 
