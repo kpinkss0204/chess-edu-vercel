@@ -4,28 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<title>Chess — 온라인 대국 + Eye Tracker</title>
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Chess — 온라인 대국</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
 
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-<!-- WebGazer MediaPipe 파일 경로를 CDN으로 사전 지정 -->
-<script>
-window.Module = window.Module || {};
-window.Module.locateFile = function(f) {
-  return 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/' + f;
-};
-</script>
+
 <!-- WebGazer.js -->
 <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
+html, body { height: 100%; overflow: hidden; }
 
 :root {
   --bg-primary:   #1a1a1a;
@@ -43,44 +39,429 @@ html, body { height: 100%; }
   --accent-green-dark:   #5a8030;
   --board-light:  #f0d9b5;
   --board-dark:   #b58863;
-  --et-accent:    #00ff87;
-  --et-accent2:   #ff6b35;
-  --et-accent3:   #7c3aed;
+  --sidebar-width: 72px;
   --font-main: 'Noto Sans KR', sans-serif;
   --font-display: 'Playfair Display', serif;
-  --font-mono: 'Space Mono', monospace;
+
+  /* Eye Tracker colors */
+  --et-bg: #1a2035;
+  --et-accent: #4f8ef7;
+  --et-accent2: #7f5af0;
+  --et-success: #2cb67d;
+  --et-warn: #f4c430;
+  --et-danger: #e05a5a;
 }
 
 body {
   font-family: var(--font-main);
   background: var(--bg-primary);
   color: var(--text-primary);
+  display: block;
   height: 100vh;
-  overflow: hidden;
 }
 
-/* ══════════════════════════════════
-   전체 레이아웃: 체스 + Eye Tracker
-   ══════════════════════════════════ */
-#app-wrapper {
+/* ══════════════════════════════════════
+   EYE TRACKER OVERLAY
+══════════════════════════════════════ */
+
+/* 메인 아이트래커 패널 (우측 하단 고정) */
+#et-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 220px;
+  background: rgba(18, 22, 38, 0.95);
+  border: 1px solid rgba(79, 142, 247, 0.35);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+  z-index: 800;
+  overflow: hidden;
+  transition: width 0.3s ease, height 0.3s ease, opacity 0.3s;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(79,142,247,0.1);
+}
+#et-panel.collapsed {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+
+#et-panel-header {
   display: flex;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(79,142,247,0.15);
+  cursor: pointer;
+  user-select: none;
 }
-
-/* ── 체스 영역 ── */
-#chess-area {
-  flex: 1;
-  min-width: 0;
+.et-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--et-accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.et-eye-icon {
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+#et-panel.collapsed .et-panel-title span { display: none; }
+#et-panel.collapsed #et-panel-header { border-bottom: none; padding: 12px; }
+
+.et-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  transition: color 0.2s;
+}
+.et-toggle-btn:hover { color: var(--et-accent); }
+#et-panel.collapsed .et-toggle-btn { display: none; }
+
+#et-panel-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#et-panel.collapsed #et-panel-body { display: none; }
+
+/* 상태 표시기 */
+.et-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.et-status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.et-status-dot.active { background: var(--et-success); box-shadow: 0 0 6px var(--et-success); animation: pulse-dot 2s infinite; }
+.et-status-dot.warning { background: var(--et-warn); box-shadow: 0 0 6px var(--et-warn); }
+.et-status-dot.error   { background: var(--et-danger); box-shadow: 0 0 6px var(--et-danger); }
+@keyframes pulse-dot {
+  0%,100% { opacity: 1; } 50% { opacity: 0.5; }
+}
+.et-status-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+/* 캘리브레이션 바 */
+.et-calib-section { display: flex; flex-direction: column; gap: 6px; }
+.et-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.et-calib-bar {
+  height: 5px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.et-calib-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--et-accent2), var(--et-accent));
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  width: 0%;
+}
+
+/* 시선 정확도 */
+.et-accuracy-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.et-acc-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--et-accent);
+  font-family: monospace;
+}
+.et-acc-label { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+
+/* 히트맵 미니 뷰 */
+.et-heatmap-section { display: flex; flex-direction: column; gap: 6px; }
+#et-mini-heatmap {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 1px solid rgba(79,142,247,0.2);
+  background: rgba(0,0,0,0.3);
   position: relative;
   overflow: hidden;
 }
+#et-mini-heatmap canvas { width: 100% !important; height: 100% !important; }
 
-#chess-area::before {
+/* 버튼들 */
+.et-btn-row { display: flex; gap: 6px; }
+.et-btn {
+  flex: 1;
+  padding: 7px 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(79,142,247,0.25);
+  background: rgba(79,142,247,0.08);
+  color: var(--et-accent);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-main);
+  transition: all 0.2s;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+.et-btn:hover { background: rgba(79,142,247,0.18); border-color: var(--et-accent); }
+.et-btn.danger { color: var(--et-danger); border-color: rgba(224,90,90,0.25); background: rgba(224,90,90,0.06); }
+.et-btn.danger:hover { background: rgba(224,90,90,0.15); }
+.et-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── 시선 커서 (화면 위 빨간 점) ── */
+#et-gaze-dot {
+  position: fixed;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(79,142,247,0.9) 0%, rgba(79,142,247,0.3) 60%, transparent 100%);
+  border: 2px solid rgba(79,142,247,0.8);
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  display: none;
+  transition: opacity 0.15s;
+  box-shadow: 0 0 10px rgba(79,142,247,0.5);
+}
+
+/* ── 캘리브레이션 오버레이 ── */
+#et-calib-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 24, 0.93);
+  z-index: 1000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  backdrop-filter: blur(4px);
+}
+#et-calib-overlay.show { display: flex; }
+
+.calib-overlay-title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--text-primary);
+  text-align: center;
+}
+.calib-overlay-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+/* 캘리브레이션 포인트 */
+.calib-point {
+  position: fixed;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--et-accent);
+  border: 3px solid rgba(255,255,255,0.8);
+  cursor: crosshair;
+  transform: translate(-50%, -50%);
+  transition: transform 0.15s, background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 0 0 0 rgba(79,142,247,0.5);
+  z-index: 1001;
+}
+.calib-point:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+  box-shadow: 0 0 0 8px rgba(79,142,247,0.2);
+}
+.calib-point.clicked {
+  background: var(--et-success);
+  transform: translate(-50%, -50%) scale(0.7);
+  box-shadow: 0 0 0 12px rgba(44,182,125,0.15);
+}
+.calib-point.done { display: none; }
+
+/* 캘리브레이션 진행률 */
+#calib-progress-bar {
+  width: 280px; height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+#calib-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--et-accent2), var(--et-accent));
+  border-radius: 2px;
+  transition: width 0.4s ease;
+  width: 0%;
+}
+#calib-progress-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ── 시선 히트맵 (대국 중 보드 오버레이) ── */
+#et-heatmap-canvas {
+  position: fixed;
+  pointer-events: none;
+  z-index: 500;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+#et-heatmap-canvas.show { opacity: 1; }
+
+/* ── 집중도 게이지 (대국 중 상단 표시) ── */
+#et-focus-bar {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 600;
+  background: rgba(0,0,0,0.3);
+}
+#et-focus-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--et-accent2), var(--et-accent), var(--et-success));
+  transition: width 0.8s ease;
+  width: 0%;
+}
+#et-focus-bar.show { display: block; }
+
+/* ── 시선 방향 경고 (화면 이탈) ── */
+#et-away-alert {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(240, 80, 80, 0.92);
+  color: #fff;
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 700;
+  z-index: 700;
+  pointer-events: none;
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 16px rgba(224,90,90,0.4);
+  animation: fadeUp 0.3s ease;
+}
+#et-away-alert.show { display: block; }
+
+/* ── 통계 뱃지 (결과화면에 추가) ── */
+.et-stats-card {
+  background: rgba(18, 22, 38, 0.95);
+  border: 1px solid rgba(79,142,247,0.3);
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 12px;
+  text-align: left;
+}
+.et-stats-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--et-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.et-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.et-stat-item { display: flex; flex-direction: column; gap: 2px; }
+.et-stat-val { font-size: 18px; font-weight: 700; color: var(--text-primary); font-family: monospace; }
+.et-stat-lbl { font-size: 10px; color: var(--text-muted); }
+
+/* ══════════════════════════════════════
+   기존 CSS 그대로
+══════════════════════════════════════ */
+
+/* ── 사이드바 ── */
+#sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  align-items: center; padding: 12px 0; gap: 4px;
+  flex-shrink: 0; z-index: 100;
+}
+.sidebar-logo {
+  width: 40px; height: 40px;
+  background: var(--accent-green); border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 12px; cursor: pointer; font-size: 22px;
+  transition: background 0.2s; text-decoration: none; color: inherit;
+}
+.sidebar-logo:hover { background: var(--accent-green-bright); }
+.sidebar-nav { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; flex: 1; }
+.sidebar-item {
+  width: 52px; height: 52px; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; gap: 3px; transition: background 0.15s; text-decoration: none; color: inherit;
+}
+.sidebar-item:hover { background: var(--bg-hover); }
+.sidebar-item.active { background: var(--bg-tertiary); }
+.sidebar-item.active .sidebar-icon { color: var(--accent-green-bright); }
+.sidebar-icon { width: 22px; height: 22px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
+.sidebar-label { font-size: 9px; color: var(--text-muted); text-align: center; line-height: 1; }
+.sidebar-item.active .sidebar-label { color: var(--accent-green-bright); }
+.sidebar-divider { width: 32px; height: 1px; background: var(--border); margin: 6px 0; }
+.sidebar-footer {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding-top: 8px; border-top: 1px solid var(--border); width: 100%;
+}
+.sidebar-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff;
+  border: 2px solid var(--accent-green-dark);
+}
+.sidebar-username {
+  font-size: 8.5px; color: var(--text-muted);
+  text-align: center; max-width: 52px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px;
+}
+.sidebar-item.logout-btn:hover { background: rgba(192,64,64,0.12); }
+.sidebar-item.logout-btn:hover .sidebar-icon { color: #e07070; }
+.sidebar-item.logout-btn:hover .sidebar-label { color: #e07070; }
+
+/* ── 메인 레이아웃 ── */
+#main {
+  width: 100vw; height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; position: relative;
+}
+
+/* ── 배경 체스판 패턴 ── */
+#main::before {
   content: '';
   position: absolute; inset: 0;
   background-image: repeating-conic-gradient(rgba(255,255,255,0.015) 0% 25%, transparent 0% 50%);
@@ -88,450 +469,162 @@ body {
   pointer-events: none;
 }
 
-/* ── Eye Tracker 사이드패널 ── */
-#et-panel {
-  width: 300px;
-  min-width: 300px;
-  background: #0e0e14;
-  border-left: 1px solid #1e1e2e;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
-}
-#et-panel.collapsed {
-  display: none;
-}
-
-/* ET 패널 헤더 */
-.et-header {
-  padding: 10px 14px;
-  border-bottom: 1px solid #1e1e2e;
-  display: flex; align-items: center; gap: 8px;
-  flex-shrink: 0;
-}
-/* ET 스크롤 가능 내용 */
-.et-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 10px;
-  display: flex; flex-direction: column; gap: 8px;
-  min-height: 0;
-}
-
-/* ET 패널 토글 버튼 */
-#et-toggle {
-  position: absolute;
-  right: 0; top: 50%;
-  transform: translateY(-50%);
-  z-index: 50;
-  width: 24px; height: 56px;
-  background: #1e1e2e;
-  border: 1px solid #2e2e3e;
-  border-right: none;
-  border-radius: 8px 0 0 8px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  color: #00ff87;
-  font-size: 12px;
-  transition: background 0.2s;
-}
-#et-toggle:hover { background: #2a2a3e; }
-
-/* ET 패널 헤더 */
-.et-header-icon {
-  width: 28px; height: 28px;
-  background: linear-gradient(135deg, #00ff87, #7c3aed);
-  border-radius: 7px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px;
-}
-.et-header h2 {
-  font-size: 13px; font-weight: 700;
-  color: #e8e8f0; flex: 1;
-}
-.et-status-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: #555570;
-  transition: all 0.3s;
-  flex-shrink: 0;
-}
-.et-status-dot.active { background: #00ff87; box-shadow: 0 0 8px #00ff87; }
-.et-status-dot.calib  { background: #ff6b35; box-shadow: 0 0 8px #ff6b35; animation: blink 0.8s infinite; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
-
-.et-body::-webkit-scrollbar { width: 4px; }
-.et-body::-webkit-scrollbar-track { background: transparent; }
-.et-body::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 2px; }
-
-/* ET 섹션 */
-.et-section {
-  background: #111118;
-  border: 1px solid #1e1e2e;
-  border-radius: 10px;
-  overflow: hidden;
-}
-.et-section-title {
-  padding: 8px 12px;
-  font-size: 9px;
-  font-family: var(--font-mono);
-  color: #555570;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  border-bottom: 1px solid #1e1e2e;
-}
-.et-section-body { padding: 10px 12px; }
-
-/* 웹캠 영역 */
-#et-cam-wrap {
-  position: relative;
-  width: 100%;
-  padding-bottom: 75%;
-  background: #000;
-  border-radius: 6px;
-  overflow: hidden;
-}
-/* WebGazer가 주입하는 video/canvas를 감춤 — 사이드패널에서는 미리보기만 표시 */
-#webgazerVideoFeed {
-  position: absolute; inset: 0;
-  width: 100% !important; height: 100% !important;
-  object-fit: cover;
-  transform: scaleX(-1);
-}
-#webgazerFaceOverlay, #webgazerFaceFeedbackBox {
-  position: absolute !important;
-  transform: scaleX(-1);
-}
-#webgazerGazeDot { display: none !important; }
-
-.et-cam-status {
-  margin-top: 8px;
-  padding: 7px 10px;
-  background: #0a0a10;
-  border-radius: 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: #555570;
-  display: flex; align-items: center; gap: 6px;
-  min-height: 32px;
-}
-#et-gaze-indicator {
-  display: inline-block;
-  width: 6px; height: 6px; border-radius: 50%;
-  background: #555570;
-  flex-shrink: 0;
-  transition: background 0.2s;
-}
-#et-gaze-indicator.on { background: #00ff87; box-shadow: 0 0 5px #00ff87; }
-
-/* ET 버튼 */
-.et-btn-row { display: flex; gap: 6px; margin-top: 8px; }
-.et-btn {
-  flex: 1; padding: 7px 6px;
-  border: none; border-radius: 6px;
-  font-family: var(--font-mono);
-  font-size: 10px; font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.et-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.et-btn-primary  { background: #00ff87; color: #000; }
-.et-btn-primary:hover:not(:disabled) { background: #00e87a; }
-.et-btn-ghost    { background: #1e1e2e; color: #a0a0b0; }
-.et-btn-ghost:hover:not(:disabled) { background: #2a2a3e; }
-.et-btn-danger   { background: #dc2626; color: #fff; }
-.et-btn-danger:hover:not(:disabled) { background: #ef4444; }
-
-/* 히트맵 */
-#et-board-wrap {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-}
-#et-board-canvas, #et-heat-canvas {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-}
-#et-gaze-dot {
-  position: absolute;
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  background: rgba(0,255,135,0.75);
-  box-shadow: 0 0 10px #00ff87;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  display: none;
-}
-
-/* 통계 */
-.et-stat-row {
-  display: flex; justify-content: space-between;
-  align-items: center;
-  padding: 6px 0;
-  border-bottom: 1px solid #1e1e2e;
-  font-size: 11px;
-  color: #888898;
-}
-.et-stat-row:last-child { border-bottom: none; }
-.et-stat-val {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: #00ff87;
-  font-weight: 700;
-}
-
-/* 상위 칸 리스트 */
-.et-sq-list { display: flex; flex-direction: column; gap: 5px; }
-.et-sq-row {
-  display: grid;
-  grid-template-columns: 30px 1fr 44px;
-  align-items: center; gap: 6px;
-}
-.et-sq-name {
-  font-family: var(--font-mono);
-  font-size: 11px; font-weight: 700;
-  color: #ff6b35;
-}
-.et-bar-bg {
-  height: 6px; background: #1e1e2e;
-  border-radius: 3px; overflow: hidden;
-}
-.et-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #ff6b35);
-  border-radius: 3px;
-  transition: width 0.4s ease;
-}
-.et-sq-time {
-  font-family: var(--font-mono);
-  font-size: 9px; color: #555570;
-  text-align: right;
-}
-
-/* 수별 시선 기록 */
-.et-move-log {
-  display: flex; flex-direction: column; gap: 4px;
-  max-height: 180px; overflow-y: auto;
-}
-.et-move-log::-webkit-scrollbar { width: 3px; }
-.et-move-log::-webkit-scrollbar-thumb { background: #2a2a3e; }
-.et-move-entry {
-  padding: 6px 8px;
-  background: #0a0a14;
-  border-radius: 5px;
-  border-left: 2px solid #1e1e2e;
-}
-.et-move-entry.white-move { border-left-color: #f0d9b5; }
-.et-move-entry.black-move { border-left-color: #b58863; }
-.et-move-header {
-  display: flex; justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 10px; margin-bottom: 3px;
-}
-.et-move-num { color: #555570; }
-.et-move-san { color: #e8e8f0; font-weight: 700; }
-.et-move-top-sq { color: #00ff87; }
-.et-move-sq-bar {
-  display: flex; gap: 3px; flex-wrap: wrap;
-}
-.et-move-sq-chip {
-  padding: 1px 5px;
-  background: #1e1e2e;
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: 9px; color: #888898;
-}
-.et-move-sq-chip.hot {
-  background: rgba(255,107,53,0.2);
-  color: #ff6b35;
-}
-
-/* 저장 버튼 */
-.et-save-btn {
-  width: 100%; padding: 8px;
-  border: 1px solid #1e1e2e;
-  border-radius: 7px;
-  background: transparent;
-  color: #555570;
-  font-size: 11px; cursor: pointer;
-  transition: all 0.15s;
-  font-family: var(--font-mono);
-}
-.et-save-btn:hover { border-color: #00ff87; color: #00ff87; }
-
-/* 설정 */
-.et-setting-row {
-  display: flex; justify-content: space-between;
-  align-items: center; margin-bottom: 10px;
-  font-size: 11px; color: #555570;
-}
-.et-setting-row label { flex: 1; }
-.et-setting-val {
-  font-family: var(--font-mono); font-size: 10px;
-  color: #00ff87; width: 30px; text-align: right; margin-right: 6px;
-}
-input[type=range] { width: 80px; accent-color: #00ff87; }
-
-/* 캘리브레이션 오버레이 */
-#et-calib-overlay {
-  display: none;
-  position: fixed; inset: 0;
-  background: rgba(8,8,12,0.97);
-  z-index: 500;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-#et-calib-overlay.show { display: flex; }
-#et-calib-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.et-calib-msg {
-  position: relative; z-index: 501;
-  text-align: center; pointer-events: none;
-}
-.et-calib-msg h2 { font-size: 26px; font-weight: 800; color: #00ff87; margin-bottom: 8px; }
-.et-calib-msg p  { font-size: 13px; color: #555570; font-family: var(--font-mono); }
-#et-calib-progress {
-  position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%);
-  font-family: var(--font-mono); font-size: 12px; color: #555570; z-index: 501;
-}
-
-/* ══════════════════════════════════
-   체스 화면들 (play.html 원본)
-   ══════════════════════════════════ */
-#main {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  position: relative; z-index: 1;
-}
-
-/* 로비 */
+/* ══════════ 로비 화면 ══════════ */
 #screen-lobby {
   position: relative; z-index: 1;
   display: flex; flex-direction: column; align-items: center;
-  gap: 28px; padding: 24px;
+  gap: 32px; padding: 24px;
   animation: fadeUp 0.5s ease both;
 }
 .lobby-header { text-align: center; }
 .lobby-icon {
-  width: 64px; height: 64px; border-radius: 18px;
+  width: 72px; height: 72px; border-radius: 20px;
   background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
   display: flex; align-items: center; justify-content: center;
-  font-size: 32px; margin: 0 auto 14px;
-  box-shadow: 0 8px 28px rgba(127,166,80,0.3);
+  font-size: 36px; margin: 0 auto 16px;
+  box-shadow: 0 8px 32px rgba(127,166,80,0.35);
 }
-.lobby-title { font-family: var(--font-display); font-size: 1.9rem; font-weight: 900; margin-bottom: 4px; }
-.lobby-sub   { font-size: 0.75rem; color: var(--text-muted); letter-spacing: 0.15em; text-transform: uppercase; }
+.lobby-title {
+  font-family: var(--font-display);
+  font-size: 2rem; font-weight: 900; color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.lobby-sub { font-size: 0.8rem; color: var(--text-muted); letter-spacing: 0.15em; text-transform: uppercase; }
+
 .lobby-card {
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 18px; padding: 24px; width: 320px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 28px;
+  width: 340px;
 }
-.lobby-card-title { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+.lobby-card-title {
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px;
+}
 .time-badge {
   display: flex; align-items: center; gap: 10px;
   background: var(--bg-tertiary); border: 1px solid var(--border);
-  border-radius: 10px; padding: 11px 14px; margin-bottom: 16px;
+  border-radius: 12px; padding: 12px 16px; margin-bottom: 20px;
 }
-.time-badge-icon { font-size: 20px; }
+.time-badge-icon { font-size: 22px; }
 .time-badge-info { flex: 1; }
-.time-badge-main { font-size: 14px; font-weight: 700; color: var(--text-primary); }
-.time-badge-sub  { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+.time-badge-main { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.time-badge-sub  { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 
-/* Eye Tracker 대국 옵션 */
+/* 로비 아이트래커 토글 */
 .et-lobby-toggle {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px;
-  background: rgba(0,255,135,0.05);
-  border: 1px solid rgba(0,255,135,0.2);
-  border-radius: 10px;
-  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(18,22,38,0.7);
+  border: 1px solid rgba(79,142,247,0.25);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  gap: 10px;
+}
+.et-lobby-toggle-info { display: flex; flex-direction: column; gap: 2px; }
+.et-lobby-toggle-title {
+  font-size: 13px; font-weight: 600; color: var(--et-accent);
+  display: flex; align-items: center; gap: 6px;
+}
+.et-lobby-toggle-sub { font-size: 10px; color: var(--text-muted); }
+/* 토글 스위치 */
+.et-switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+.et-switch input { opacity: 0; width: 0; height: 0; }
+.et-slider {
+  position: absolute; inset: 0;
+  background: var(--bg-hover);
+  border-radius: 11px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.25s;
+  border: 1px solid var(--border);
 }
-.et-lobby-toggle:hover { background: rgba(0,255,135,0.08); }
-.et-lobby-toggle-label {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; font-weight: 600; color: #00ff87;
+.et-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px; height: 16px;
+  left: 2px; top: 2px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.25s, background 0.25s;
 }
-.et-toggle-switch {
-  width: 36px; height: 20px;
-  background: #1e1e2e; border-radius: 10px;
-  position: relative; transition: background 0.2s; flex-shrink: 0;
-}
-.et-toggle-switch::after {
-  content: ''; position: absolute;
-  width: 14px; height: 14px; border-radius: 50%;
-  background: #555570; top: 3px; left: 3px;
-  transition: all 0.2s;
-}
-.et-toggle-switch.on { background: rgba(0,255,135,0.2); }
-.et-toggle-switch.on::after { background: #00ff87; left: 19px; }
+.et-switch input:checked + .et-slider { background: rgba(79,142,247,0.25); border-color: rgba(79,142,247,0.5); }
+.et-switch input:checked + .et-slider::before { transform: translateX(16px); background: var(--et-accent); }
 
 .btn-find {
-  width: 100%; padding: 13px;
+  width: 100%; padding: 14px;
   background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
-  border: none; border-radius: 10px; color: #fff;
-  font-family: var(--font-main); font-size: 0.95rem; font-weight: 700;
+  border: none; border-radius: 12px; color: #fff;
+  font-family: var(--font-main); font-size: 1rem; font-weight: 700;
   cursor: pointer; transition: opacity 0.2s, transform 0.15s;
-  box-shadow: 0 4px 18px rgba(127,166,80,0.3);
+  box-shadow: 0 4px 20px rgba(127,166,80,0.35);
   display: flex; align-items: center; justify-content: center; gap: 8px;
 }
 .btn-find:hover { opacity: 0.9; transform: translateY(-1px); }
 
-/* 매칭 대기 */
+/* ══════════ 매칭 대기 화면 ══════════ */
 #screen-searching {
   display: none; position: relative; z-index: 1;
   flex-direction: column; align-items: center; justify-content: center;
-  gap: 22px; padding: 24px; animation: fadeUp 0.4s ease both;
+  gap: 24px; padding: 24px;
+  animation: fadeUp 0.4s ease both;
 }
 .search-spinner {
-  width: 72px; height: 72px; border-radius: 50%;
+  width: 80px; height: 80px; border-radius: 50%;
   border: 3px solid var(--border);
   border-top-color: var(--accent-green);
   animation: spin 1s linear infinite;
 }
-.search-title { font-size: 17px; font-weight: 700; }
-.search-elapsed { font-size: 12px; color: var(--text-muted); }
+.search-title { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.search-elapsed { font-size: 13px; color: var(--text-muted); }
 .btn-cancel {
-  padding: 10px 28px;
+  padding: 11px 32px;
   background: transparent; border: 1px solid var(--border-light);
-  border-radius: 9px; color: var(--text-secondary);
-  font-family: var(--font-main); font-size: 0.85rem; cursor: pointer;
+  border-radius: 10px; color: var(--text-secondary);
+  font-family: var(--font-main); font-size: 0.875rem; cursor: pointer;
   transition: all 0.2s;
 }
-.btn-cancel:hover { border-color: #c04040; color: #e07070; }
+.btn-cancel:hover { border-color: #c04040; color: #e07070; background: rgba(192,64,64,0.08); }
 
-/* 대국 화면 */
+/* ══════════ 대국 화면 ══════════ */
 #screen-playing {
   display: none; position: relative; z-index: 1;
   width: 100%; height: 100%;
   flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; padding: 14px;
+  gap: 12px; padding: 16px;
 }
+
 .player-bar {
-  width: min(calc(100vh - 200px), calc(100% - 8px));
+  width: min(calc(100vh - 216px), calc(100vw - 32px));
   display: flex; align-items: center; justify-content: space-between;
   background: var(--bg-secondary); border: 1px solid var(--border);
-  border-radius: 10px; padding: 9px 14px;
+  border-radius: 12px; padding: 10px 16px;
 }
 .player-bar.my-bar { border-color: var(--accent-green-dark); }
-.player-info-wrap { display: flex; align-items: center; gap: 9px; }
+.player-info-wrap { display: flex; align-items: center; gap: 10px; }
 .p-avatar {
-  width: 30px; height: 30px; border-radius: 50%;
-  background: var(--bg-hover); display: flex; align-items: center;
-  justify-content: center; font-size: 13px; font-weight: 700;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--bg-hover);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: var(--text-primary);
 }
 .p-avatar.me { background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark)); color: #fff; }
-.p-name  { font-size: 12px; font-weight: 600; }
-.p-color { font-size: 9px; color: var(--text-muted); margin-top: 1px; }
-.p-timer { font-size: 20px; font-weight: 700; font-family: monospace; min-width: 56px; text-align: right; }
+.p-name  { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.p-color { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+.p-timer {
+  font-size: 22px; font-weight: 700; font-family: monospace;
+  color: var(--text-primary); min-width: 60px; text-align: right;
+}
 .p-timer.active { color: var(--accent-green-bright); }
 .p-timer.low    { color: #e07070; }
 
+/* ── 체스보드 ── */
 #play-board-wrap {
-  width: min(calc(100vh - 200px), calc(100% - 8px));
-  height: min(calc(100vh - 200px), calc(100% - 8px));
-  flex-shrink: 0; position: relative;
+  width: min(calc(100vh - 216px), calc(100vw - 32px));
+  height: min(calc(100vh - 216px), calc(100vw - 32px));
+  flex-shrink: 0;
+  position: relative;
 }
 #play-board {
   width: 100%; height: 100%;
@@ -541,8 +634,9 @@ input[type=range] { width: 80px; accent-color: #00ff87; }
 }
 .sq {
   aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
-  font-size: clamp(16px, 4.5vw, 40px); cursor: pointer; position: relative;
-  transition: background 0.1s; will-change: background-color;
+  font-size: clamp(18px, 5vw, 42px);
+  cursor: pointer; position: relative;
+  transition: background 0.1s;
 }
 .sq.light { background: var(--board-light); }
 .sq.dark  { background: var(--board-dark); }
@@ -552,458 +646,454 @@ input[type=range] { width: 80px; accent-color: #00ff87; }
   width: 30%; height: 30%; border-radius: 50%;
   background: rgba(0,0,0,0.18);
 }
-.sq.possible.has-piece::after { width: 100%; height: 100%; border-radius: 0; background: none; box-shadow: inset 0 0 0 4px rgba(0,0,0,0.2); }
+.sq.possible.has-piece::after {
+  width: 100%; height: 100%; border-radius: 0;
+  background: none;
+  box-shadow: inset 0 0 0 4px rgba(0,0,0,0.2);
+}
 .sq.last-from { background: rgba(205,210,106,0.5) !important; }
 .sq.last-to   { background: rgba(205,210,106,0.7) !important; }
 .sq.in-check  { background: rgba(220,50,50,0.55) !important; }
+
+/* 시선 응시 하이라이트 */
+.sq.gaze-focus { outline: 2px solid rgba(79,142,247,0.5); outline-offset: -2px; }
+
+.sq .piece { pointer-events: none; line-height: 1; }
+.sq {
+  will-change: background-color;
+}
 .sq .piece-img {
-  width: 88%; height: 88%; object-fit: contain; position: relative; z-index: 1;
-  pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+  width: 88%; height: 88%; object-fit: contain;
+  position: relative; z-index: 1; pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
 }
 .sq .piece-img.black-piece {
-  filter: drop-shadow(0 0 1px rgba(180,180,180,0.9)) drop-shadow(0 0 1px rgba(150,150,150,0.7)) drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+  filter: drop-shadow(0 0 1px rgba(180,180,180,0.9))
+          drop-shadow(0 0 1px rgba(150,150,150,0.7))
+          drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 }
-.rank-label { position: absolute; left: 2px; top: 1px; font-size: 9px; font-weight: 700; opacity: 0.5; pointer-events: none; }
-.file-label { position: absolute; right: 2px; bottom: 0px; font-size: 9px; font-weight: 700; opacity: 0.5; pointer-events: none; }
 
-/* 현재 응시 칸 하이라이트 */
-.sq.gaze-highlight { outline: 2px solid rgba(0,255,135,0.6); outline-offset: -2px; }
+/* 좌표 표시 */
+.rank-label {
+  position: absolute; left: 2px; top: 1px;
+  font-size: 9px; font-weight: 700; opacity: 0.5; pointer-events: none;
+}
+.file-label {
+  position: absolute; right: 2px; bottom: 0px;
+  font-size: 9px; font-weight: 700; opacity: 0.5; pointer-events: none;
+}
 
+/* ── 하단 버튼 ── */
 .play-actions {
   display: flex; gap: 8px;
-  width: min(calc(100vh - 200px), calc(100% - 8px));
+  width: min(calc(100vh - 216px), calc(100vw - 32px));
 }
 .btn-resign {
-  flex: 1; padding: 9px;
+  flex: 1; padding: 10px;
   background: transparent; border: 1px solid rgba(192,64,64,0.4);
-  border-radius: 9px; color: #e07070;
-  font-family: var(--font-main); font-size: 0.82rem; cursor: pointer; transition: all 0.2s;
+  border-radius: 10px; color: #e07070;
+  font-family: var(--font-main); font-size: 0.85rem; cursor: pointer;
+  transition: all 0.2s;
 }
 .btn-resign:hover { background: rgba(192,64,64,0.1); }
 .btn-draw {
-  flex: 1; padding: 9px;
+  flex: 1; padding: 10px;
   background: transparent; border: 1px solid rgba(160,160,80,0.4);
-  border-radius: 9px; color: #c8c870;
-  font-family: var(--font-main); font-size: 0.82rem; cursor: pointer; transition: all 0.2s;
+  border-radius: 10px; color: #c8c870;
+  font-family: var(--font-main); font-size: 0.85rem; cursor: pointer;
+  transition: all 0.2s;
 }
 .btn-draw:hover { background: rgba(160,160,80,0.1); }
 .btn-draw:disabled { opacity: 0.4; cursor: not-allowed; }
-/* ET 패널 토글 (대국 중) */
-.btn-et-panel {
-  padding: 9px 12px;
-  background: transparent; border: 1px solid rgba(0,255,135,0.3);
-  border-radius: 9px; color: #00ff87;
-  font-family: var(--font-mono); font-size: 10px; cursor: pointer; transition: all 0.2s;
-}
-.btn-et-panel:hover { background: rgba(0,255,135,0.08); }
 
+/* 무승부 제안 수신 토스트 */
 #draw-offer-bar {
   display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
   background: var(--bg-tertiary); border: 1px solid #c8c870;
-  border-radius: 12px; padding: 12px 16px; z-index: 999;
-  text-align: center; font-size: 13px; min-width: 220px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  border-radius: 14px; padding: 12px 18px; z-index: 999;
+  text-align: center; font-size: 13px; color: var(--text-primary);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4); min-width: 240px;
 }
 #draw-offer-bar.show { display: block; }
 .draw-offer-btns { display: flex; gap: 8px; margin-top: 10px; justify-content: center; }
 .draw-offer-btns button {
-  padding: 7px 18px; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 600;
+  padding: 7px 20px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
   font-family: var(--font-main); border: none;
 }
-.draw-accept-btn  { background: var(--accent-green); color: #fff; }
+.draw-accept-btn { background: var(--accent-green); color: #fff; }
 .draw-decline-btn { background: var(--bg-hover); color: var(--text-secondary); border: 1px solid var(--border-light) !important; }
 
+/* 프로모션 모달 */
 #promo-modal {
   display: none; position: absolute; z-index: 200;
   background: var(--bg-card); border: 1px solid var(--border-light);
-  border-radius: 10px; padding: 8px;
+  border-radius: 12px; padding: 8px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   flex-direction: row; gap: 4px;
 }
 .promo-piece {
-  width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
-  font-size: 30px; cursor: pointer; border-radius: 7px; transition: background 0.15s;
+  width: 52px; height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px; cursor: pointer; border-radius: 8px;
+  transition: background 0.15s;
 }
 .promo-piece:hover { background: var(--bg-hover); }
 
-/* 결과 화면 */
+/* ══════════ 결과 화면 ══════════ */
 #screen-result {
   display: none; position: relative; z-index: 1;
-  flex-direction: column; align-items: center; gap: 0; padding: 24px;
+  flex-direction: column; align-items: center;
+  gap: 0; padding: 24px;
   animation: fadeUp 0.4s ease both;
+  overflow-y: auto; max-height: 100vh;
 }
 .result-card {
   background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 18px; padding: 32px 28px; width: 320px; text-align: center;
+  border-radius: 20px; padding: 36px 32px;
+  width: 340px; text-align: center;
 }
-.result-emoji  { font-size: 48px; margin-bottom: 10px; }
-.result-title  { font-family: var(--font-display); font-size: 1.7rem; font-weight: 900; margin-bottom: 4px; }
-.result-reason { font-size: 12px; color: var(--text-muted); margin-bottom: 24px; }
-.result-players { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; font-size: 12px; color: var(--text-secondary); }
-.result-vs { color: var(--text-muted); font-size: 10px; }
-
-/* 기보 + 시선 데이터 저장 완료 표시 */
-.result-et-badge {
-  margin-bottom: 16px;
-  padding: 8px 12px;
-  background: rgba(0,255,135,0.08);
-  border: 1px solid rgba(0,255,135,0.2);
-  border-radius: 8px;
-  font-size: 11px; color: #00ff87;
-  font-family: var(--font-mono);
-  display: none;
+.result-emoji { font-size: 52px; margin-bottom: 12px; }
+.result-title {
+  font-family: var(--font-display);
+  font-size: 1.8rem; font-weight: 900; margin-bottom: 4px;
 }
-.result-et-badge.show { display: block; }
-
+.result-reason { font-size: 13px; color: var(--text-muted); margin-bottom: 28px; }
+.result-players {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; margin-bottom: 24px;
+  font-size: 13px; color: var(--text-secondary);
+}
+.result-vs { color: var(--text-muted); font-size: 11px; }
 .btn-again {
-  width: 100%; padding: 12px;
+  width: 100%; padding: 13px;
   background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
-  border: none; border-radius: 10px; color: #fff;
-  font-family: var(--font-main); font-size: 0.9rem; font-weight: 700;
-  cursor: pointer; box-shadow: 0 4px 14px rgba(127,166,80,0.3);
+  border: none; border-radius: 12px; color: #fff;
+  font-family: var(--font-main); font-size: 0.95rem; font-weight: 700;
+  cursor: pointer; box-shadow: 0 4px 16px rgba(127,166,80,0.3);
   transition: opacity 0.2s; margin-bottom: 8px;
 }
 .btn-again:hover { opacity: 0.9; }
 .btn-analysis {
-  width: 100%; padding: 10px;
+  width: 100%; padding: 11px;
   background: transparent; border: 1px solid var(--border-light);
-  border-radius: 10px; color: var(--text-secondary);
-  font-family: var(--font-main); font-size: 0.85rem; cursor: pointer;
-  transition: all 0.2s; text-decoration: none; display: block; margin-bottom: 8px;
+  border-radius: 12px; color: var(--text-secondary);
+  font-family: var(--font-main); font-size: 0.875rem; cursor: pointer;
+  transition: all 0.2s; text-decoration: none; display: block;
 }
 .btn-analysis:hover { background: var(--bg-hover); color: var(--text-primary); }
-.btn-download-gaze {
-  width: 100%; padding: 10px;
-  background: transparent; border: 1px solid rgba(0,255,135,0.25);
-  border-radius: 10px; color: #00ff87;
-  font-family: var(--font-mono); font-size: 11px; cursor: pointer;
-  transition: all 0.2s; display: none;
-}
-.btn-download-gaze.show { display: block; }
-.btn-download-gaze:hover { background: rgba(0,255,135,0.06); }
 
-/* ── 전체 화면 시선 커서 ── */
-#gaze-cursor {
-  position: fixed; pointer-events: none; z-index: 9999;
-  display: none; transform: translate(-50%, -50%);
+/* ── 애니메이션 ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-#gaze-cursor .gc-outer {
-  position: absolute; width: 52px; height: 52px;
-  border: 2px solid rgba(0,255,135,0.3); border-radius: 50%;
-  transform: translate(-50%,-50%);
-  animation: gc-pulse 1.8s ease-in-out infinite;
-}
-#gaze-cursor .gc-mid {
-  position: absolute; width: 26px; height: 26px;
-  border: 1.5px solid rgba(0,255,135,0.6); border-radius: 50%;
-  transform: translate(-50%,-50%);
-}
-#gaze-cursor .gc-dot {
-  position: absolute; width: 8px; height: 8px;
-  background: #00ff87; border-radius: 50%;
-  transform: translate(-50%,-50%);
-  box-shadow: 0 0 10px rgba(0,255,135,0.9), 0 0 24px rgba(0,255,135,0.4);
-}
-#gaze-cursor .gc-sq {
-  position: absolute; top: 14px; left: 14px;
-  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-  color: #00ff87; text-shadow: 0 0 6px rgba(0,0,0,0.9), 0 1px 3px #000;
-  white-space: nowrap;
-}
-@keyframes gc-pulse {
-  0%,100% { transform: translate(-50%,-50%) scale(1);    opacity: 0.4; }
-  50%      { transform: translate(-50%,-50%) scale(1.15); opacity: 0.8; }
-}
-@keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── 토스트 ── */
 #toast {
-  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   background: var(--bg-tertiary); border: 1px solid var(--border-light);
-  color: var(--text-primary); padding: 9px 18px;
-  border-radius: 18px; font-size: 12px; font-weight: 500;
+  color: var(--text-primary); padding: 10px 20px;
+  border-radius: 20px; font-size: 13px; font-weight: 500;
   opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999;
   white-space: nowrap;
 }
 #toast.show { opacity: 1; }
 
-/* 모바일 */
+/* ── 반응형 ── */
 #mobile-bottom-nav { display: none; }
 .mob-nav-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px; flex: 1; padding: 6px 4px;
-  color: var(--text-muted); transition: color 0.15s; text-decoration: none;
+  color: var(--text-muted); transition: color 0.15s;
+  text-decoration: none;
 }
 .mob-nav-item span { font-size: 9px; line-height: 1; }
 .mob-nav-item:hover, .mob-nav-item.active { color: var(--accent-green-bright); }
 
-@media (max-width: 900px) {
-  #et-panel { display: none; }
-}
 @media (max-width: 768px) {
+  #sidebar { display: none !important; }
   #mobile-bottom-nav {
     display: flex !important;
-    position: fixed; bottom: 0; left: 0; right: 0; height: 54px;
-    background: var(--bg-secondary); border-top: 1px solid var(--border);
-    z-index: 600; align-items: center; justify-content: space-around; padding: 0 4px;
+    position: fixed; bottom: 0; left: 0; right: 0; height: 56px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    z-index: 600;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 4px;
   }
-  body { padding-bottom: 54px; }
+  #et-panel { bottom: 72px; }
+}
+
+@media (max-width: 1100px) and (min-width: 769px) {
+  #play-board-wrap, .play-actions {
+    width: min(calc(100vh - 216px), calc(100vw - var(--sidebar-width, 72px) - 32px)) !important;
+    height: min(calc(100vh - 216px), calc(100vw - var(--sidebar-width, 72px) - 32px)) !important;
+  }
+  .play-actions { height: auto !important; }
+}
+@media (max-width: 768px) {
+  body { padding-bottom: 56px; }
   #play-board-wrap {
-    width: min(calc(100vw - 14px), calc(100vh - 190px)) !important;
-    height: min(calc(100vw - 14px), calc(100vh - 190px)) !important;
+    width: min(calc(100vw - 16px), calc(100vh - 200px)) !important;
+    height: min(calc(100vw - 16px), calc(100vh - 200px)) !important;
   }
   .play-actions {
-    width: min(calc(100vw - 14px), calc(100vh - 190px)) !important;
+    width: min(calc(100vw - 16px), calc(100vh - 200px)) !important;
   }
 }
 </style>
 </head>
 <body>
 
-<div id="gaze-cursor">
-  <div class="gc-outer"></div>
-  <div class="gc-mid"></div>
-  <div class="gc-dot"></div>
-  <div class="gc-sq" id="gc-sq-label"></div>
+<!-- MAIN -->
+<div id="main">
+
+  <!-- 로비 -->
+  <div id="screen-lobby" style="display:flex;">
+    <div class="lobby-header">
+      <div class="lobby-icon">♟</div>
+      <div class="lobby-title">온라인 대국</div>
+      <div class="lobby-sub">랜덤 매칭 · 실시간 대국</div>
+    </div>
+    <div class="lobby-card">
+      <div class="lobby-card-title">시간 설정</div>
+      <div class="time-badge">
+        <div class="time-badge-icon">⏱</div>
+        <div class="time-badge-info">
+          <div class="time-badge-main">10분</div>
+          <div class="time-badge-sub">증가분 없음 · 래피드</div>
+        </div>
+      </div>
+      <!-- 아이트래커 토글 -->
+      <div class="et-lobby-toggle">
+        <div class="et-lobby-toggle-info">
+          <div class="et-lobby-toggle-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            시선 추적 활성화
+          </div>
+          <div class="et-lobby-toggle-sub">WebGazer · 카메라 필요</div>
+        </div>
+        <label class="et-switch">
+          <input type="checkbox" id="et-enable-toggle" onchange="onEyeTrackerToggle(this.checked)">
+          <span class="et-slider"></span>
+        </label>
+      </div>
+      <button class="btn-find" onclick="startMatchmaking()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        대국 찾기
+      </button>
+    </div>
+  </div>
+
+  <!-- 매칭 대기 -->
+  <div id="screen-searching" style="display:none;flex-direction:column;align-items:center;gap:24px;">
+    <div class="search-spinner"></div>
+    <div style="text-align:center;">
+      <div class="search-title">상대방 찾는 중...</div>
+      <div class="search-elapsed" id="search-elapsed">0초 경과</div>
+    </div>
+    <button class="btn-cancel" onclick="cancelMatchmaking()">취소</button>
+  </div>
+
+  <!-- 대국 중 -->
+  <div id="screen-playing" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+
+    <!-- 상대방 바 -->
+    <div class="player-bar" style="width:100%;">
+      <div class="player-info-wrap">
+        <div class="p-avatar" id="opp-avatar-el">?</div>
+        <div>
+          <div class="p-name"  id="opp-name-el">상대방</div>
+          <div class="p-color" id="opp-color-el">—</div>
+        </div>
+      </div>
+      <div class="p-timer" id="opp-timer">10:00</div>
+    </div>
+
+    <!-- 보드 -->
+    <div id="play-board-wrap">
+      <div id="play-board"></div>
+      <div id="promo-modal"></div>
+    </div>
+
+    <!-- 내 바 -->
+    <div class="player-bar my-bar" style="width:100%;">
+      <div class="player-info-wrap">
+        <div class="p-avatar me" id="my-avatar-el">?</div>
+        <div>
+          <div class="p-name"  id="my-name-el">나</div>
+          <div class="p-color" id="my-color-el">—</div>
+        </div>
+      </div>
+      <div class="p-timer active" id="my-timer">10:00</div>
+    </div>
+
+    <div class="play-actions">
+      <button class="btn-draw" id="btn-draw" onclick="offerDraw()">½ 무승부 제안</button>
+      <button class="btn-resign" onclick="resignGame()">⚑ 기권</button>
+    </div>
+
+  </div>
+
+  <!-- 무승부 제안 수신 바 -->
+  <div id="draw-offer-bar">
+    <div>상대방이 무승부를 제안했습니다</div>
+    <div class="draw-offer-btns">
+      <button class="draw-accept-btn" onclick="acceptDraw()">수락</button>
+      <button class="draw-decline-btn" onclick="declineDraw()">거절</button>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div id="screen-result" style="display:none;flex-direction:column;align-items:center;">
+    <div class="result-card">
+      <div class="result-emoji" id="result-emoji">🏆</div>
+      <div class="result-title" id="result-title">승리!</div>
+      <div class="result-reason" id="result-reason">체크메이트</div>
+      <div class="result-players">
+        <span id="result-white">백</span>
+        <span class="result-vs">vs</span>
+        <span id="result-black">흑</span>
+      </div>
+      <button class="btn-again" onclick="showScreen('lobby')">다시 찾기</button>
+      <a class="btn-analysis" href="/">분석 보드로 이동</a>
+
+      <!-- 아이트래커 통계 (게임 후) -->
+      <div id="et-result-stats" class="et-stats-card" style="display:none;">
+        <div class="et-stats-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+          시선 분석
+        </div>
+        <div class="et-stats-grid">
+          <div class="et-stat-item">
+            <div class="et-stat-val" id="et-stat-focus">—</div>
+            <div class="et-stat-lbl">평균 집중도</div>
+          </div>
+          <div class="et-stat-item">
+            <div class="et-stat-val" id="et-stat-away">—</div>
+            <div class="et-stat-lbl">시선 이탈 횟수</div>
+          </div>
+          <div class="et-stat-item">
+            <div class="et-stat-val" id="et-stat-board">—</div>
+            <div class="et-stat-lbl">보드 응시 비율</div>
+          </div>
+          <div class="et-stat-item">
+            <div class="et-stat-val" id="et-stat-hotzone">—</div>
+            <div class="et-stat-lbl">가장 많이 본 칸</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#main -->
+
+<!-- ══════════════════════════
+     EYE TRACKER UI ELEMENTS
+══════════════════════════ -->
+
+<!-- 시선 커서 -->
+<div id="et-gaze-dot"></div>
+
+<!-- 상단 집중도 바 -->
+<div id="et-focus-bar"><div id="et-focus-fill"></div></div>
+
+<!-- 화면 이탈 경고 -->
+<div id="et-away-alert">👁 시선이 화면을 벗어났습니다</div>
+
+<!-- 히트맵 캔버스 -->
+<canvas id="et-heatmap-canvas"></canvas>
+
+<!-- 아이트래커 컨트롤 패널 -->
+<div id="et-panel">
+  <div id="et-panel-header" onclick="toggleEtPanel()">
+    <div class="et-panel-title">
+      <div class="et-eye-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+      </div>
+      <span>시선 추적</span>
+    </div>
+    <button class="et-toggle-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+    </button>
+  </div>
+  <div id="et-panel-body">
+    <!-- 상태 -->
+    <div class="et-status-row">
+      <div class="et-status-dot" id="et-status-dot"></div>
+      <div class="et-status-text" id="et-status-text">비활성화됨</div>
+    </div>
+
+    <!-- 캘리브레이션 진행도 -->
+    <div class="et-calib-section">
+      <div class="et-section-label">캘리브레이션</div>
+      <div class="et-calib-bar"><div class="et-calib-fill" id="et-calib-fill"></div></div>
+    </div>
+
+    <!-- 정확도 -->
+    <div class="et-accuracy-row">
+      <div>
+        <div class="et-acc-val" id="et-acc-val">—</div>
+        <div class="et-acc-label">추적 정확도</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="et-acc-val" id="et-focus-val">—</div>
+        <div class="et-acc-label">집중도</div>
+      </div>
+    </div>
+
+    <!-- 미니 히트맵 -->
+    <div class="et-heatmap-section">
+      <div class="et-section-label">시선 히트맵</div>
+      <div id="et-mini-heatmap">
+        <canvas id="et-mini-canvas" width="196" height="196"></canvas>
+      </div>
+    </div>
+
+    <!-- 버튼 -->
+    <div class="et-btn-row">
+      <button class="et-btn" id="et-btn-calib" onclick="startCalibration()">캘리브레이션</button>
+      <button class="et-btn" id="et-btn-heatmap" onclick="toggleHeatmap()">히트맵</button>
+    </div>
+    <div class="et-btn-row">
+      <button class="et-btn danger" id="et-btn-stop" onclick="stopEyeTracker()">추적 중지</button>
+    </div>
+  </div>
 </div>
 
 <!-- 캘리브레이션 오버레이 -->
 <div id="et-calib-overlay">
-  <canvas id="et-calib-canvas"></canvas>
-  <div class="et-calib-msg">
-    <h2>👁 시선 캘리브레이션</h2>
-    <p>초록색 점을 바라보며 클릭하세요</p>
+  <div class="calib-overlay-title">시선 캘리브레이션</div>
+  <div class="calib-overlay-sub" id="et-calib-instruction">
+    화면에 나타나는 <strong style="color:var(--et-accent)">파란 점</strong>을 순서대로 클릭해 주세요.<br>
+    각 점을 바라보면서 클릭하면 더 정확합니다.
   </div>
-  <div id="et-calib-progress">0 / 9 완료</div>
+  <div id="calib-progress-bar"><div id="calib-progress-fill"></div></div>
+  <div id="calib-progress-text">0 / 9 완료</div>
+  <button class="et-btn" style="margin-top:8px;width:120px;" onclick="skipCalibration()">건너뛰기</button>
 </div>
 
-<div id="app-wrapper">
-
-  <!-- ── 체스 영역 ── -->
-  <div id="chess-area">
-    <div id="main">
-
-      <!-- 로비 -->
-      <div id="screen-lobby" style="display:flex;">
-        <div class="lobby-header">
-          <div class="lobby-icon">♟</div>
-          <div class="lobby-title">온라인 대국</div>
-          <div class="lobby-sub">랜덤 매칭 · 실시간 대국</div>
-        </div>
-        <div class="lobby-card">
-          <div class="lobby-card-title">시간 설정</div>
-          <div class="time-badge">
-            <div class="time-badge-icon">⏱</div>
-            <div class="time-badge-info">
-              <div class="time-badge-main">10분</div>
-              <div class="time-badge-sub">증가분 없음 · 래피드</div>
-            </div>
-          </div>
-          <!-- Eye Tracker 옵션 -->
-          <div class="et-lobby-toggle" onclick="toggleEtOnGame()">
-            <div class="et-lobby-toggle-label">
-              👁 Eye Tracker 활성화
-            </div>
-            <div class="et-toggle-switch" id="et-game-switch"></div>
-          </div>
-          <button class="btn-find" onclick="startMatchmaking()">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-            대국 찾기
-          </button>
-        </div>
-      </div>
-
-      <!-- 매칭 대기 -->
-      <div id="screen-searching" style="display:none;flex-direction:column;align-items:center;gap:22px;">
-        <div class="search-spinner"></div>
-        <div style="text-align:center;">
-          <div class="search-title">상대방 찾는 중...</div>
-          <div class="search-elapsed" id="search-elapsed">0초 경과</div>
-        </div>
-        <button class="btn-cancel" onclick="cancelMatchmaking()">취소</button>
-      </div>
-
-      <!-- 대국 중 -->
-      <div id="screen-playing" style="display:none;flex-direction:column;align-items:center;gap:10px;">
-        <div class="player-bar" style="width:100%;">
-          <div class="player-info-wrap">
-            <div class="p-avatar" id="opp-avatar-el">?</div>
-            <div>
-              <div class="p-name"  id="opp-name-el">상대방</div>
-              <div class="p-color" id="opp-color-el">—</div>
-            </div>
-          </div>
-          <div class="p-timer" id="opp-timer">10:00</div>
-        </div>
-
-        <div id="play-board-wrap">
-          <div id="play-board"></div>
-          <div id="promo-modal"></div>
-        </div>
-
-        <div class="player-bar my-bar" style="width:100%;">
-          <div class="player-info-wrap">
-            <div class="p-avatar me" id="my-avatar-el">?</div>
-            <div>
-              <div class="p-name"  id="my-name-el">나</div>
-              <div class="p-color" id="my-color-el">—</div>
-            </div>
-          </div>
-          <div class="p-timer active" id="my-timer">10:00</div>
-        </div>
-
-        <div class="play-actions">
-          <button class="btn-draw" id="btn-draw" onclick="offerDraw()">½ 무승부 제안</button>
-          <button class="btn-resign" onclick="resignGame()">⚑ 기권</button>
-          <button class="btn-et-panel" id="btn-et-panel-toggle" onclick="toggleEtPanel()" title="Eye Tracker 패널">👁</button>
-        </div>
-      </div>
-
-      <!-- 무승부 제안 -->
-      <div id="draw-offer-bar">
-        <div>상대방이 무승부를 제안했습니다</div>
-        <div class="draw-offer-btns">
-          <button class="draw-accept-btn"  onclick="acceptDraw()">수락</button>
-          <button class="draw-decline-btn" onclick="declineDraw()">거절</button>
-        </div>
-      </div>
-
-      <!-- 결과 -->
-      <div id="screen-result" style="display:none;flex-direction:column;align-items:center;">
-        <div class="result-card">
-          <div class="result-emoji" id="result-emoji">🏆</div>
-          <div class="result-title"  id="result-title">승리!</div>
-          <div class="result-reason" id="result-reason">체크메이트</div>
-          <div class="result-players">
-            <span id="result-white">백</span>
-            <span class="result-vs">vs</span>
-            <span id="result-black">흑</span>
-          </div>
-          <div class="result-et-badge" id="result-et-badge">👁 시선 데이터가 기보와 함께 저장되었습니다</div>
-          <button class="btn-again" onclick="showScreen('lobby')">다시 찾기</button>
-          <a class="btn-analysis" href="/">분석 보드로 이동</a>
-          <button class="btn-download-gaze show" id="btn-dl-gaze" onclick="downloadGazeData()">⬇ 시선 데이터 JSON 다운로드</button>
-        </div>
-      </div>
-
-    </div><!-- #main -->
-  </div><!-- #chess-area -->
-
-  <!-- ── Eye Tracker 사이드패널 ── -->
-  <div id="et-panel">
-    <div class="et-header">
-      <div class="et-header-icon">👁</div>
-      <h2>Eye Tracker</h2>
-      <div class="et-status-dot" id="et-main-dot"></div>
-    </div>
-
-    <!-- 웹캠 섹션: 상단 고정 -->
-    <div style="padding:10px;border-bottom:1px solid #1e1e2e;flex-shrink:0;">
-      <div style="font-size:9px;font-family:var(--font-mono);color:#555570;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">📷 웹캠 / 시선 추적 (WebGazer)</div>
-      <div id="et-cam-wrap">
-        <!-- WebGazer가 자동으로 video 요소를 여기에 이동시킴 -->
-      </div>
-      <div class="et-cam-status">
-        <span id="et-gaze-indicator"></span>
-        <span id="et-cam-text">웹캠을 시작하세요</span>
-      </div>
-      <div class="et-btn-row">
-        <button class="et-btn et-btn-primary" id="btn-et-cam">▶ 카메라</button>
-        <button class="et-btn et-btn-ghost"   id="btn-et-calib" disabled>◎ 캘리브</button>
-      </div>
-      <div id="et-debug-log" style="margin-top:6px;background:#050508;border:1px solid #1e1e2e;border-radius:5px;padding:5px 7px;font-family:monospace;font-size:9px;color:#7a7aaa;max-height:80px;overflow-y:auto;line-height:1.6;"></div>
-      <div class="et-btn-row" style="margin-top:6px;">
-        <button class="et-btn et-btn-primary"  id="btn-et-track" disabled>👁 추적 시작</button>
-        <button class="et-btn et-btn-danger"   id="btn-et-stop"  disabled>■ 중지</button>
-      </div>
-    </div>
-
-    <!-- 나머지: 스크롤 가능 -->
-    <div class="et-body">
-
-      <!-- 체스판 히트맵 -->
-      <div class="et-section">
-        <div class="et-section-title">🔥 시선 히트맵</div>
-        <div class="et-section-body">
-          <div id="et-board-wrap">
-            <canvas id="et-board-canvas"></canvas>
-            <canvas id="et-heat-canvas"></canvas>
-            <div id="et-gaze-dot"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 세션 통계 -->
-      <div class="et-section">
-        <div class="et-section-title">📊 세션 통계</div>
-        <div class="et-section-body">
-          <div class="et-stat-row"><span>추적 시간</span><span class="et-stat-val" id="et-stat-time">0s</span></div>
-          <div class="et-stat-row"><span>응시 칸 수</span><span class="et-stat-val" id="et-stat-sqs">0</span></div>
-          <div class="et-stat-row"><span>최다 응시</span><span class="et-stat-val" id="et-stat-top">—</span></div>
-          <div class="et-stat-row"><span>수별 스냅샷</span><span class="et-stat-val" id="et-stat-snaps">0</span></div>
-        </div>
-      </div>
-
-      <!-- 상위 칸 -->
-      <div class="et-section">
-        <div class="et-section-title">🏆 응시 상위 칸</div>
-        <div class="et-section-body">
-          <div class="et-sq-list" id="et-sq-list">
-            <div style="color:#555570;font-size:11px;text-align:center;padding:14px 0;font-family:var(--font-mono)">추적 시작 후 표시됩니다</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 수별 시선 기록 -->
-      <div class="et-section">
-        <div class="et-section-title">📋 수별 시선 기록</div>
-        <div class="et-section-body">
-          <div class="et-move-log" id="et-move-log">
-            <div style="color:#555570;font-size:11px;text-align:center;padding:14px 0;font-family:var(--font-mono)">수를 두면 기록됩니다</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 설정 -->
-      <div class="et-section">
-        <div class="et-section-title">⚙ 설정</div>
-        <div class="et-section-body">
-          <div class="et-setting-row">
-            <label>스무딩</label>
-            <span class="et-setting-val" id="et-smooth-val">12</span>
-            <input type="range" id="et-smooth" min="1" max="30" value="12">
-          </div>
-          <div class="et-setting-row">
-            <label>최소 응시(ms)</label>
-            <span class="et-setting-val" id="et-dwell-val">120</span>
-            <input type="range" id="et-dwell" min="20" max="500" step="20" value="120">
-          </div>
-          <div class="et-setting-row">
-            <label>히트맵 투명도</label>
-            <span class="et-setting-val" id="et-alpha-val">.5</span>
-            <input type="range" id="et-alpha" min="1" max="10" value="5">
-          </div>
-          <button class="et-btn et-btn-ghost" onclick="resetEtData()" style="width:100%;margin-top:4px">↺ 데이터 초기화</button>
-        </div>
-      </div>
-
-      <!-- 내보내기 -->
-      <div style="display:flex;gap:6px;padding:0 0 4px">
-        <button class="et-save-btn" onclick="downloadGazeData()">⬇ JSON</button>
-        <button class="et-save-btn" onclick="exportHeatmapImg()">⬇ 이미지</button>
-      </div>
-
-    </div>
-  </div><!-- #et-panel -->
-
-</div><!-- #app-wrapper -->
-
+<!-- 토스트 -->
 <div id="toast"></div>
 
+<!-- 모바일 하단 내비게이션 -->
+<nav id="mobile-bottom-nav">
+  <a class="mob-nav-item" href="/"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z"/></svg></span><span>분석</span></a>
+  <a class="mob-nav-item active" href="/play.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></span><span>대국</span></a>
+  <a class="mob-nav-item" href="/puzzle.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg></span><span>퍼즐</span></a>
+  <a class="mob-nav-item" href="/opening-explorer.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></span><span>탐색기</span></a>
+  <a class="mob-nav-item" href="/records.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20ZM8 15V17H16V15H8ZM8 11V13H16V11H8Z"/></svg></span><span>기록</span></a>
+  <a class="mob-nav-item" href="/study.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg></span><span>학습</span></a>
+  <a class="mob-nav-item" href="/practice.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5v14h2v2h10v-2h2V5zm-2 12H7V7h10v10zM9 9h6v6H9V9z"/></svg></span><span>연습</span></a>
+  <a class="mob-nav-item" href="/records.html?tab=stats"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/></svg></span><span>통계</span></a>
+</nav>
+
 <script>
-// ══════════════════════════════════════════
-// Firebase 초기화
-// ══════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+//  FIREBASE 초기화
+// ══════════════════════════════════════════════════════════════════
 firebase.initializeApp({
   apiKey: "AIzaSyDiBFoUf2QVG9QXO34Xny0bSslFYaiwozg",
   authDomain: "chess-education-464fc.firebaseapp.com",
@@ -1013,7 +1103,7 @@ firebase.initializeApp({
   appId: "1:963998720041:web:aa4037707214d3777c7c38",
   databaseURL: "https://chess-education-464fc-default-rtdb.firebaseio.com"
 });
-const _auth = firebase.auth();
+const _auth  = firebase.auth();
 const _fbDb  = firebase.firestore();
 const _rtDb  = firebase.database();
 
@@ -1029,613 +1119,521 @@ function handleLogout() {
   _auth.signOut().then(() => window.location.href = '/auth.html');
 }
 
-// ══════════════════════════════════════════
-// Eye Tracker 상태 (WebGazer.js 기반)
-// ══════════════════════════════════════════
-const ET_FILES = ['a','b','c','d','e','f','g','h'];
-const ET_RANKS = ['1','2','3','4','5','6','7','8'];
+// ══════════════════════════════════════════════════════════════════
+//  아이트래커 모듈
+// ══════════════════════════════════════════════════════════════════
+const ET = {
+  enabled: false,
+  running: false,
+  calibrated: false,
+  calibProgress: 0,        // 0~9
+  showHeatmap: false,
+  showDot: true,
 
-const BOARD_PALETTES = { classic: { light: '#f0d9b5', dark: '#b58863' } };
+  // 통계 수집
+  gazeHistory: [],          // [{x,y,t}]
+  boardHits: Array(64).fill(0),  // 각 칸 시선 횟수
+  awayCount: 0,             // 화면 이탈 횟수
+  awayTotal: 0,             // 총 이탈 샘플 수
+  totalSamples: 0,
 
-let etState = {
-  camReady:        false,
-  calibrated:      false,   // WebGazer는 자체 캘리브 사용 → 항상 true after begin
-  tracking:        false,
-  gazeData:        {},
-  sessionStart:    null,
-  currentSquare:   null,
-  squareEnteredAt: null,
-  smoothX: 0, smoothY: 0,
-  moveSnapshots:   [],
-  prevMoveGaze:    {},
+  // 인터벌
+  _awayTimer: null,
+  _focusInt: null,
+  _miniHeatInt: null,
+  _lastGazeX: null,
+  _lastGazeY: null,
+  _awayConsecutive: 0,
+
+  // 히트맵 데이터 (풀 해상도)
+  heatData: [],
+
+  // 최근 시선이 보드 위에 있는지 여부
+  _onBoard: false,
+
+  // 집중도 (0~100)
+  focusScore: 0,
+
+  // 정확도
+  accuracy: 0,
+
+  init() {
+    // WebGazer 기본 UI 숨기기 (직접 그릴 것)
+    try {
+      webgazer.params.showVideoPreview = true;
+      webgazer.params.showFaceOverlay  = false;
+      webgazer.params.showFaceFeedbackBox = false;
+    } catch(e) {}
+  },
+
+  async start() {
+    if (this.running) return;
+    setEtStatus('warning', '카메라 초기화 중...');
+    try {
+      await webgazer
+        .setRegression('ridge')
+        .setTracker('TFFacemesh')
+        .setGazeListener((data, elapsedTime) => {
+          if (!data) return;
+          ET.onGaze(data.x, data.y, elapsedTime);
+        })
+        .begin();
+
+      // WebGazer 비디오를 왼쪽 상단 고정 (작게)
+      webgazer.showVideoPreview(true);
+      const vid = document.getElementById('webgazerVideoContainer');
+      if (vid) {
+        vid.style.cssText = `
+          position:fixed!important; top:8px!important; left:8px!important;
+          width:130px!important; height:80px!important;
+          border-radius:10px!important; overflow:hidden!important;
+          border:1px solid rgba(79,142,247,0.35)!important;
+          opacity:0.85!important; z-index:790!important;
+          box-shadow:0 4px 16px rgba(0,0,0,0.4)!important;
+        `;
+      }
+      // canvas 오버레이도 함께 이동
+      const ovl = document.getElementById('webgazerFaceOverlay');
+      if (ovl) ovl.style.display = 'none';
+      const fc  = document.getElementById('webgazerFaceFeedbackBox');
+      if (fc)  fc.style.display = 'none';
+
+      this.running = true;
+      setEtStatus('active', '시선 추적 중');
+      document.getElementById('et-gaze-dot').style.display = 'block';
+      document.getElementById('et-focus-bar').classList.add('show');
+
+      this._startFocusTracking();
+      this._startMiniHeatmap();
+    } catch(e) {
+      setEtStatus('error', '카메라 접근 실패');
+      showToast('카메라 권한이 필요합니다 🎥');
+      console.error('WebGazer error:', e);
+    }
+  },
+
+  stop() {
+    if (!this.running) return;
+    try { webgazer.end(); } catch(e) {}
+    this.running = false;
+    this.enabled = false;
+    document.getElementById('et-enable-toggle').checked = false;
+    document.getElementById('et-gaze-dot').style.display = 'none';
+    document.getElementById('et-focus-bar').classList.remove('show');
+    document.getElementById('et-away-alert').classList.remove('show');
+    clearInterval(this._focusInt);
+    clearInterval(this._miniHeatInt);
+    clearTimeout(this._awayTimer);
+    setEtStatus('', '비활성화됨');
+    document.getElementById('et-acc-val').textContent  = '—';
+    document.getElementById('et-focus-val').textContent = '—';
+    document.getElementById('et-panel').classList.remove('collapsed');
+    // 비디오 컨테이너 숨기기
+    const vid = document.getElementById('webgazerVideoContainer');
+    if (vid) vid.style.display = 'none';
+  },
+
+  onGaze(x, y, t) {
+    this._lastGazeX = x;
+    this._lastGazeY = y;
+    this.totalSamples++;
+
+    // 시선 커서 이동
+    const dot = document.getElementById('et-gaze-dot');
+    if (dot) {
+      dot.style.left = x + 'px';
+      dot.style.top  = y + 'px';
+    }
+
+    // 히트맵 데이터
+    this.heatData.push({x, y});
+    if (this.heatData.length > 3000) this.heatData.shift();
+
+    // 화면 이탈 감지 (화면 밖 or 대폭 벗어남)
+    const margin = -40;
+    const outX = x < margin || x > window.innerWidth  - margin;
+    const outY = y < margin || y > window.innerHeight - margin;
+    const away = outX || outY;
+
+    if (away) {
+      this._awayConsecutive++;
+      this.awayTotal++;
+      if (this._awayConsecutive === 5) {
+        this.awayCount++;
+        document.getElementById('et-away-alert').classList.add('show');
+        clearTimeout(this._awayTimer);
+        this._awayTimer = setTimeout(() => {
+          document.getElementById('et-away-alert').classList.remove('show');
+        }, 2000);
+      }
+    } else {
+      this._awayConsecutive = 0;
+    }
+
+    // 보드 히트 체크
+    const bw = document.getElementById('play-board-wrap');
+    if (bw && _gameActive) {
+      const r = bw.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        this._onBoard = true;
+        const sqW = r.width  / 8;
+        const sqH = r.height / 8;
+        const flipped = _myColor === 'b';
+        let ci = Math.floor((x - r.left)  / sqW);
+        let ri = Math.floor((y - r.top)   / sqH);
+        ci = Math.max(0, Math.min(7, ci));
+        ri = Math.max(0, Math.min(7, ri));
+        const c = flipped ? 7 - ci : ci;
+        const rr = flipped ? 7 - ri : ri;
+        const idx = rr * 8 + c;
+        if (idx >= 0 && idx < 64) this.boardHits[idx]++;
+
+        // 시선 칸 하이라이트
+        this._highlightGazeSquare(rr, c);
+      } else {
+        this._onBoard = false;
+        this._clearGazeHighlight();
+      }
+    }
+
+    // 히스토리
+    this.gazeHistory.push({x, y, t: Date.now()});
+    if (this.gazeHistory.length > 500) this.gazeHistory.shift();
+
+    // 집중도: 보드 위 비율 (최근 60샘플 기준)
+    const recent = this.gazeHistory.slice(-60);
+    if (recent.length > 10) {
+      const bwEl = document.getElementById('play-board-wrap');
+      if (bwEl) {
+        const br = bwEl.getBoundingClientRect();
+        const boardCount = recent.filter(p =>
+          p.x >= br.left && p.x <= br.right && p.y >= br.top && p.y <= br.bottom
+        ).length;
+        this.focusScore = Math.round((boardCount / recent.length) * 100);
+        const fill = document.getElementById('et-focus-fill');
+        if (fill) fill.style.width = this.focusScore + '%';
+        document.getElementById('et-focus-val').textContent = this.focusScore + '%';
+      }
+    }
+
+    // 가상 정확도 (캘리브레이션 포인트 수 기반)
+    if (this.calibProgress > 0) {
+      this.accuracy = Math.min(95, 50 + this.calibProgress * 5);
+      document.getElementById('et-acc-val').textContent = this.accuracy + '%';
+    }
+  },
+
+  _gazeSquare: null,
+  _highlightGazeSquare(r, c) {
+    const key = r + ',' + c;
+    if (this._gazeSquare === key) return;
+    this._clearGazeHighlight();
+    this._gazeSquare = key;
+    const boardEl = document.getElementById('play-board');
+    if (!boardEl) return;
+    for (const sq of boardEl.children) {
+      if (Number(sq.dataset.r) === r && Number(sq.dataset.c) === c) {
+        sq.classList.add('gaze-focus');
+        break;
+      }
+    }
+  },
+  _clearGazeHighlight() {
+    if (!this._gazeSquare) return;
+    const boardEl = document.getElementById('play-board');
+    if (!boardEl) return;
+    for (const sq of boardEl.children) {
+      sq.classList.remove('gaze-focus');
+    }
+    this._gazeSquare = null;
+  },
+
+  _startFocusTracking() {
+    clearInterval(this._focusInt);
+    this._focusInt = setInterval(() => {
+      if (!this.running) return;
+      updateMiniHeatmap();
+    }, 2000);
+  },
+
+  _startMiniHeatmap() {
+    clearInterval(this._miniHeatInt);
+    this._miniHeatInt = setInterval(() => {
+      if (!this.running) return;
+      drawMiniHeatmap();
+    }, 500);
+  },
+
+  getStats() {
+    const total = this.totalSamples || 1;
+    const boardTotal = this.boardHits.reduce((a,b)=>a+b,0);
+    const boardPct = Math.round((boardTotal / total) * 100);
+    const focusAvg = this.focusScore;
+    const maxHit = this.boardHits.indexOf(Math.max(...this.boardHits));
+    const files = 'abcdefgh';
+    const hotRow = 7 - Math.floor(maxHit / 8);
+    const hotCol = maxHit % 8;
+    const hotZone = files[hotCol] + (hotRow + 1);
+    return {
+      focusAvg,
+      awayCount: this.awayCount,
+      boardPct,
+      hotZone: this.totalSamples > 50 ? hotZone : '—',
+    };
+  },
+
+  reset() {
+    this.gazeHistory   = [];
+    this.boardHits     = Array(64).fill(0);
+    this.awayCount     = 0;
+    this.awayTotal     = 0;
+    this.totalSamples  = 0;
+    this.heatData      = [];
+    this.focusScore    = 0;
+    this._awayConsecutive = 0;
+    const canvas = document.getElementById('et-heatmap-canvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  },
 };
 
-let etSettings = { smoothing: 12, minDwell: 120, heatAlpha: 0.5 };
-const ET_DEAD_ZONE_PX = 14;
-const ET_SQUARE_DEBOUNCE_FRAMES = 3;
-let _etPendingSq = null, _etPendingCount = 0;
-let etUseOnGame = false;
-let _wgStarted = false;  // WebGazer.begin() 호출 여부
-
-// DOM refs
-const etBoardCanvas = document.getElementById('et-board-canvas');
-const etHeatCanvas  = document.getElementById('et-heat-canvas');
-const etGazeDot     = document.getElementById('et-gaze-dot');
-const etCalibOverlay= document.getElementById('et-calib-overlay');
-const etCalibCanvas = document.getElementById('et-calib-canvas');
-
-const etBoardCtx = etBoardCanvas.getContext('2d');
-const etHeatCtx  = etHeatCanvas.getContext('2d');
-const etCalibCtx = etCalibCanvas.getContext('2d');
-
-// ── 디버그 로그 ──
-function etLog(msg, color) {
-  const el = document.getElementById('et-debug-log');
-  if (!el) { console.log('[ET]', msg); return; }
-  const t = new Date().toLocaleTimeString('ko',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  const line = document.createElement('div');
-  line.style.color = color || '#7a7aaa';
-  line.textContent = `[${t}] ${msg}`;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-  console.log('[ET]', msg);
-}
-function etLogOk(msg)  { etLog('✅ ' + msg, '#00ff87'); }
-function etLogErr(msg) { etLog('❌ ' + msg, '#ff4444'); }
-function etLogInfo(msg){ etLog('ℹ ' + msg,  '#aaaaff'); }
-
-// ── 로비 ET 토글 ──
-function toggleEtOnGame() {
-  etUseOnGame = !etUseOnGame;
-  document.getElementById('et-game-switch').classList.toggle('on', etUseOnGame);
-  const panel = document.getElementById('et-panel');
-  if (etUseOnGame) {
-    panel.classList.remove('collapsed');
-    panel.style.display = 'flex';
-    showToast('Eye Tracker 활성화됨. 카메라 버튼을 눌러 시작하세요.');
-    setTimeout(() => resizeEtBoard(), 100);
-  } else {
-    panel.classList.add('collapsed');
-    panel.style.display = '';
-  }
-}
-
-// ── 대국 중 ET 패널 토글 ──
+// ── 패널 토글 ──
 function toggleEtPanel() {
   const panel = document.getElementById('et-panel');
-  const isCollapsed = panel.classList.contains('collapsed');
-  if (isCollapsed) {
-    panel.classList.remove('collapsed');
-    panel.style.display = 'flex';
-    setTimeout(() => resizeEtBoard(), 50);
-  } else {
-    panel.classList.add('collapsed');
-    panel.style.display = '';
-  }
-}
-
-// 로비에서는 ET 패널 숨김
-document.getElementById('et-panel').classList.add('collapsed');
-
-// ══════════════════════════════════════════
-// WebGazer 초기화
-// ══════════════════════════════════════════
-async function initEtMediaPipe() {   // 함수명 유지 (기존 호출부 호환)
-  const btn = document.getElementById('btn-et-cam');
-  btn.disabled = true; btn.textContent = '로딩...';
-  setEtStatus('loading', '⏳ WebGazer 로딩 중...');
-  document.getElementById('et-debug-log').innerHTML = '';
-
-  try {
-    if (typeof webgazer === 'undefined') {
-      throw new Error('WebGazer 라이브러리가 로딩되지 않았습니다. 네트워크를 확인하세요.');
-    }
-    etLogOk('WebGazer 라이브러리 확인됨');
-
-    // ── MediaPipe 파일을 CDN에서 로드하도록 경로 재지정 ──
-    // WebGazer 내부 TFFacemesh 트래커가 로컬 /mediapipe/... 경로를 찾는 문제 해결
-    const MP_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/';
-    if (window.Module) {
-      window.Module.locateFile = (f) => MP_CDN + f;
-    }
-    // WebGazer params에 locateFile 설정
-    if (webgazer.params) {
-      webgazer.params.faceMeshLocateFile = (f) => MP_CDN + f;
-    }
-
-    // 시선 콜백 등록
-    webgazer.setGazeListener((data, elapsedTime) => {
-      if (!data || !etState.tracking) return;
-      const { x, y } = data;
-      const a = 1 / etSettings.smoothing;
-      const newX = etState.smoothX * (1 - a) + x * a;
-      const newY = etState.smoothY * (1 - a) + y * a;
-      if (Math.hypot(newX - etState.smoothX, newY - etState.smoothY) > ET_DEAD_ZONE_PX || !etState.smoothX) {
-        etState.smoothX = newX; etState.smoothY = newY;
-      }
-      updateEtGazeDot(etState.smoothX, etState.smoothY);
-      updateGazeCursor(etState.smoothX, etState.smoothY);
-      processEtGazePoint(etState.smoothX, etState.smoothY);
-      const sq = etScreenToSquare(etState.smoothX, etState.smoothY);
-      document.getElementById('et-cam-text').textContent = sq ? `👁 응시: ${sq}` : '👁 보드 밖';
-      document.getElementById('et-gaze-indicator').classList.add('on');
-      highlightGazeSquare(sq);
-    });
-
-    etLogInfo('WebGazer.begin() 호출 중...');
-
-    // begin()이 내부에서 throw 해도 UI를 복구할 수 있도록
-    // "No stream" 에러는 begin()이 Promise reject가 아닌 내부 콘솔 경고일 수 있으므로
-    // 타임아웃 방식으로 성공 판단
-    await new Promise((resolve, reject) => {
-      let done = false;
-      const timeout = setTimeout(() => {
-        if (!done) { done = true; reject(new Error('WebGazer 초기화 타임아웃 (카메라 권한 또는 네트워크 확인)')); }
-      }, 12000);
-
-      try {
-        const result = webgazer.begin();
-        const p = result && typeof result.then === 'function' ? result : Promise.resolve(result);
-        p.then(() => {
-          if (!done) { done = true; clearTimeout(timeout); resolve(); }
-        }).catch(err => {
-          // "No stream" 같은 내부 에러를 잡아냄
-          if (!done) { done = true; clearTimeout(timeout); reject(err); }
-        });
-      } catch(syncErr) {
-        if (!done) { done = true; clearTimeout(timeout); reject(syncErr); }
-      }
-
-      // WebGazer가 video 요소를 DOM에 추가하면 성공으로 간주 (일부 버전 대응)
-      const checkVideo = setInterval(() => {
-        if (document.getElementById('webgazerVideoFeed')) {
-          if (!done) { done = true; clearTimeout(timeout); clearInterval(checkVideo); resolve(); }
-        }
-      }, 300);
-    });
-
-    _wgStarted = true;
-    etLogOk('WebGazer 시작됨');
-
-    try { webgazer.showPredictionPoints(false); } catch(e) {}
-
-    // WebGazer 생성 video/canvas를 et-cam-wrap 안으로 이동
-    setTimeout(() => {
-      const camWrap = document.getElementById('et-cam-wrap');
-      if (!camWrap) return;
-      ['webgazerVideoFeed','webgazerFaceOverlay','webgazerFaceFeedbackBox'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el && !camWrap.contains(el)) {
-          el.style.position = 'absolute';
-          if (id === 'webgazerVideoFeed') {
-            el.style.inset = '0'; el.style.width = '100%'; el.style.height = '100%';
-            el.style.objectFit = 'cover'; el.style.transform = 'scaleX(-1)';
-          }
-          camWrap.appendChild(el);
-        }
-      });
-    }, 1000);
-
-    etState.camReady = true;
-    document.getElementById('btn-et-calib').disabled = false;
-    document.getElementById('btn-et-track').disabled = false;
-    btn.textContent = '✓ 연결됨';
-    setEtStatus('cam', '✅ 웹캠 준비됨 — 캘리브 또는 추적 시작');
-    etLogOk('완료! 캘리브레이션 후 추적을 시작하거나 바로 추적을 시작하세요.');
-    showToast('카메라 연결됨! 캘리브레이션 후 추적을 시작하세요.');
-
-  } catch(e) {
-    btn.disabled = false; btn.textContent = '▶ 카메라';
-    const msg = e.name === 'NotAllowedError' ? '카메라 권한 거부 (브라우저 설정 확인)'
-              : e.name === 'NotFoundError'   ? '카메라 없음'
-              : (e.message || String(e));
-    etLogErr(`실패: [${e.name||'Error'}] ${msg}`);
-    setEtStatus('error', '❌ ' + msg);
-    showToast('카메라 오류: ' + msg);
-  }
-}
-
-// ── 시선 → 체스 칸 ──
-function processEtGazePoint(sx, sy) {
-  const now = Date.now(), sq = etScreenToSquare(sx, sy);
-  if (sq !== etState.currentSquare) {
-    if (sq === _etPendingSq) {
-      _etPendingCount++;
-    } else {
-      _etPendingSq = sq;
-      _etPendingCount = 1;
-    }
-    if (_etPendingCount >= ET_SQUARE_DEBOUNCE_FRAMES) {
-      if (etState.currentSquare && etState.squareEnteredAt) {
-        const d = now - etState.squareEnteredAt;
-        if (d >= etSettings.minDwell)
-          etState.gazeData[etState.currentSquare] = (etState.gazeData[etState.currentSquare] || 0) + d;
-      }
-      etState.currentSquare = sq; etState.squareEnteredAt = sq ? now : null;
-      _etPendingSq = null; _etPendingCount = 0;
-    }
-  } else {
-    _etPendingSq = null; _etPendingCount = 0;
-  }
-}
-
-function etScreenToSquare(sx, sy) {
-  const boardEl = document.getElementById('play-board');
-  if (!boardEl) return null;
-  const rect = boardEl.getBoundingClientRect();
-  const bx = sx - rect.left, by = sy - rect.top;
-  if (bx < 0 || by < 0 || bx > rect.width || by > rect.height) return null;
-  const col = Math.floor(bx / rect.width * 8);
-  const row = Math.floor(by / rect.height * 8);
-  if (col < 0 || col > 7 || row < 0 || row > 7) return null;
-  const flipped = _myColor === 'b';
-  const fc = flipped ? 7 - col : col;
-  const fr = flipped ? 7 - row : row;
-  return ET_FILES[fc] + ET_RANKS[7 - fr];
-}
-
-function updateEtGazeDot(sx, sy) {
-  const rect = etHeatCanvas.getBoundingClientRect();
-  const px = (sx - rect.left) / rect.width * 100;
-  const py = (sy - rect.top) / rect.height * 100;
-  if (px >= 0 && px <= 100 && py >= 0 && py <= 100) {
-    etGazeDot.style.display = 'block';
-    etGazeDot.style.left = px + '%'; etGazeDot.style.top = py + '%';
-  } else {
-    etGazeDot.style.display = 'none';
-  }
-}
-
-const _gazeCursorEl = document.getElementById('gaze-cursor');
-const _gazeSqLabel  = document.getElementById('gc-sq-label');
-function updateGazeCursor(sx, sy) {
-  _gazeCursorEl.style.left = sx + 'px';
-  _gazeCursorEl.style.top  = sy + 'px';
-  _gazeSqLabel.textContent = etScreenToSquare(sx, sy) || '';
-}
-function showGazeCursor() { _gazeCursorEl.style.display = 'block'; }
-function hideGazeCursor()  { _gazeCursorEl.style.display = 'none'; }
-
-// 체스판 칸 시선 하이라이트
-let _lastGazeSq = null;
-function highlightGazeSquare(sq) {
-  if (sq === _lastGazeSq) return;
-  document.querySelectorAll('.sq.gaze-highlight').forEach(e => e.classList.remove('gaze-highlight'));
-  if (sq) {
-    const col = ET_FILES.indexOf(sq[0]);
-    const row = 7 - ET_RANKS.indexOf(sq[1]);
-    const flipped = _myColor === 'b';
-    const ri = flipped ? 7 - row : row;
-    const ci = flipped ? 7 - col : col;
-    const idx = ri * 8 + ci;
-    const boardEl = document.getElementById('play-board');
-    if (boardEl && boardEl.children[idx])
-      boardEl.children[idx].classList.add('gaze-highlight');
-  }
-  _lastGazeSq = sq;
-}
-
-// ── ET 히트맵 렌더링 ──
-function renderEtHeatmap() {
-  const w = etHeatCanvas.width, sq = w / 8;
-  etHeatCtx.clearRect(0, 0, w, w);
-  const live = { ...etState.gazeData };
-  if (etState.currentSquare && etState.squareEnteredAt) {
-    const d = Date.now() - etState.squareEnteredAt;
-    if (d >= etSettings.minDwell) live[etState.currentSquare] = (live[etState.currentSquare] || 0) + d;
-  }
-  const vals = Object.values(live); if (!vals.length) return;
-  const maxMs = Math.max(...vals, 1);
-  for (const [sqn, ms] of Object.entries(live)) {
-    const c = ET_FILES.indexOf(sqn[0]), r = 7 - ET_RANKS.indexOf(sqn[1]);
-    if (c < 0 || r < 0) continue;
-    const t = Math.min(ms / maxMs, 1);
-    const red   = Math.round(255 * Math.min(t * 2, 1));
-    const green = Math.round(255 * (1 - Math.abs(t - 0.5) * 1.8));
-    const blue  = Math.round(255 * Math.max(1 - t * 2.5, 0));
-    const alpha = etSettings.heatAlpha * (0.25 + t * 0.75);
-    etHeatCtx.fillStyle = `rgba(${red},${green},${blue},${alpha})`;
-    etHeatCtx.fillRect(c * sq, r * sq, sq, sq);
-    if (ms >= 800) {
-      etHeatCtx.fillStyle = 'rgba(255,255,255,0.9)';
-      etHeatCtx.font = `bold ${Math.round(sq * 0.2)}px Space Mono,monospace`;
-      etHeatCtx.textAlign = 'center'; etHeatCtx.textBaseline = 'middle';
-      etHeatCtx.fillText(ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`, c * sq + sq / 2, r * sq + sq / 2);
-    }
-  }
-  if (etState.currentSquare) {
-    const c = ET_FILES.indexOf(etState.currentSquare[0]);
-    const r = 7 - ET_RANKS.indexOf(etState.currentSquare[1]);
-    if (c >= 0 && r >= 0) {
-      etHeatCtx.strokeStyle = 'rgba(0,255,135,0.9)'; etHeatCtx.lineWidth = 2;
-      etHeatCtx.strokeRect(c * sq + 1, r * sq + 1, sq - 2, sq - 2);
-    }
-  }
-}
-
-function drawEtBoard() {
-  const w = etBoardCanvas.width, sq = w / 8;
-  const pal = BOARD_PALETTES.classic;
-  etBoardCtx.clearRect(0, 0, w, w);
-  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-    etBoardCtx.fillStyle = (r + c) % 2 === 0 ? pal.light : pal.dark;
-    etBoardCtx.fillRect(c * sq, r * sq, sq, sq);
-  }
-  etBoardCtx.font = `bold ${sq * 0.16}px Space Mono,monospace`;
-  etBoardCtx.textBaseline = 'top';
-  for (let c = 0; c < 8; c++) {
-    etBoardCtx.fillStyle = (c % 2 === 0) ? pal.dark : pal.light;
-    etBoardCtx.textAlign = 'left';
-    etBoardCtx.fillText(ET_FILES[c], c * sq + 2, 7 * sq + sq * 0.8);
-  }
-  etBoardCtx.textAlign = 'right';
-  for (let r = 0; r < 8; r++) {
-    etBoardCtx.fillStyle = (r % 2 === 0) ? pal.light : pal.dark;
-    etBoardCtx.fillText(ET_RANKS[7 - r], sq - 2, r * sq + 2);
-  }
-}
-
-function resizeEtBoard() {
-  const wrap = document.getElementById('et-board-wrap');
-  const size = wrap.clientWidth || 288;
-  if (size < 10) return;
-  etBoardCanvas.width = size; etBoardCanvas.height = size;
-  etHeatCanvas.width  = size; etHeatCanvas.height  = size;
-  drawEtBoard(); renderEtHeatmap();
-}
-
-// ── 통계 업데이트 ──
-function updateEtStats() {
-  const secs = etState.sessionStart ? Math.floor((Date.now() - etState.sessionStart) / 1000) : 0;
-  const m = Math.floor(secs / 60), s = secs % 60;
-  document.getElementById('et-stat-time').textContent = m > 0 ? `${m}m ${s}s` : `${s}s`;
-  const keys = Object.keys(etState.gazeData);
-  document.getElementById('et-stat-sqs').textContent = keys.length;
-  document.getElementById('et-stat-snaps').textContent = etState.moveSnapshots.length;
-  if (keys.length) {
-    const top = Object.entries(etState.gazeData).sort((a, b) => b[1] - a[1])[0];
-    document.getElementById('et-stat-top').textContent = `${top[0]} (${(top[1] / 1000).toFixed(1)}s)`;
-  }
-  const sorted = Object.entries(etState.gazeData).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const listEl = document.getElementById('et-sq-list');
-  if (!sorted.length) return;
-  const maxMs = sorted[0][1];
-  listEl.innerHTML = sorted.map(([sq, ms]) => `
-    <div class="et-sq-row">
-      <span class="et-sq-name">${sq}</span>
-      <div class="et-bar-bg"><div class="et-bar-fill" style="width:${Math.round(ms / maxMs * 100)}%"></div></div>
-      <span class="et-sq-time">${ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms'}</span>
-    </div>`).join('');
-}
-
-// ── 수별 시선 스냅샷 ──
-function captureGazeSnapshot(moveNum, san, color) {
-  if (!etState.tracking) return;
-  const currentGaze = { ...etState.gazeData };
-  if (etState.currentSquare && etState.squareEnteredAt) {
-    const d = Date.now() - etState.squareEnteredAt;
-    if (d >= etSettings.minDwell)
-      currentGaze[etState.currentSquare] = (currentGaze[etState.currentSquare] || 0) + d;
-  }
-  const prevGaze = etState.prevMoveGaze;
-  const deltaGaze = {};
-  for (const [sq, ms] of Object.entries(currentGaze)) {
-    const delta = ms - (prevGaze[sq] || 0);
-    if (delta > 0) deltaGaze[sq] = delta;
-  }
-  const topSquares = Object.entries(deltaGaze)
-    .sort((a, b) => b[1] - a[1]).slice(0, 5)
-    .map(([sq, ms]) => ({ square: sq, ms, seconds: +(ms / 1000).toFixed(2) }));
-  etState.moveSnapshots.push({ moveNum, san, color, gazeSnapshot: deltaGaze, topSquares });
-  etState.prevMoveGaze = { ...currentGaze };
-  renderMoveLog();
-}
-
-function renderMoveLog() {
-  const el = document.getElementById('et-move-log');
-  if (!etState.moveSnapshots.length) return;
-  el.innerHTML = etState.moveSnapshots.slice().reverse().map(snap => {
-    const topSq = snap.topSquares[0];
-    const chips = snap.topSquares.map((s, i) =>
-      `<span class="et-move-sq-chip${i === 0 ? ' hot' : ''}">${s.square} ${s.seconds}s</span>`
-    ).join('');
-    return `<div class="et-move-entry ${snap.color === 'w' ? 'white-move' : 'black-move'}">
-      <div class="et-move-header">
-        <span class="et-move-num">${Math.ceil(snap.moveNum / 2)}${snap.color === 'w' ? '.' : '...'}</span>
-        <span class="et-move-san">${snap.san}</span>
-        <span class="et-move-top-sq">${topSq ? topSq.square : '—'}</span>
-      </div>
-      <div class="et-move-sq-bar">${chips || '<span class="et-move-sq-chip">데이터 없음</span>'}</div>
-    </div>`;
-  }).join('');
-}
-
-// ── WebGazer 캘리브레이션 (클릭 기반) ──
-const ET_CALIB_POSITIONS = [
-  [0.1,0.1],[0.5,0.1],[0.9,0.1],
-  [0.1,0.5],[0.5,0.5],[0.9,0.5],
-  [0.1,0.9],[0.5,0.9],[0.9,0.9],
-];
-let etCalibIdx = 0, etCalibListening = false;
-
-function resizeEtCalibCanvas() {
-  etCalibCanvas.width = window.innerWidth; etCalibCanvas.height = window.innerHeight;
-}
-function drawEtCalibPoint(idx) {
-  const w = etCalibCanvas.width, h = etCalibCanvas.height;
-  etCalibCtx.clearRect(0, 0, w, h);
-  const [px, py] = ET_CALIB_POSITIONS[idx];
-  const x = px * w, y = py * h;
-  etCalibCtx.beginPath(); etCalibCtx.arc(x, y, 22, 0, Math.PI * 2);
-  etCalibCtx.strokeStyle = 'rgba(0,255,135,0.3)'; etCalibCtx.lineWidth = 2; etCalibCtx.stroke();
-  etCalibCtx.beginPath(); etCalibCtx.arc(x, y, 10, 0, Math.PI * 2);
-  etCalibCtx.fillStyle = '#00ff87'; etCalibCtx.fill();
-  etCalibCtx.fillStyle = 'rgba(0,255,135,0.6)';
-  etCalibCtx.font = '12px Space Mono,monospace'; etCalibCtx.textAlign = 'center';
-  etCalibCtx.fillText('이 점을 바라보며 클릭', x, y + 34);
-  document.getElementById('et-calib-progress').textContent = `${idx} / ${ET_CALIB_POSITIONS.length} 완료`;
-}
-
-function startEtCalibration() {
-  if (!_wgStarted) { showToast('먼저 카메라 버튼을 눌러 WebGazer를 시작하세요.'); return; }
-  etCalibIdx = 0; etCalibListening = true;
-  resizeEtCalibCanvas(); etCalibOverlay.classList.add('show');
-  drawEtCalibPoint(etCalibIdx);
-  setEtStatusDot('calib');
-}
-
-etCalibCanvas.addEventListener('click', (e) => {
-  if (!etCalibListening) return;
-  const [px, py] = ET_CALIB_POSITIONS[etCalibIdx];
-  const sx = px * window.innerWidth, sy = py * window.innerHeight;
-  // WebGazer에 캘리브레이션 포인트 등록
-  webgazer.recordScreenPosition(sx, sy, 'click');
-  etCalibIdx++;
-  if (etCalibIdx >= ET_CALIB_POSITIONS.length) {
-    finishEtCalibration();
-  } else {
-    drawEtCalibPoint(etCalibIdx);
-  }
-});
-
-function finishEtCalibration() {
-  etCalibListening = false; etCalibOverlay.classList.remove('show');
-  etState.calibrated = true;
-  document.getElementById('btn-et-track').disabled = false;
-  setEtStatus('ready', '캘리브레이션 완료 — 추적 시작 버튼을 누르세요');
-  setEtStatusDot('ready');
-  showToast('캘리브레이션 완료! 추적을 시작하세요.');
+  panel.classList.toggle('collapsed');
 }
 
 // ── 상태 표시 ──
 function setEtStatus(type, text) {
-  document.getElementById('et-cam-text').textContent = text;
-  setEtStatusDot(type);
-}
-function setEtStatusDot(type) {
-  const dot = document.getElementById('et-main-dot');
-  dot.className = 'et-status-dot';
-  if (type === 'active' || type === 'cam' || type === 'ready') dot.classList.add('active');
-  else if (type === 'calib') dot.classList.add('calib');
+  const dot  = document.getElementById('et-status-dot');
+  const txt  = document.getElementById('et-status-text');
+  dot.className = 'et-status-dot' + (type ? ' ' + type : '');
+  txt.textContent = text;
 }
 
-// ── 데이터 초기화 ──
-function resetEtData() {
-  etState.gazeData = {};
-  etState.currentSquare = null; etState.squareEnteredAt = null;
-  etState.sessionStart = null; etState.sessionEnd = null;
-  etState.moveSnapshots = []; etState.prevMoveGaze = {};
-  renderEtHeatmap(); updateEtStats(); renderMoveLog();
-  showToast('시선 데이터 초기화 완료');
+// ── 토글 이벤트 ──
+async function onEyeTrackerToggle(checked) {
+  if (checked) {
+    ET.enabled = true;
+    ET.init();
+    await ET.start();
+    if (ET.running && !ET.calibrated) {
+      // 자동 캘리브레이션 안내
+      showToast('💡 캘리브레이션을 하면 정확도가 높아집니다');
+    }
+  } else {
+    ET.stop();
+  }
 }
 
-// ── JSON 다운로드 ──
-function downloadGazeData() {
-  const data = buildGazeExport();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `chess-gaze-${Date.now()}.json`; a.click();
-}
-function buildGazeExport() {
-  return {
-    timestamp: new Date().toISOString(),
-    sessionDuration: etState.sessionStart ? Math.floor(((etState.sessionEnd || Date.now()) - etState.sessionStart) / 1000) : 0,
-    gazeData: etState.gazeData,
-    topSquares: Object.entries(etState.gazeData)
-      .sort((a, b) => b[1] - a[1]).slice(0, 10)
-      .map(([sq, ms]) => ({ square: sq, ms, seconds: +(ms / 1000).toFixed(2) })),
-    moveSnapshots: etState.moveSnapshots,
-  };
+// ── 추적 중지 ──
+function stopEyeTracker() {
+  ET.stop();
+  showToast('시선 추적이 중지되었습니다');
 }
 
-// ── 이미지 내보내기 ──
-function exportHeatmapImg() {
-  const size = etBoardCanvas.width;
-  const exp = document.createElement('canvas'); exp.width = exp.height = size;
-  const ctx = exp.getContext('2d');
-  ctx.drawImage(etBoardCanvas, 0, 0); ctx.drawImage(etHeatCanvas, 0, 0);
-  exp.toBlob(blob => {
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `chess-heatmap-${Date.now()}.png`; a.click();
+// ── 히트맵 토글 ──
+function toggleHeatmap() {
+  ET.showHeatmap = !ET.showHeatmap;
+  const canvas = document.getElementById('et-heatmap-canvas');
+  const btn    = document.getElementById('et-btn-heatmap');
+  if (ET.showHeatmap) {
+    canvas.classList.add('show');
+    btn.textContent = '히트맵 끄기';
+    drawFullHeatmap();
+  } else {
+    canvas.classList.remove('show');
+    btn.textContent = '히트맵';
+  }
+}
+
+// ── 풀 히트맵 그리기 ──
+function drawFullHeatmap() {
+  const canvas = document.getElementById('et-heatmap-canvas');
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  canvas.style.left = '0';
+  canvas.style.top  = '0';
+  canvas.style.width  = window.innerWidth  + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const radius = 40;
+  ET.heatData.forEach(({x, y}) => {
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    grad.addColorStop(0,   'rgba(79, 142, 247, 0.04)');
+    grad.addColorStop(0.4, 'rgba(127, 90, 240, 0.025)');
+    grad.addColorStop(1,   'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   });
 }
 
-// 루프
-setInterval(() => { if (etState.tracking) { renderEtHeatmap(); updateEtStats(); } }, 150);
-window.addEventListener('resize', () => {
-  resizeEtBoard();
-  if (etCalibOverlay.classList.contains('show')) { resizeEtCalibCanvas(); drawEtCalibPoint(etCalibIdx); }
-});
+// ── 미니 히트맵 ──
+function drawMiniHeatmap() {
+  const canvas = document.getElementById('et-mini-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
 
-// ── 버튼 이벤트 ──
-document.getElementById('btn-et-cam').addEventListener('click', () => { initEtMediaPipe(); });
-document.getElementById('btn-et-calib').addEventListener('click', () => { startEtCalibration(); });
-document.getElementById('btn-et-track').addEventListener('click', () => {
-  if (!_wgStarted) { showToast('먼저 카메라 버튼을 누르세요.'); return; }
-  etState.tracking = true; etState.sessionStart = Date.now();
-  etState.calibrated = true;
-  etGazeDot.style.display = 'block'; showGazeCursor();
-  document.getElementById('btn-et-track').disabled = true;
-  document.getElementById('btn-et-stop').disabled = false;
-  setEtStatusDot('active');
-  showToast('시선 추적 시작!');
-});
-document.getElementById('btn-et-stop').addEventListener('click', () => {
-  etState.tracking = false;
-  if (etState.currentSquare && etState.squareEnteredAt) {
-    const d = Date.now() - etState.squareEnteredAt;
-    if (d >= etSettings.minDwell)
-      etState.gazeData[etState.currentSquare] = (etState.gazeData[etState.currentSquare] || 0) + d;
-  }
-  etState.currentSquare = null; etState.squareEnteredAt = null;
-  etGazeDot.style.display = 'none'; hideGazeCursor();
-  document.getElementById('et-gaze-indicator').classList.remove('on');
-  document.getElementById('btn-et-track').disabled = false;
-  document.getElementById('btn-et-stop').disabled = true;
-  setEtStatusDot('ready');
-  showToast('추적 중지됨.');
-});
-document.getElementById('et-smooth').addEventListener('input', function () {
-  etSettings.smoothing = +this.value; document.getElementById('et-smooth-val').textContent = this.value;
-});
-document.getElementById('et-dwell').addEventListener('input', function () {
-  etSettings.minDwell = +this.value; document.getElementById('et-dwell-val').textContent = this.value;
-});
-document.getElementById('et-alpha').addEventListener('input', function () {
-  etSettings.heatAlpha = this.value / 10; document.getElementById('et-alpha-val').textContent = (this.value / 10).toFixed(1);
-});
-
-window.addEventListener('load', () => {
-  resizeEtBoard();
-  setTimeout(() => {
-    if (typeof webgazer === 'undefined') {
-      etLogErr('WebGazer 없음 — CDN 차단 또는 네트워크 오류. HTTPS 환경인지 확인하세요.');
-      setEtStatus('error', '❌ WebGazer 로딩 실패 (로그 확인)');
-    } else {
-      etLogOk('WebGazer 라이브러리 로딩 완료. ▶ 카메라 버튼을 누르세요.');
+  // 보드 배경 그리기
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      ctx.fillStyle = (r + c) % 2 === 0 ? '#f0d9b5' : '#b58863';
+      ctx.globalAlpha = 0.3;
+      ctx.fillRect(c * (W/8), r * (H/8), W/8, H/8);
     }
-  }, 1200);
-});
+  }
+  ctx.globalAlpha = 1;
+
+  // 보드 위 시선만 미니맵에 투영
+  const bwEl = document.getElementById('play-board-wrap');
+  if (!bwEl || ET.heatData.length === 0) return;
+  const br = bwEl.getBoundingClientRect();
+  if (br.width === 0) return;
+
+  const recent = ET.heatData.slice(-200);
+  recent.forEach(({x, y}) => {
+    const nx = ((x - br.left) / br.width)  * W;
+    const ny = ((y - br.top)  / br.height) * H;
+    if (nx < 0 || ny < 0 || nx > W || ny > H) return;
+    const grad = ctx.createRadialGradient(nx, ny, 0, nx, ny, 14);
+    grad.addColorStop(0, 'rgba(79, 142, 247, 0.35)');
+    grad.addColorStop(1, 'rgba(79, 142, 247, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(nx - 14, ny - 14, 28, 28);
+  });
+}
+function updateMiniHeatmap() { drawMiniHeatmap(); }
 
 // ══════════════════════════════════════════
-// 체스 엔진
+//  캘리브레이션
+// ══════════════════════════════════════════
+const CALIB_POINTS = [
+  [0.05, 0.05], [0.5, 0.05], [0.95, 0.05],
+  [0.05, 0.5 ], [0.5, 0.5 ], [0.95, 0.5 ],
+  [0.05, 0.95], [0.5, 0.95], [0.95, 0.95],
+];
+let _calibIdx = 0;
+let _calibPoints = [];
+
+function startCalibration() {
+  if (!ET.running) {
+    showToast('먼저 시선 추적을 활성화하세요');
+    return;
+  }
+  _calibIdx = 0;
+  ET.calibProgress = 0;
+  updateCalibProgress(0);
+
+  // 기존 포인트 제거
+  _calibPoints.forEach(p => p.remove());
+  _calibPoints = [];
+
+  // 오버레이 표시
+  document.getElementById('et-calib-overlay').classList.add('show');
+  document.getElementById('et-calib-instruction').innerHTML =
+    '화면에 나타나는 <strong style="color:var(--et-accent)">파란 점</strong>을 순서대로 클릭해 주세요.<br>각 점을 바라보면서 클릭하면 더 정확합니다.';
+
+  // 포인트 생성
+  CALIB_POINTS.forEach((pos, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'calib-point';
+    dot.style.left = (pos[0] * 100) + '%';
+    dot.style.top  = (pos[1] * 100) + '%';
+    dot.dataset.idx = i;
+    dot.style.opacity = i === 0 ? '1' : '0.25';
+    dot.style.pointerEvents = i === 0 ? 'auto' : 'none';
+    dot.onclick = () => onCalibPointClick(i, dot);
+    document.body.appendChild(dot);
+    _calibPoints.push(dot);
+  });
+}
+
+function onCalibPointClick(i, dot) {
+  if (i !== _calibIdx) return;
+  dot.classList.add('clicked');
+  // WebGazer에 클릭 좌표를 학습 데이터로 등록
+  const x = parseFloat(dot.style.left) / 100 * window.innerWidth;
+  const y = parseFloat(dot.style.top)  / 100 * window.innerHeight;
+  try { webgazer.recordScreenPosition(x, y, 'click'); } catch(e) {}
+
+  _calibIdx++;
+  ET.calibProgress = _calibIdx;
+  updateCalibProgress(_calibIdx);
+
+  setTimeout(() => {
+    dot.classList.add('done');
+    if (_calibIdx < CALIB_POINTS.length) {
+      const next = _calibPoints[_calibIdx];
+      if (next) {
+        next.style.opacity = '1';
+        next.style.pointerEvents = 'auto';
+      }
+    } else {
+      finishCalibration();
+    }
+  }, 300);
+}
+
+function updateCalibProgress(n) {
+  const fill = document.getElementById('calib-progress-fill');
+  const text = document.getElementById('calib-progress-text');
+  if (fill) fill.style.width = (n / CALIB_POINTS.length * 100) + '%';
+  if (text) text.textContent = `${n} / ${CALIB_POINTS.length} 완료`;
+  // 패널 바 업데이트
+  const panelFill = document.getElementById('et-calib-fill');
+  if (panelFill) panelFill.style.width = (n / CALIB_POINTS.length * 100) + '%';
+}
+
+function finishCalibration() {
+  ET.calibrated = true;
+  document.getElementById('et-calib-instruction').innerHTML =
+    '✅ <strong style="color:var(--et-success)">캘리브레이션 완료!</strong><br>정확한 시선 추적이 시작됩니다.';
+  setTimeout(() => {
+    document.getElementById('et-calib-overlay').classList.remove('show');
+    _calibPoints.forEach(p => p.remove());
+    _calibPoints = [];
+    setEtStatus('active', '캘리브레이션 완료 · 추적 중');
+    showToast('👁 시선 캘리브레이션이 완료되었습니다!');
+  }, 1200);
+}
+
+function skipCalibration() {
+  document.getElementById('et-calib-overlay').classList.remove('show');
+  _calibPoints.forEach(p => p.remove());
+  _calibPoints = [];
+  showToast('캘리브레이션을 건너뛰었습니다');
+}
+
+// ══════════════════════════════════════════
+//  체스 엔진 (독립형)
 // ══════════════════════════════════════════
 const PIECE_IMG_BASE = 'https://lichess1.org/assets/piece/cburnett/';
-function pieceImg(p){ return PIECE_IMG_BASE+p+'.svg'; }
-(function preloadPieces(){
-  ['wP','wN','wB','wR','wQ','wK','bP','bN','bB','bR','bQ','bK'].forEach(p=>{const img=new Image();img.src=pieceImg(p);});
+function pieceImg(p) { return PIECE_IMG_BASE + p + '.svg'; }
+(function preloadPieces() {
+  ['wP','wN','wB','wR','wQ','wK','bP','bN','bB','bR','bQ','bK'].forEach(p => {
+    const img = new Image(); img.src = pieceImg(p);
+  });
 })();
 
-const FILES=['a','b','c','d','e','f','g','h'];
+const FILES = ['a','b','c','d','e','f','g','h'];
 
-function moveToSAN(board,move,color,allMoves){
-  const[fr,fc]=move.from,[tr,tc]=move.to,p=board[fr][fc],type=p[1];
+function moveToSAN(board, move, color, allMoves) {
+  const [fr,fc]=move.from,[tr,tc]=move.to,p=board[fr][fc],type=p[1];
   const captured=board[tr][tc]||(move.enPassant?'ep':null);
   let san='';
   if(move.castle==='K')return'O-O';
   if(move.castle==='Q')return'O-O-O';
-  if(type!=='P'){san+=type;const ambig=allMoves.filter(m=>m!==move&&board[m.from[0]][m.from[1]]===p&&m.to[0]===tr&&m.to[1]===tc);if(ambig.length){const sf=ambig.some(m=>m.from[1]===fc),sr=ambig.some(m=>m.from[0]===fr);if(!sf)san+=FILES[fc];else if(!sr)san+=(8-fr);else san+=FILES[fc]+(8-fr);}}
-  else if(captured){san+=FILES[fc];}
+  if(type!=='P'){
+    san+=type;
+    const ambig=allMoves.filter(m=>m!==move&&board[m.from[0]][m.from[1]]===p&&m.to[0]===tr&&m.to[1]===tc);
+    if(ambig.length){const sf=ambig.some(m=>m.from[1]===fc),sr=ambig.some(m=>m.from[0]===fr);if(!sf)san+=FILES[fc];else if(!sr)san+=(8-fr);else san+=FILES[fc]+(8-fr);}
+  } else if(captured){san+=FILES[fc];}
   if(captured)san+='x';
   san+=FILES[tc]+(8-tr);
   if(move.promo&&move.promoPiece)san+='='+move.promoPiece;
@@ -1646,456 +1644,738 @@ function moveToSAN(board,move,color,allMoves){
   return san;
 }
 
-const INIT_FEN='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-let _board=[],_turn='w',_castling={wK:true,wQ:true,bK:true,bQ:true};
-let _enPassant=null,_selected=null,_legalMoves=[],_lastMove=null;
-let _myColor='w',_gameId=null,_gameRef=null;
-let _sanMoves=[];
-let _wTime=600,_bTime=600,_timerInt=null;
-let _gameActive=false,_firstMoveDone=false,_firstMoveTimer=null;
-let _disconnectRef=null,_heartbeatInt=null,_oppHeartbeatInt=null,_oppLastSeen=null;
+const INIT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-function parseFen(fen){
-  const parts=fen.split(' '), rows=parts[0].split('/'), board=[];
-  for(const row of rows){const r=[];for(const ch of row){if('12345678'.includes(ch))for(let i=0;i<+ch;i++)r.push(null);else{const color=ch===ch.toUpperCase()?'w':'b';r.push(color+ch.toUpperCase());}}board.push(r);}
-  _turn=parts[1]||'w';const cast=parts[2]||'-';
-  _castling={wK:cast.includes('K'),wQ:cast.includes('Q'),bK:cast.includes('k'),bQ:cast.includes('q')};
-  _enPassant=parts[3]!=='-'?algebraicToRC(parts[3]):null;
+let _board = [], _turn = 'w', _castling = {wK:true,wQ:true,bK:true,bQ:true};
+let _enPassant = null, _selected = null, _legalMoves = [], _lastMove = null;
+let _myColor = 'w', _gameId = null, _gameRef = null;
+let _sanMoves = [];
+let _wTime = 600, _bTime = 600, _timerInt = null;
+let _gameActive = false;
+let _firstMoveDone = false;
+let _firstMoveTimer = null;
+let _disconnectRef = null;
+let _heartbeatInt = null;
+let _oppHeartbeatInt = null;
+let _oppLastSeen = null;
+
+function parseFen(fen) {
+  const parts = fen.split(' ');
+  const rows = parts[0].split('/');
+  const board = [];
+  for (const row of rows) {
+    const r = [];
+    for (const ch of row) {
+      if ('12345678'.includes(ch)) for (let i=0;i<+ch;i++) r.push(null);
+      else {
+        const color = ch === ch.toUpperCase() ? 'w' : 'b';
+        const type  = ch.toUpperCase();
+        r.push(color + type);
+      }
+    }
+    board.push(r);
+  }
+  _turn = parts[1] || 'w';
+  const cast = parts[2] || '-';
+  _castling = { wK: cast.includes('K'), wQ: cast.includes('Q'), bK: cast.includes('k'), bQ: cast.includes('q') };
+  _enPassant = parts[3] !== '-' ? algebraicToRC(parts[3]) : null;
   return board;
 }
-function algebraicToRC(alg){if(!alg||alg==='-')return null;return[8-parseInt(alg[1]),alg.charCodeAt(0)-97];}
-function enemyColor(c){return c==='w'?'b':'w';}
-function isInBounds(r,c){return r>=0&&r<8&&c>=0&&c<8;}
 
-function pseudoMoves(board,r,c,castling,enPassant){
-  const p=board[r][c];if(!p)return[];
-  const color=p[0],type=p[1],moves=[],enemy=enemyColor(color),dir=color==='w'?-1:1;
-  const push=(tr,tc,extra={})=>{if(isInBounds(tr,tc)){const t=board[tr][tc];if(!t||t[0]===enemy)moves.push({from:[r,c],to:[tr,tc],...extra});}};
-  const slide=(drs,dcs)=>{let nr=r+drs[0],nc=c+dcs[0];while(isInBounds(nr,nc)){const t=board[nr][nc];if(t){if(t[0]===enemy)moves.push({from:[r,c],to:[nr,nc]});break;}moves.push({from:[r,c],to:[nr,nc]});nr+=drs[0];nc+=dcs[0];}};
-  if(type==='P'){if(!board[r+dir]?.[c])moves.push({from:[r,c],to:[r+dir,c],...((r+dir===0||r+dir===7)?{promo:true}:{})});if((color==='w'&&r===6||color==='b'&&r===1)&&!board[r+dir][c]&&!board[r+2*dir][c])moves.push({from:[r,c],to:[r+2*dir,c],doublePush:true});[-1,1].forEach(dc=>{if(isInBounds(r+dir,c+dc)){if(board[r+dir][c+dc]&&board[r+dir][c+dc][0]===enemy)moves.push({from:[r,c],to:[r+dir,c+dc],...((r+dir===0||r+dir===7)?{promo:true}:{})});if(enPassant&&enPassant[0]===r+dir&&enPassant[1]===c+dc)moves.push({from:[r,c],to:[r+dir,c+dc],enPassant:true});}});}
-  else if(type==='N'){[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc])=>push(r+dr,c+dc));}
-  else if(type==='B'){[[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc])=>slide([dr],[dc]));}
-  else if(type==='R'){[[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>slide([dr],[dc]));}
-  else if(type==='Q'){[[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>slide([dr],[dc]));}
+function algebraicToRC(alg) {
+  if (!alg || alg === '-') return null;
+  const c = alg.charCodeAt(0) - 97;
+  const r = 8 - parseInt(alg[1]);
+  return [r, c];
+}
+
+function enemyColor(c) { return c === 'w' ? 'b' : 'w'; }
+function isInBounds(r,c) { return r>=0&&r<8&&c>=0&&c<8; }
+
+function pseudoMoves(board, r, c, castling, enPassant) {
+  const p = board[r][c]; if (!p) return [];
+  const color=p[0], type=p[1], moves=[], enemy=enemyColor(color), dir=color==='w'?-1:1;
+  const push=(tr,tc,extra={})=>{ if(isInBounds(tr,tc)){const t=board[tr][tc];if(!t||t[0]===enemy)moves.push({from:[r,c],to:[tr,tc],...extra});} };
+  const slide=(drs,dcs)=>{ for(let i=0;i<drs.length;i++){let nr=r+drs[i],nc=c+dcs[i];while(isInBounds(nr,nc)){const t=board[nr][nc];if(t){if(t[0]===enemy)moves.push({from:[r,c],to:[nr,nc]});break;}moves.push({from:[r,c],to:[nr,nc]});nr+=drs[i];nc+=dcs[i];}} };
+  if(type==='P'){
+    if(!board[r+dir]?.[c])moves.push({from:[r,c],to:[r+dir,c],...((r+dir===0||r+dir===7)?{promo:true}:{})});
+    if((color==='w'&&r===6||color==='b'&&r===1)&&!board[r+dir][c]&&!board[r+2*dir][c])moves.push({from:[r,c],to:[r+2*dir,c],doublePush:true});
+    [-1,1].forEach(dc=>{
+      if(isInBounds(r+dir,c+dc)){
+        if(board[r+dir][c+dc]&&board[r+dir][c+dc][0]===enemy)moves.push({from:[r,c],to:[r+dir,c+dc],...((r+dir===0||r+dir===7)?{promo:true}:{})});
+        if(enPassant&&enPassant[0]===r+dir&&enPassant[1]===c+dc)moves.push({from:[r,c],to:[r+dir,c+dc],enPassant:true});
+      }
+    });
+  } else if(type==='N'){[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc])=>push(r+dr,c+dc));}
+  else if(type==='B'){slide([-1,-1,-1,1,1,1],[-1,0,1,-1,0,1]);slide([-1,1],[-1,1]);slide([-1,-1,1,1],[-1,1,-1,1]);}
+  else if(type==='R'){slide([-1,0,1,0],[0,-1,0,1]);}
+  else if(type==='Q'){slide([-1,-1,-1,0,0,1,1,1],[-1,0,1,-1,0,1]);}
   else if(type==='K'){[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc])=>push(r+dr,c+dc));
     if(color==='w'){if(castling.wK&&!board[7][5]&&!board[7][6]&&board[7][7]==='wR')moves.push({from:[7,4],to:[7,6],castle:'K'});if(castling.wQ&&!board[7][3]&&!board[7][2]&&!board[7][1]&&board[7][0]==='wR')moves.push({from:[7,4],to:[7,2],castle:'Q'});}
     if(color==='b'){if(castling.bK&&!board[0][5]&&!board[0][6]&&board[0][7]==='bR')moves.push({from:[0,4],to:[0,6],castle:'K'});if(castling.bQ&&!board[0][3]&&!board[0][2]&&!board[0][1]&&board[0][0]==='bR')moves.push({from:[0,4],to:[0,2],castle:'Q'});}
   }
   return moves;
 }
-function applyMoveToBoard(board,move,color){
-  const b=board.map(r=>[...r]);const[fr,fc]=move.from,[tr,tc]=move.to,p=b[fr][fc];
-  b[tr][tc]=move.promoPiece?color+move.promoPiece:p;b[fr][fc]=null;
+
+function applyMoveToBoard(board, move, color) {
+  const b = board.map(r=>[...r]);
+  const[fr,fc]=move.from,[tr,tc]=move.to,p=b[fr][fc];
+  b[tr][tc]=move.promoPiece?color+move.promoPiece:p; b[fr][fc]=null;
   if(move.enPassant){const cr=color==='w'?tr+1:tr-1;b[cr][tc]=null;}
   if(move.castle==='K'){b[fr][7]=null;b[fr][5]=`${color}R`;}
   else if(move.castle==='Q'){b[fr][0]=null;b[fr][3]=`${color}R`;}
   return b;
 }
-function isInCheck(board,color){
+
+function isInCheck(board, color) {
   let kr=-1,kc=-1;
   for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]===color+'K'){kr=r;kc=c;}
   if(kr<0)return false;
   const enemy=enemyColor(color);
-  for(let r=0;r<8;r++)for(let c=0;c<8;c++){if(board[r][c]&&board[r][c][0]===enemy){const ms=pseudoMoves(board,r,c,{wK:false,wQ:false,bK:false,bQ:false},null);if(ms.some(m=>m.to[0]===kr&&m.to[1]===kc))return true;}}
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    if(board[r][c]&&board[r][c][0]===enemy){
+      const ms=pseudoMoves(board,r,c,{wK:false,wQ:false,bK:false,bQ:false},null);
+      if(ms.some(m=>m.to[0]===kr&&m.to[1]===kc))return true;
+    }
+  }
   return false;
 }
-function getLegalMoves(board,r,c,castling,enPassant){
-  const p=board[r][c];if(!p)return[];
-  const color=p[0],pseudo=pseudoMoves(board,r,c,castling,enPassant),legal=[];
-  for(const move of pseudo){const nb=applyMoveToBoard(board,move,color);if(!isInCheck(nb,color)){if(move.castle){const midC=move.castle==='K'?5:3;const nb2=applyMoveToBoard(board,{from:move.from,to:[move.from[0],midC]},color);if(isInCheck(board,color)||isInCheck(nb2,color))continue;}legal.push(move);}}
+
+function getLegalMoves(board, r, c, castling, enPassant) {
+  const p=board[r][c]; if(!p)return[];
+  const color=p[0], pseudo=pseudoMoves(board,r,c,castling,enPassant), legal=[];
+  for(const move of pseudo){
+    const nb=applyMoveToBoard(board,move,color);
+    if(!isInCheck(nb,color)){
+      if(move.castle){
+        const midC=move.castle==='K'?5:3;
+        const nb2=applyMoveToBoard(board,{from:move.from,to:[move.from[0],midC]},color);
+        if(isInCheck(board,color)||isInCheck(nb2,color))continue;
+      }
+      legal.push(move);
+    }
+  }
   return legal;
 }
-function getAllLegal(board,color,castling,enPassant){
+
+function getAllLegal(board, color, castling, enPassant) {
   const moves=[];
   for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]&&board[r][c][0]===color)moves.push(...getLegalMoves(board,r,c,castling,enPassant));
   return moves;
 }
 
-// ── 보드 렌더링 ──
-let _lastFlipped = null;
-function renderBoard(){
-  const el=document.getElementById('play-board');if(!el)return;
-  const flipped=_myColor==='b';
+// ══════════════════════════════════════════
+//  보드 렌더링
+// ══════════════════════════════════════════
+function renderBoard() {
+  const el = document.getElementById('play-board');
+  if (!el) return;
+  const flipped = _myColor === 'b';
+  const isFirstRender = el.children.length === 0;
 
-  // 플립 상태 바뀌면 보드 셀 전체 재생성
-  if(_lastFlipped !== flipped){
-    el.innerHTML = '';
-    _lastFlipped = flipped;
-  }
-  const isFirst = el.children.length === 0;
+  for (let ri = 0; ri < 8; ri++) {
+    for (let ci = 0; ci < 8; ci++) {
+      const r = flipped ? 7 - ri : ri;
+      const c = flipped ? 7 - ci : ci;
+      const isLight = (r + c) % 2 === 0;
+      const idx = ri * 8 + ci;
+      const piece = _board[r][c];
 
-  for(let ri=0;ri<8;ri++){for(let ci=0;ci<8;ci++){
-    const r=flipped?7-ri:ri, c=flipped?7-ci:ci;
-    const isLight=(r+c)%2===0, idx=ri*8+ci, piece=_board[r][c];
-    let sq;
-    if(isFirst){
-      sq=document.createElement('div');
-      if(ci===0){const lbl=document.createElement('span');lbl.className='rank-label';lbl.textContent=8-r;sq.appendChild(lbl);}
-      if(ri===7){const lbl=document.createElement('span');lbl.className='file-label';lbl.textContent='abcdefgh'[c];sq.appendChild(lbl);}
-      const img=document.createElement('img');img.className='piece-img';img.draggable=false;img.style.display='none';sq.appendChild(img);
-      el.appendChild(sq);
-    }else{
-      sq=el.children[idx];
+      let sq;
+      if (isFirstRender) {
+        sq = document.createElement('div');
+        sq.dataset.r = r; sq.dataset.c = c;
+        if (ci === 0) { const lbl = document.createElement('span'); lbl.className='rank-label'; lbl.textContent=8-r; sq.appendChild(lbl); }
+        if (ri === 7) { const lbl = document.createElement('span'); lbl.className='file-label'; lbl.textContent='abcdefgh'[c]; sq.appendChild(lbl); }
+        const img = document.createElement('img');
+        img.className = 'piece-img';
+        img.draggable = false;
+        img.style.display = 'none';
+        sq.appendChild(img);
+        sq.addEventListener('click', () => onSquareClick(Number(sq.dataset.r), Number(sq.dataset.c)));
+        el.appendChild(sq);
+      } else {
+        sq = el.children[idx];
+      }
+
+      const classes = ['sq', isLight ? 'light' : 'dark'];
+      if (_lastMove) {
+        if (_lastMove.from[0]===r && _lastMove.from[1]===c) classes.push('last-from');
+        if (_lastMove.to[0]===r   && _lastMove.to[1]===c)   classes.push('last-to');
+      }
+      if (_selected && _selected[0]===r && _selected[1]===c) classes.push('selected');
+      const isPossible = _legalMoves.some(m => m.to[0]===r && m.to[1]===c);
+      if (isPossible) {
+        classes.push('possible');
+        if (piece) classes.push('has-piece');
+      }
+      const king = _turn + 'K';
+      if (piece === king && isInCheck(_board, _turn)) classes.push('in-check');
+      sq.className = classes.join(' ');
+
+      const img = sq.querySelector('.piece-img');
+      if (img) {
+        if (piece) {
+          const newSrc = pieceImg(piece);
+          if (img.src !== newSrc) img.src = newSrc;
+          const newCls = 'piece-img' + (piece.startsWith('b') ? ' black-piece' : '');
+          if (img.className !== newCls) img.className = newCls;
+          img.alt = piece;
+          img.style.display = '';
+        } else {
+          img.style.display = 'none';
+          img.src = '';
+        }
+      }
     }
-    // 매 렌더마다 dataset 갱신 (플립 고려한 실제 보드 좌표)
-    sq.dataset.r=r; sq.dataset.c=c;
-    sq.onclick=null;
-    sq.onclick=()=>onSquareClick(Number(sq.dataset.r),Number(sq.dataset.c));
+  }
 
-    const classes=['sq',isLight?'light':'dark'];
-    if(_lastMove){if(_lastMove.from[0]===r&&_lastMove.from[1]===c)classes.push('last-from');if(_lastMove.to[0]===r&&_lastMove.to[1]===c)classes.push('last-to');}
-    if(_selected&&_selected[0]===r&&_selected[1]===c)classes.push('selected');
-    const isPoss=_legalMoves.some(m=>m.to[0]===r&&m.to[1]===c);
-    if(isPoss){classes.push('possible');if(piece)classes.push('has-piece');}
-    if(piece===_turn+'K'&&isInCheck(_board,_turn))classes.push('in-check');
-    sq.className=classes.join(' ');
-    const img=sq.querySelector('.piece-img');
-    if(img){if(piece){const ns=pieceImg(piece);if(img.src!==ns)img.src=ns;const nc='piece-img'+(piece[0]==='b'?' black-piece':'');if(img.className!==nc)img.className=nc;img.alt=piece;img.style.display='';}else{img.style.display='none';img.src='';}}
-  }}
+  // 히트맵 업데이트
+  if (ET.showHeatmap) drawFullHeatmap();
 }
 
-let _pendingPromo=null;
-function onSquareClick(r,c){
-  if(!_gameActive)return;
-  if(_turn!==_myColor)return;
-  const piece=_board[r][c];
+// ══════════════════════════════════════════
+//  클릭 처리
+// ══════════════════════════════════════════
+let _pendingPromo = null;
 
-  // 이미 선택된 상태에서 클릭
-  if(_selected){
-    const move=_legalMoves.find(m=>m.to[0]===r&&m.to[1]===c);
-    if(move){
-      // 유효한 이동 대상
-      if(move.promo){_pendingPromo=move;showPromoModal(r,c);return;}
-      doMove(move,null);return;
+function onSquareClick(r, c) {
+  if (!_gameActive) return;
+  if (_turn !== _myColor) return;
+  const piece = _board[r][c];
+  if (_selected) {
+    const move = _legalMoves.find(m => m.to[0]===r && m.to[1]===c);
+    if (move) {
+      if (move.promo) { _pendingPromo = move; showPromoModal(r, c); return; }
+      doMove(move, null); return;
     }
-    // 같은 색 다른 기물 클릭 → 재선택
-    if(piece&&piece[0]===_myColor){
-      _selected=[r,c];_legalMoves=getLegalMoves(_board,r,c,_castling,_enPassant);
-      renderBoard();return;
-    }
-    // 빈 칸 또는 이동 불가 → 선택 해제
-    _selected=null;_legalMoves=[];
-    renderBoard();return;
   }
-
-  // 선택 안 된 상태
-  if(piece&&piece[0]===_myColor){
-    _selected=[r,c];_legalMoves=getLegalMoves(_board,r,c,_castling,_enPassant);
-  }else{
-    _selected=null;_legalMoves=[];
+  if (piece && piece[0] === _myColor) {
+    _selected = [r, c];
+    _legalMoves = getLegalMoves(_board, r, c, _castling, _enPassant);
+  } else {
+    _selected = null; _legalMoves = [];
   }
   renderBoard();
 }
-function showPromoModal(r,c){
-  const modal=document.getElementById('promo-modal');
-  const pieces=_myColor==='w'?['wQ','wR','wB','wN']:['bQ','bR','bB','bN'];
-  modal.innerHTML='';
-  pieces.forEach(p=>{const div=document.createElement('div');div.className='promo-piece';const img=document.createElement('img');img.src=pieceImg(p);img.style.cssText='width:42px;height:42px;object-fit:contain;pointer-events:none;';if(p.startsWith('b'))img.style.filter='drop-shadow(0 0 1px rgba(180,180,180,0.9))';div.appendChild(img);div.onclick=()=>{modal.style.display='none';if(_pendingPromo){_pendingPromo.promoPiece=p[1];doMove(_pendingPromo,p[1]);_pendingPromo=null;}};modal.appendChild(div);});
-  const bw=document.getElementById('play-board-wrap').getBoundingClientRect();
-  const sq=bw.width/8;const flipped=_myColor==='b';
-  const ci=flipped?7-c:c,ri=flipped?7-r:r;
-  modal.style.display='flex';modal.style.left=Math.min(ci*sq,bw.width-220)+'px';modal.style.top=(ri<=3?(ri+1)*sq:ri*sq-56)+'px';
+
+function showPromoModal(r, c) {
+  const modal = document.getElementById('promo-modal');
+  const pieces = _myColor === 'w' ? ['wQ','wR','wB','wN'] : ['bQ','bR','bB','bN'];
+  modal.innerHTML = '';
+  pieces.forEach((p) => {
+    const div = document.createElement('div');
+    div.className = 'promo-piece';
+    const img = document.createElement('img');
+    img.src = pieceImg(p);
+    img.style.cssText = 'width:44px;height:44px;object-fit:contain;pointer-events:none;';
+    if (p.startsWith('b')) img.style.filter = 'drop-shadow(0 0 1px rgba(180,180,180,0.9))';
+    div.appendChild(img);
+    div.onclick = () => {
+      modal.style.display = 'none';
+      if (_pendingPromo) { _pendingPromo.promoPiece = p[1]; doMove(_pendingPromo, p[1]); _pendingPromo = null; }
+    };
+    modal.appendChild(div);
+  });
+  const boardEl = document.getElementById('play-board-wrap');
+  const rect = boardEl.getBoundingClientRect();
+  const sqSize = rect.width / 8;
+  const flipped = _myColor === 'b';
+  const ci = flipped ? 7 - c : c;
+  const ri = flipped ? 7 - r : r;
+  modal.style.display = 'flex';
+  modal.style.left = Math.min(ci * sqSize, rect.width - 224) + 'px';
+  modal.style.top  = (ri <= 3 ? (ri+1)*sqSize : ri*sqSize - 60) + 'px';
 }
 
-// ── 수 실행 ──
-function doMove(move,promoPiece){
-  const boardBefore=_board.map(r=>[...r]);
-  _board=applyMoveToBoard(_board,move,_turn);
-  if(promoPiece)move.promoPiece=promoPiece;
-  if(!_firstMoveDone){_firstMoveDone=true;clearTimeout(_firstMoveTimer);setupDisconnectLoss();}
-  // 캐슬링 권리 업데이트 (이동 전 기물 기준)
-  const movingPiece=boardBefore[move.from[0]][move.from[1]];
-  if(movingPiece===_turn+'K'){if(_turn==='w'){_castling.wK=false;_castling.wQ=false;}else{_castling.bK=false;_castling.bQ=false;}}
+// ══════════════════════════════════════════
+//  수 실행
+// ══════════════════════════════════════════
+function doMove(move, promoPiece) {
+  const boardBefore = _board.map(r=>[...r]);
+  _board = applyMoveToBoard(_board, move, _turn);
+  if (promoPiece) move.promoPiece = promoPiece;
+
+  if (!_firstMoveDone) {
+    _firstMoveDone = true;
+    clearTimeout(_firstMoveTimer);
+    setupDisconnectLoss();
+  }
+
+  if (_board[move.to[0]][move.to[1]] === _turn+'K') {
+    if (_turn==='w'){_castling.wK=false;_castling.wQ=false;}
+    else{_castling.bK=false;_castling.bQ=false;}
+  }
   if(move.from[0]===7&&move.from[1]===7)_castling.wK=false;
   if(move.from[0]===7&&move.from[1]===0)_castling.wQ=false;
   if(move.from[0]===0&&move.from[1]===7)_castling.bK=false;
   if(move.from[0]===0&&move.from[1]===0)_castling.bQ=false;
-  // 상대 룩 잡힌 경우도 처리
-  if(move.to[0]===7&&move.to[1]===7)_castling.wK=false;
-  if(move.to[0]===7&&move.to[1]===0)_castling.wQ=false;
-  if(move.to[0]===0&&move.to[1]===7)_castling.bK=false;
-  if(move.to[0]===0&&move.to[1]===0)_castling.bQ=false;
-  _enPassant=move.doublePush?[move.to[0]+(_turn==='w'?1:-1),move.to[1]]:null;
-  _lastMove=move;_selected=null;_legalMoves=[];
-  const prevTurn=_turn;_turn=enemyColor(_turn);
-  playMoveSound(move,boardBefore,prevTurn);
+
+  _enPassant = move.doublePush ? [move.to[0]-(_turn==='w'?-1:1), move.to[1]] : null;
+  _lastMove = move;
+  _selected = null; _legalMoves = [];
+
+  const prevTurn = _turn;
+  _turn = enemyColor(_turn);
+
+  playMoveSound(move, boardBefore, prevTurn);
+
   const _allM=getAllLegal(boardBefore,prevTurn,_castling,_enPassant);
-  const san=moveToSAN(boardBefore,move,prevTurn,_allM);
-  _sanMoves.push(san);
+  _sanMoves.push(moveToSAN(boardBefore,move,prevTurn,_allM));
 
-  // ── 시선 스냅샷 캡처 ──
-  captureGazeSnapshot(_sanMoves.length, san, prevTurn);
-
-  sendMove(move);updateTimerOnMove();renderBoard();checkGameEnd();
-}
-function checkGameEnd(){
-  const allMoves=getAllLegal(_board,_turn,_castling,_enPassant);
-  const inCheck=isInCheck(_board,_turn);
-  if(allMoves.length===0){const status=inCheck?'checkmate':'stalemate';if(_gameRef)_gameRef.update({status});}
+  sendMove(move);
+  updateTimerOnMove();
+  renderBoard();
+  checkGameEnd();
 }
 
-// ── 사운드 ──
-const _sounds={};
-const _sf={'move':'sound/chess_move.mp3','capture':'sound/chess_capture.mp3','castle':'sound/chess_castle.mp3','check':'sound/chess_check.mp3','checkmate':'sound/chess_checkmate.mp3','stalemate':'sound/chess_stalemate.mp3','start':'sound/chess_start.mp3','over':'sound/chess_over.mp3'};
-for(const[k,v]of Object.entries(_sf)){const a=new Audio(v);a.preload='auto';_sounds[k]=a;}
-function playSound(t){const a=_sounds[t];if(!a)return;a.cloneNode().play().catch(()=>{});}
-function playMoveSound(move,bb,turn){
-  const ba=applyMoveToBoard(bb.map(r=>[...r]),move,turn);const enemy=enemyColor(turn);
-  const ic=isInCheck(ba,enemy),nm=getAllLegal(ba,enemy,_castling,_enPassant).length===0;
-  if(ic&&nm)playSound('checkmate');else if(!ic&&nm)playSound('stalemate');else if(ic)playSound('check');else if(move.castle)playSound('castle');else if(bb[move.to[0]][move.to[1]]||move.enPassant)playSound('capture');else playSound('move');
+function checkGameEnd() {
+  const allMoves = getAllLegal(_board, _turn, _castling, _enPassant);
+  const inCheck  = isInCheck(_board, _turn);
+  if (allMoves.length === 0) {
+    const status = inCheck ? 'checkmate' : 'stalemate';
+    if (_gameRef) _gameRef.update({ status });
+  }
 }
 
-// ── 타이머 ──
-function fmtTime(s){s=Math.max(0,s);return`${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;}
-let _lastTickTime=null;
-function startTimer(){
-  clearInterval(_timerInt);_lastTickTime=Date.now();
-  _timerInt=setInterval(()=>{
-    if(!_gameActive)return;
-    const now=Date.now(),delta=(now-_lastTickTime)/1000;_lastTickTime=now;
-    if(_turn==='w')_wTime=Math.max(0,_wTime-delta);else _bTime=Math.max(0,_bTime-delta);
+// ══════════════════════════════════════════
+//  사운드
+// ══════════════════════════════════════════
+const _sounds = {};
+const _soundFiles2 = {
+  move:'sound/chess_move.mp3', capture:'sound/chess_capture.mp3',
+  castle:'sound/chess_castle.mp3', check:'sound/chess_check.mp3',
+  checkmate:'sound/chess_checkmate.mp3', stalemate:'sound/chess_stalemate.mp3',
+  start:'sound/chess_start.mp3', over:'sound/chess_over.mp3',
+};
+for (const [k,v] of Object.entries(_soundFiles2)) {
+  const a = new Audio(v); a.preload='auto'; _sounds[k]=a;
+}
+function playSound(type) {
+  const a = _sounds[type]; if (!a) return;
+  a.cloneNode().play().catch(()=>{});
+}
+function playMoveSound(move, boardBefore, turn) {
+  const boardAfter = applyMoveToBoard(boardBefore.map(r=>[...r]), move, turn);
+  const enemy = enemyColor(turn);
+  const inCheck = isInCheck(boardAfter, enemy);
+  const noMoves = getAllLegal(boardAfter, enemy, _castling, _enPassant).length === 0;
+  if      (inCheck && noMoves) playSound('checkmate');
+  else if (!inCheck && noMoves) playSound('stalemate');
+  else if (inCheck)             playSound('check');
+  else if (move.castle)         playSound('castle');
+  else if (boardBefore[move.to[0]][move.to[1]] || move.enPassant) playSound('capture');
+  else                          playSound('move');
+}
+
+// ══════════════════════════════════════════
+//  타이머
+// ══════════════════════════════════════════
+function fmtTime(s) {
+  s = Math.max(0, s);
+  return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+}
+let _lastTickTime = null;
+
+function startTimer() {
+  clearInterval(_timerInt);
+  _lastTickTime = Date.now();
+  _timerInt = setInterval(() => {
+    if (!_gameActive) return;
+    const now = Date.now();
+    const delta = (now - _lastTickTime) / 1000;
+    _lastTickTime = now;
+    if (_turn === 'w') _wTime = Math.max(0, _wTime - delta);
+    else               _bTime = Math.max(0, _bTime - delta);
     updateTimerDisplay();
-    if(_wTime<=0||_bTime<=0){const lc=_wTime<=0?'w':'b';const status=lc===_myColor?'lose_time':'win_time';if(_gameRef)_gameRef.update({status});}
-  },100);
+    if (_wTime <= 0 || _bTime <= 0) {
+      const loserColor = _wTime <= 0 ? 'w' : 'b';
+      const status = loserColor === _myColor ? 'lose_time' : 'win_time';
+      if (_gameRef) _gameRef.update({ status });
+    }
+  }, 100);
 }
-function updateTimerDisplay(){
-  const mt=_myColor==='w'?_wTime:_bTime,ot=_myColor==='w'?_bTime:_wTime;
-  const me=document.getElementById('my-timer'),oe=document.getElementById('opp-timer');
-  if(me){me.textContent=fmtTime(mt);me.className='p-timer'+(_turn===_myColor?' active':'')+(mt<30?' low':'');}
-  if(oe){oe.textContent=fmtTime(ot);oe.className='p-timer'+(_turn!==_myColor?' active':'')+(ot<30?' low':'');}
-}
-function updateTimerOnMove(){if(_gameRef)_gameRef.update({whiteTime:_wTime,blackTime:_bTime,lastMoveAt:Date.now()});}
 
-// ── Firebase 매칭 ──
-const GAME_TIME=600;
-let _queueRef=null,_searchInt=null;
-async function startMatchmaking(){
-  if(!_user||_gameActive)return;
+function updateTimerDisplay() {
+  const myTime  = _myColor === 'w' ? _wTime : _bTime;
+  const oppTime = _myColor === 'w' ? _bTime : _wTime;
+  const myEl  = document.getElementById('my-timer');
+  const oppEl = document.getElementById('opp-timer');
+  if (myEl) {
+    myEl.textContent = fmtTime(myTime);
+    myEl.className = 'p-timer' + (_turn===_myColor?' active':'') + (myTime<30?' low':'');
+  }
+  if (oppEl) {
+    oppEl.textContent = fmtTime(oppTime);
+    oppEl.className = 'p-timer' + (_turn!==_myColor?' active':'') + (oppTime<30?' low':'');
+  }
+}
+
+function updateTimerOnMove() {
+  if (_gameRef) _gameRef.update({ whiteTime: _wTime, blackTime: _bTime, lastMoveAt: Date.now() });
+}
+
+// ══════════════════════════════════════════
+//  Firebase 매칭 & 대국
+// ══════════════════════════════════════════
+const GAME_TIME = 600;
+let _queueRef = null, _searchInt = null;
+
+async function startMatchmaking() {
+  if (!_user || _gameActive) return;
+  // 아이트래커가 켜져 있으면 게임 시작 시 리셋
+  if (ET.running) { ET.reset(); }
   showScreen('searching');
-  let elapsed=0;
-  _searchInt=setInterval(()=>{elapsed++;const el=document.getElementById('search-elapsed');if(el)el.textContent=elapsed+'초 경과';},1000);
-  const myName=_user.displayName||_user.email.split('@')[0];
-  const queue=_rtDb.ref('matchmaking_queue');
-  const myRef=queue.push();_queueRef=myRef;
-  await myRef.set({uid:_user.uid,displayName:myName,joinedAt:Date.now()});
-  const snap=await queue.orderByChild('joinedAt').once('value');
-  let matched=false;
-  snap.forEach(child=>{
-    if(matched)return;if(child.key===myRef.key)return;
-    const data=child.val();if(!data||data.uid===_user.uid||data.gameId)return;
-    matched=true;
-    const myColor=Math.random()<0.5?'w':'b',oppColor=myColor==='w'?'b':'w';
-    const gameId=queue.push().key;
-    const gameData={white:myColor==='w'?_user.uid:data.uid,black:myColor==='b'?_user.uid:data.uid,whiteName:myColor==='w'?myName:data.displayName,blackName:myColor==='b'?myName:data.displayName,status:'playing',whiteTime:GAME_TIME,blackTime:GAME_TIME,lastMoveAt:Date.now(),createdAt:Date.now()};
-    _rtDb.ref('games/'+gameId).set(gameData);child.ref.update({gameId,color:oppColor});
-    myRef.remove();_queueRef=null;joinGame(gameId,myColor,gameData);
+  let elapsed = 0;
+  _searchInt = setInterval(() => {
+    elapsed++;
+    const el = document.getElementById('search-elapsed');
+    if (el) el.textContent = elapsed + '초 경과';
+  }, 1000);
+  const myName = _user.displayName || _user.email.split('@')[0];
+  const queue  = _rtDb.ref('matchmaking_queue');
+  const myRef  = queue.push();
+  _queueRef = myRef;
+  await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: Date.now() });
+  const snap = await queue.orderByChild('joinedAt').once('value');
+  let matched = false;
+  snap.forEach(child => {
+    if (matched) return;
+    if (child.key === myRef.key) return;
+    const data = child.val();
+    if (!data || data.uid === _user.uid || data.gameId) return;
+    matched = true;
+    const myColor  = Math.random() < 0.5 ? 'w' : 'b';
+    const oppColor = myColor === 'w' ? 'b' : 'w';
+    const gameId   = queue.push().key;
+    const gameData = {
+      white: myColor==='w'?_user.uid:data.uid, black: myColor==='b'?_user.uid:data.uid,
+      whiteName: myColor==='w'?myName:data.displayName, blackName: myColor==='b'?myName:data.displayName,
+      status:'playing', whiteTime:GAME_TIME, blackTime:GAME_TIME,
+      lastMoveAt:Date.now(), createdAt:Date.now(),
+    };
+    _rtDb.ref('games/'+gameId).set(gameData);
+    child.ref.update({ gameId, color: oppColor });
+    myRef.remove(); _queueRef = null;
+    joinGame(gameId, myColor, gameData);
   });
-  if(!matched){
-    _queueRef.on('value',snap2=>{
-      const d=snap2.val();if(!d||!d.gameId)return;
-      _queueRef.off();const waitRef=_queueRef;_queueRef=null;
-      _rtDb.ref('games/'+d.gameId).once('value').then(gs=>{if(gs.val()){waitRef.remove();joinGame(d.gameId,d.color,gs.val());}});
+  if (!matched) {
+    _queueRef.on('value', snap2 => {
+      const d = snap2.val();
+      if (!d || !d.gameId) return;
+      _queueRef.off();
+      const waitRef = _queueRef; _queueRef = null;
+      _rtDb.ref('games/'+d.gameId).once('value').then(gs => {
+        if (gs.val()) { waitRef.remove(); joinGame(d.gameId, d.color, gs.val()); }
+      });
     });
   }
 }
-function cancelMatchmaking(){
-  clearInterval(_searchInt);clearTimeout(_firstMoveTimer);cancelDisconnectLoss();stopHeartbeat(_gameId,_myColor);
-  if(_queueRef){_queueRef.remove();_queueRef=null;}showScreen('lobby');
-}
-function joinGame(gameId,myColor,gameData){
+
+function cancelMatchmaking() {
   clearInterval(_searchInt);
-  _myColor=myColor;_gameId=gameId;
-  _board=parseFen(INIT_FEN);_turn='w';_castling={wK:true,wQ:true,bK:true,bQ:true};
-  _enPassant=null;_selected=null;_legalMoves=[];_lastMove=null;_wTime=GAME_TIME;_bTime=GAME_TIME;
-  _gameActive=true;_lastTickTime=Date.now();_sanMoves=[];
-
-  // 시선 데이터 초기화
-  resetEtData();
-
-  const myName=myColor==='w'?gameData.whiteName:gameData.blackName;
-  const oppName=myColor==='w'?gameData.blackName:gameData.whiteName;
-  document.getElementById('my-name-el').textContent=myName||'나';
-  document.getElementById('opp-name-el').textContent=oppName||'상대방';
-  document.getElementById('my-color-el').textContent=myColor==='w'?'⬜ 백':'⬛ 흑';
-  document.getElementById('opp-color-el').textContent=myColor==='w'?'⬛ 흑':'⬜ 백';
-  document.getElementById('my-avatar-el').textContent=(myName||'나')[0].toUpperCase();
-  document.getElementById('opp-avatar-el').textContent=(oppName||'?')[0].toUpperCase();
-
-  showScreen('playing');renderBoard();startTimer();playSound('start');
-
-  if (etUseOnGame) {
-    const panel = document.getElementById('et-panel');
-    panel.classList.remove('collapsed');
-    panel.style.display = 'flex';
-    setTimeout(() => resizeEtBoard(), 50);
-  }
-  if (_wgStarted && !etState.tracking) {
-    etState.tracking=true; etState.sessionStart=Date.now(); etState.sessionEnd=null;
-    etState.calibrated=true;
-    etGazeDot.style.display='block'; showGazeCursor();
-    document.getElementById('btn-et-track').disabled=true;
-    document.getElementById('btn-et-stop').disabled=false;
-    setEtStatusDot('active');
-    showToast('시선 추적 자동 시작됨!');
-  }
-
-  _firstMoveDone=false;
-  _firstMoveTimer=setTimeout(()=>{if(_gameActive&&!_firstMoveDone){if(_gameRef)_gameRef.update({status:'draw_no_move'});}},10000);
-
-  _gameRef=_rtDb.ref('games/'+gameId);
-  startHeartbeat(gameId,myColor);
-  _disconnectRef=null;
-  _gameRef.child('moves').on('child_added',snap=>{const d=snap.val();if(!d||d.uid===_user.uid)return;applyRemoteMove(d);});
-  _gameRef.child('status').on('value',snap=>{const s=snap.val();if(s&&s!=='playing')endGame(s);});
-  _gameRef.child('drawOffer').on('value',snap=>{
-    const offer=snap.val(),bar=document.getElementById('draw-offer-bar'),btn=document.getElementById('btn-draw');
-    if(offer&&offer!==_myColor){if(bar)bar.classList.add('show');}
-    else{if(bar)bar.classList.remove('show');if(!offer&&btn){btn.disabled=false;btn.textContent='½ 무승부 제안';}}
-  });
-  _gameRef.child('whiteTime').on('value',snap=>{if(snap.val()!==null&&_turn!=='w')_wTime=snap.val();});
-  _gameRef.child('blackTime').on('value',snap=>{if(snap.val()!==null&&_turn!=='b')_bTime=snap.val();});
-}
-function applyRemoteMove(d){
-  const allMoves=getAllLegal(_board,_turn,_castling,_enPassant);
-  const move=allMoves.find(m=>m.from[0]===d.from[0]&&m.from[1]===d.from[1]&&m.to[0]===d.to[0]&&m.to[1]===d.to[1]);
-  if(!move)return;if(d.promo)move.promoPiece=d.promo;doMove(move,d.promo||null);
-}
-function sendMove(move){if(!_gameRef||!_user)return;_gameRef.child('moves').push({uid:_user.uid,from:move.from,to:move.to,promo:move.promoPiece||null,at:Date.now()});}
-
-let _drawOfferTimeout=null;
-function offerDraw(){if(!_gameRef||!_gameActive)return;const btn=document.getElementById('btn-draw');if(btn){btn.disabled=true;btn.textContent='½ 제안 중...';}  _gameRef.update({drawOffer:_myColor,drawOfferAt:Date.now()});_drawOfferTimeout=setTimeout(()=>{if(_gameRef)_gameRef.update({drawOffer:null});if(btn){btn.disabled=false;btn.textContent='½ 무승부 제안';}},30000);}
-function acceptDraw(){hidDrawOfferBar();if(_gameRef)_gameRef.update({status:'draw',drawOffer:null});}
-function declineDraw(){hidDrawOfferBar();if(_gameRef)_gameRef.update({drawOffer:null});}
-function hidDrawOfferBar(){const bar=document.getElementById('draw-offer-bar');if(bar)bar.classList.remove('show');}
-function resignGame(){if(!_gameRef||!_gameActive)return;cancelDisconnectLoss();const status=_myColor==='w'?'resign_w':'resign_b';_gameRef.update({status});}
-
-function setupDisconnectLoss(){if(!_gameRef||!_user)return;const status=_myColor==='w'?'resign_w':'resign_b';_disconnectRef=_gameRef;_disconnectRef.onDisconnect().update({status});}
-function cancelDisconnectLoss(){if(_disconnectRef){_disconnectRef.onDisconnect().cancel();_disconnectRef=null;}}
-
-function startHeartbeat(gameId,myColor){
-  const oppColor=myColor==='w'?'b':'w';
-  const myHbRef=_rtDb.ref(`games/${gameId}/heartbeat/${myColor}`);
-  const oppHbRef=_rtDb.ref(`games/${gameId}/heartbeat/${oppColor}`);
-  clearInterval(_heartbeatInt);
-  _heartbeatInt=setInterval(()=>{if(!_gameActive)return;myHbRef.set(Date.now());},3000);
-  myHbRef.set(Date.now());
-  _oppLastSeen=Date.now();
-  oppHbRef.on('value',snap=>{if(snap.val())_oppLastSeen=snap.val();});
-  clearInterval(_oppHeartbeatInt);
-  _oppHeartbeatInt=setInterval(()=>{
-    if(!_gameActive||!_firstMoveDone)return;
-    const elapsed=Date.now()-_oppLastSeen;
-    if(elapsed>10000){const status=oppColor==='w'?'resign_w':'resign_b';if(_gameRef)_gameRef.update({status});}
-  },3000);
-}
-function stopHeartbeat(gameId,myColor){
-  clearInterval(_heartbeatInt);clearInterval(_oppHeartbeatInt);
-  _heartbeatInt=null;_oppHeartbeatInt=null;
-  if(gameId&&myColor)_rtDb.ref(`games/${gameId}/heartbeat/${myColor}`).remove();
+  clearTimeout(_firstMoveTimer);
+  cancelDisconnectLoss();
+  stopHeartbeat(_gameId, _myColor);
+  if (_queueRef) { _queueRef.remove(); _queueRef = null; }
+  showScreen('lobby');
 }
 
-function endGame(status){
-  if(!_gameActive)return;
-  _gameActive=false;clearInterval(_timerInt);clearTimeout(_firstMoveTimer);
-  cancelDisconnectLoss();stopHeartbeat(_gameId,_myColor);
-  if(_gameRef)_gameRef.off();playSound('over');
+function joinGame(gameId, myColor, gameData) {
+  clearInterval(_searchInt);
+  _myColor = myColor; _gameId = gameId;
+  _board = parseFen(INIT_FEN);
+  _turn = 'w'; _castling = {wK:true,wQ:true,bK:true,bQ:true};
+  _enPassant = null; _selected = null; _legalMoves = [];
+  _lastMove = null; _wTime = GAME_TIME; _bTime = GAME_TIME;
+  _gameActive = true;
+  _lastTickTime = Date.now();
+  _sanMoves = [];
 
-  // Eye Tracker 중지
-  if(etState.tracking){
-    if(etState.currentSquare&&etState.squareEnteredAt){
-      const d=Date.now()-etState.squareEnteredAt;
-      if(d>=etSettings.minDwell)etState.gazeData[etState.currentSquare]=(etState.gazeData[etState.currentSquare]||0)+d;
+  const myName  = myColor==='w' ? gameData.whiteName : gameData.blackName;
+  const oppName = myColor==='w' ? gameData.blackName  : gameData.whiteName;
+
+  document.getElementById('my-name-el').textContent    = myName  || '나';
+  document.getElementById('opp-name-el').textContent   = oppName || '상대방';
+  document.getElementById('my-color-el').textContent   = myColor==='w' ? '⬜ 백' : '⬛ 흑';
+  document.getElementById('opp-color-el').textContent  = myColor==='w' ? '⬛ 흑' : '⬜ 백';
+  document.getElementById('my-avatar-el').textContent  = (myName  ||'나')[0].toUpperCase();
+  document.getElementById('opp-avatar-el').textContent = (oppName||'?')[0].toUpperCase();
+
+  showScreen('playing');
+  renderBoard();
+  startTimer();
+  playSound('start');
+
+  _firstMoveDone = false;
+  _firstMoveTimer = setTimeout(() => {
+    if (_gameActive && !_firstMoveDone) {
+      if (_gameRef) _gameRef.update({ status: 'draw_no_move' });
     }
-    etState.sessionEnd=Date.now();
-    etState.sessionEnd=Date.now();
-    etState.tracking=false;
-    etGazeDot.style.display='none';
-    hideGazeCursor();
-    document.getElementById('btn-et-track').disabled=false;
-    document.getElementById('btn-et-stop').disabled=true;
+  }, 10000);
+
+  _gameRef = _rtDb.ref('games/'+gameId);
+  startHeartbeat(gameId, myColor);
+  _disconnectRef = null;
+
+  _gameRef.child('moves').on('child_added', snap => {
+    const d = snap.val();
+    if (!d || d.uid === _user.uid) return;
+    applyRemoteMove(d);
+  });
+  _gameRef.child('status').on('value', snap => {
+    const s = snap.val();
+    if (s && s !== 'playing') endGame(s);
+  });
+  _gameRef.child('drawOffer').on('value', snap => {
+    const offer = snap.val();
+    const bar   = document.getElementById('draw-offer-bar');
+    const btn   = document.getElementById('btn-draw');
+    if (offer && offer !== _myColor) {
+      if (bar) bar.classList.add('show');
+    } else {
+      if (bar) bar.classList.remove('show');
+      if (!offer && btn) { btn.disabled = false; btn.textContent = '½ 무승부 제안'; }
+    }
+  });
+  _gameRef.child('whiteTime').on('value', snap => { if (snap.val() !== null && _turn !== 'w') _wTime = snap.val(); });
+  _gameRef.child('blackTime').on('value', snap => { if (snap.val() !== null && _turn !== 'b') _bTime = snap.val(); });
+}
+
+function applyRemoteMove(d) {
+  const allMoves = getAllLegal(_board, _turn, _castling, _enPassant);
+  const move = allMoves.find(m =>
+    m.from[0]===d.from[0] && m.from[1]===d.from[1] &&
+    m.to[0]===d.to[0]     && m.to[1]===d.to[1]
+  );
+  if (!move) return;
+  if (d.promo) move.promoPiece = d.promo;
+  doMove(move, d.promo || null);
+}
+
+function sendMove(move) {
+  if (!_gameRef || !_user) return;
+  _gameRef.child('moves').push({
+    uid: _user.uid, from: move.from, to: move.to,
+    promo: move.promoPiece || null, at: Date.now(),
+  });
+}
+
+let _drawOfferTimeout = null;
+
+function offerDraw() {
+  if (!_gameRef || !_gameActive) return;
+  const btn = document.getElementById('btn-draw');
+  if (btn) { btn.disabled = true; btn.textContent = '½ 제안 중...'; }
+  _gameRef.update({ drawOffer: _myColor, drawOfferAt: Date.now() });
+  _drawOfferTimeout = setTimeout(() => {
+    if (_gameRef) _gameRef.update({ drawOffer: null });
+    if (btn) { btn.disabled = false; btn.textContent = '½ 무승부 제안'; }
+  }, 30000);
+}
+
+function acceptDraw() {
+  hidDrawOfferBar();
+  if (_gameRef) _gameRef.update({ status: 'draw', drawOffer: null });
+}
+
+function declineDraw() {
+  hidDrawOfferBar();
+  if (_gameRef) _gameRef.update({ drawOffer: null });
+}
+
+function hidDrawOfferBar() {
+  const bar = document.getElementById('draw-offer-bar');
+  if (bar) bar.classList.remove('show');
+}
+
+function resignGame() {
+  if (!_gameRef || !_gameActive) return;
+  cancelDisconnectLoss();
+  const status = _myColor === 'w' ? 'resign_w' : 'resign_b';
+  _gameRef.update({ status });
+}
+
+function setupDisconnectLoss() {
+  if (!_gameRef || !_user) return;
+  const status = _myColor === 'w' ? 'resign_w' : 'resign_b';
+  _disconnectRef = _gameRef;
+  _disconnectRef.onDisconnect().update({ status });
+}
+function cancelDisconnectLoss() {
+  if (_disconnectRef) { _disconnectRef.onDisconnect().cancel(); _disconnectRef = null; }
+}
+
+// ══════════════════════════════════════════
+//  Heartbeat
+// ══════════════════════════════════════════
+function startHeartbeat(gameId, myColor) {
+  const oppColor = myColor === 'w' ? 'b' : 'w';
+  const myHbRef  = _rtDb.ref(`games/${gameId}/heartbeat/${myColor}`);
+  const oppHbRef = _rtDb.ref(`games/${gameId}/heartbeat/${oppColor}`);
+  clearInterval(_heartbeatInt);
+  _heartbeatInt = setInterval(() => {
+    if (!_gameActive) return;
+    myHbRef.set(Date.now());
+  }, 3000);
+  myHbRef.set(Date.now());
+  _oppLastSeen = Date.now();
+  oppHbRef.on('value', snap => { if (snap.val()) _oppLastSeen = snap.val(); });
+  clearInterval(_oppHeartbeatInt);
+  _oppHeartbeatInt = setInterval(() => {
+    if (!_gameActive || !_firstMoveDone) return;
+    const elapsed = Date.now() - _oppLastSeen;
+    if (elapsed > 10000) {
+      const status = oppColor === 'w' ? 'resign_w' : 'resign_b';
+      if (_gameRef) _gameRef.update({ status });
+    }
+  }, 3000);
+}
+
+function stopHeartbeat(gameId, myColor) {
+  clearInterval(_heartbeatInt);
+  clearInterval(_oppHeartbeatInt);
+  _heartbeatInt = null; _oppHeartbeatInt = null;
+  if (gameId && myColor) { _rtDb.ref(`games/${gameId}/heartbeat/${myColor}`).remove(); }
+}
+
+// ══════════════════════════════════════════
+//  게임 종료
+// ══════════════════════════════════════════
+function endGame(status) {
+  if (!_gameActive) return;
+  _gameActive = false;
+  clearInterval(_timerInt);
+  clearTimeout(_firstMoveTimer);
+  cancelDisconnectLoss();
+  stopHeartbeat(_gameId, _myColor);
+  if (_gameRef) _gameRef.off();
+  playSound('over');
+  saveRecord(status);
+
+  let emoji='🏁', title='대국 종료', reason='';
+  if (status==='checkmate') {
+    const winner = enemyColor(_turn);
+    if (winner===_myColor) { emoji='🏆'; title='승리!'; reason='체크메이트'; }
+    else { emoji='😔'; title='패배'; reason='체크메이트'; }
+  } else if (status==='resign_w') {
+    if (_myColor==='b') { emoji='🏆'; title='승리!'; reason='상대방 기권'; }
+    else { emoji='😔'; title='패배'; reason='기권'; }
+  } else if (status==='resign_b') {
+    if (_myColor==='w') { emoji='🏆'; title='승리!'; reason='상대방 기권'; }
+    else { emoji='😔'; title='패배'; reason='기권'; }
+  } else if (status==='win_time') {
+    emoji='🏆'; title='승리!'; reason='상대방 시간 초과';
+  } else if (status==='lose_time') {
+    emoji='😔'; title='패배'; reason='시간 초과';
+  } else if (status==='stalemate') {
+    emoji='🤝'; title='무승부'; reason='스테일메이트';
+  } else if (status==='draw' || status==='draw_no_move') {
+    emoji='🤝'; title='무승부'; reason= status==='draw_no_move' ? '첫 수 미입력' : '합의 무승부';
   }
 
-  saveRecord(status);
-  let emoji='🏁',title='대국 종료',reason='';
-  if(status==='checkmate'){const winner=enemyColor(_turn);if(winner===_myColor){emoji='🏆';title='승리!';reason='체크메이트';}else{emoji='😔';title='패배';reason='체크메이트';}}
-  else if(status==='resign_w'){if(_myColor==='b'){emoji='🏆';title='승리!';reason='상대방 기권';}else{emoji='😔';title='패배';reason='기권';}}
-  else if(status==='resign_b'){if(_myColor==='w'){emoji='🏆';title='승리!';reason='상대방 기권';}else{emoji='😔';title='패배';reason='기권';}}
-  else if(status==='win_time'){emoji='🏆';title='승리!';reason='상대방 시간 초과';}
-  else if(status==='lose_time'){emoji='😔';title='패배';reason='시간 초과';}
-  else if(status==='stalemate'){emoji='🤝';title='무승부';reason='스테일메이트';}
-  else if(status==='draw'||status==='draw_no_move'){emoji='🤝';title='무승부';reason=status==='draw_no_move'?'첫 수 미입력':'합의 무승부';}
-  document.getElementById('result-emoji').textContent=emoji;
-  document.getElementById('result-title').textContent=title;
-  document.getElementById('result-reason').textContent=reason;
+  document.getElementById('result-emoji').textContent = emoji;
+  document.getElementById('result-title').textContent = title;
+  document.getElementById('result-reason').textContent = reason;
+
+  // ── 아이트래커 결과 통계 표시 ──
+  if (ET.running && ET.totalSamples > 30) {
+    const stats = ET.getStats();
+    document.getElementById('et-result-stats').style.display = 'block';
+    document.getElementById('et-stat-focus').textContent  = stats.focusAvg + '%';
+    document.getElementById('et-stat-away').textContent   = stats.awayCount + '회';
+    document.getElementById('et-stat-board').textContent  = stats.boardPct + '%';
+    document.getElementById('et-stat-hotzone').textContent = stats.hotZone;
+  }
+
   showScreen('result');
 }
 
-async function saveRecord(result){
-  if(_gameId){try{await _rtDb.ref('games/'+_gameId).remove();}catch(e){}}
-  try{const qSnap=await _rtDb.ref('matchmaking_queue').orderByChild('uid').equalTo(_user.uid).once('value');qSnap.forEach(child=>{child.ref.remove();});}catch(e){}
-  if(!_fbDb||!_user)return;
-  try{
-    let pgn='';
-    _sanMoves.forEach((san,i)=>{if(i%2===0)pgn+=(Math.floor(i/2)+1)+'. ';pgn+=san+' ';});
-    pgn=pgn.trim();
-    let resultStr='*';
-    if(result==='checkmate') resultStr=_myColor===enemyColor(_turn)?'1-0':'0-1';
-    if(result==='resign_w')  resultStr='0-1';
-    if(result==='resign_b')  resultStr='1-0';
-    if(result==='win_time')  resultStr=_myColor==='w'?'1-0':'0-1';
-    if(result==='lose_time') resultStr=_myColor==='w'?'0-1':'1-0';
-    if(result==='stalemate'||result==='draw')resultStr='1/2-1/2';
-    const myName=_user.displayName||_user.email.split('@')[0];
-    const oppName=document.getElementById('opp-name-el')?.textContent||'상대방';
-    const whiteName=_myColor==='w'?myName:oppName, blackName=_myColor==='b'?myName:oppName;
-    const today=new Date().toISOString().slice(0,10);
-    const fullPgn=`[White "${whiteName}"]\n[Black "${blackName}"]\n[Result "${resultStr}"]\n[Date "${today}"]\n\n${pgn} ${resultStr}`;
+async function saveRecord(result) {
+  if (_gameId) { try { await _rtDb.ref('games/' + _gameId).remove(); } catch(e){} }
+  try {
+    const qSnap = await _rtDb.ref('matchmaking_queue').orderByChild('uid').equalTo(_user.uid).once('value');
+    qSnap.forEach(child => { child.ref.remove(); });
+  } catch(e){}
+  if (!_fbDb || !_user) return;
+  try {
+    let pgn = '';
+    _sanMoves.forEach((san, i) => {
+      if (i % 2 === 0) pgn += (Math.floor(i/2)+1) + '. ';
+      pgn += san + ' ';
+    });
+    pgn = pgn.trim();
+    let resultStr = '*';
+    if (result==='checkmate')  resultStr = _myColor===enemyColor(_turn)?'1-0':'0-1';
+    if (result==='resign_w')   resultStr = '0-1';
+    if (result==='resign_b')   resultStr = '1-0';
+    if (result==='win_time')   resultStr = _myColor==='w'?'1-0':'0-1';
+    if (result==='lose_time')  resultStr = _myColor==='w'?'0-1':'1-0';
+    if (result==='stalemate'||result==='draw') resultStr = '1/2-1/2';
+    const myName   = _user.displayName || _user.email.split('@')[0];
+    const oppName  = document.getElementById('opp-name-el')?.textContent || '상대방';
+    const whiteName = _myColor==='w' ? myName : oppName;
+    const blackName = _myColor==='b' ? myName : oppName;
+    const today = new Date().toISOString().slice(0,10);
+    const fullPgn = `[White "${whiteName}"]\n[Black "${blackName}"]\n[Result "${resultStr}"]\n[Date "${today}"]\n\n${pgn} ${resultStr}`;
 
-    // 시선 데이터 포함 저장
-    const gazeExport = buildGazeExport();
-    const hasGazeData = Object.keys(etState.gazeData).length > 0;
+    // 아이트래커 통계도 함께 저장
+    let etData = null;
+    if (ET.running && ET.totalSamples > 30) {
+      etData = ET.getStats();
+    }
 
     await _fbDb.collection('game_records').add({
-      uid:_user.uid, playerName:myName, gameId:_gameId||'',
-      myColor:_myColor, whiteName, blackName,
-      result:resultStr, resultRaw:result,
-      moveCount:_sanMoves.length, pgn:fullPgn,
-      // 시선 데이터
-      gazeData: hasGazeData ? etState.gazeData : null,
-      gazeTopSquares: hasGazeData ? gazeExport.topSquares : null,
-      gazeMoveSnapshots: hasGazeData ? etState.moveSnapshots : null,
-      gazeSessionDuration: gazeExport.sessionDuration,
-      playedAt:firebase.firestore.FieldValue.serverTimestamp(),
+      uid: _user.uid, playerName: myName, gameId: _gameId || '',
+      myColor: _myColor, whiteName, blackName,
+      result: resultStr, resultRaw: result,
+      moveCount: _sanMoves.length, pgn: fullPgn,
+      eyeTracking: etData,
+      playedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-
-    // 결과 화면 배지 표시
-    if (hasGazeData) {
-      document.getElementById('result-et-badge').classList.add('show');
-      document.getElementById('btn-dl-gaze').classList.add('show');
-    }
-  }catch(e){console.warn('기보 저장 실패',e);}
+  } catch(e) { console.warn('기보 저장 실패', e); }
 }
 
-function showScreen(name){
-  ['lobby','searching','playing','result'].forEach(s=>{
-    const el=document.getElementById('screen-'+s);
-    if(el)el.style.display=s===name?'flex':'none';
+// ══════════════════════════════════════════
+//  화면 전환
+// ══════════════════════════════════════════
+function showScreen(name) {
+  ['lobby','searching','playing','result'].forEach(s => {
+    const el = document.getElementById('screen-'+s);
+    if (el) el.style.display = s===name ? 'flex' : 'none';
   });
+  if (name === 'playing') {
+    document.body.classList.add('playing');
+  } else {
+    document.body.classList.remove('playing');
+    // 히트맵 숨기기
+    const canvas = document.getElementById('et-heatmap-canvas');
+    if (canvas) canvas.classList.remove('show');
+    ET.showHeatmap = false;
+    const btn = document.getElementById('et-btn-heatmap');
+    if (btn) btn.textContent = '히트맵';
+  }
+  // ET 패널: 로비에선 숨기고 그 외엔 표시
+  const etPanel = document.getElementById('et-panel');
+  if (etPanel) {
+    etPanel.style.display = (name === 'lobby') ? 'none' : (ET.enabled ? 'block' : 'none');
+  }
 }
-function showToast(msg,duration=2500){
-  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),duration);
+
+// ── 토스트 ──
+function showToast(msg, duration=2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
 }
+
+// ── 초기화 ──
+window.addEventListener('resize', () => {
+  if (ET.showHeatmap) drawFullHeatmap();
+});
+
+// ET 패널 초기 숨기기
+document.getElementById('et-panel').style.display = 'none';
 </script>
-
-<!-- 모바일 하단 내비 -->
-<nav id="mobile-bottom-nav">
-  <a class="mob-nav-item" href="/"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z"/></svg></span><span>분석</span></a>
-  <a class="mob-nav-item active" href="/play.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></span><span>대국</span></a>
-  <a class="mob-nav-item" href="/puzzle.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg></span><span>퍼즐</span></a>
-  <a class="mob-nav-item" href="/opening-explorer.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></span><span>탐색기</span></a>
-  <a class="mob-nav-item" href="/records.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z"/></svg></span><span>기록</span></a>
-</nav>
-
 </body>
 </html>
