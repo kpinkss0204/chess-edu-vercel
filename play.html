@@ -961,13 +961,13 @@ input[type=range] { width: 80px; accent-color: #00ff87; }
         <div class="et-section-body">
           <div class="et-setting-row">
             <label>스무딩</label>
-            <span class="et-setting-val" id="et-smooth-val">7</span>
-            <input type="range" id="et-smooth" min="1" max="20" value="7">
+            <span class="et-setting-val" id="et-smooth-val">12</span>
+            <input type="range" id="et-smooth" min="1" max="30" value="12">
           </div>
           <div class="et-setting-row">
             <label>최소 응시(ms)</label>
-            <span class="et-setting-val" id="et-dwell-val">80</span>
-            <input type="range" id="et-dwell" min="20" max="300" step="20" value="80">
+            <span class="et-setting-val" id="et-dwell-val">120</span>
+            <input type="range" id="et-dwell" min="20" max="500" step="20" value="120">
           </div>
           <div class="et-setting-row">
             <label>히트맵 투명도</label>
@@ -1047,7 +1047,12 @@ let etState = {
   prevMoveGaze:   {},
 };
 
-let etSettings = { smoothing: 4, minDwell: 80, heatAlpha: 0.5 };
+let etSettings = { smoothing: 12, minDwell: 120, heatAlpha: 0.5 };
+// 시선 안정화: 이전 스크린 좌표 대비 이 픽셀 이상 벗어나야 업데이트
+const ET_DEAD_ZONE_PX = 18;
+// 칸 전환 디바운스: N 프레임 연속으로 같은 칸을 봐야 실제로 그 칸으로 인정
+const ET_SQUARE_DEBOUNCE_FRAMES = 4;
+let _etPendingSq = null, _etPendingCount = 0;
 let etCalibPoints = [], etCalibMatrix = null, etCalibIdx = 0;
 let etCalibListening = false, etLastEyeRaw = null;
 let etFaceMesh = null, etMpCamera = null;
@@ -1286,8 +1291,13 @@ function onEtFaceMeshResults(results) {
     const sc = etEyeToScreen(etLastEyeRaw.x, etLastEyeRaw.y);
     if (!sc) return;
     const a = 1/etSettings.smoothing;
-    etState.smoothX = etState.smoothX*(1-a)+sc.x*a;
-    etState.smoothY = etState.smoothY*(1-a)+sc.y*a;
+    const newX = etState.smoothX*(1-a)+sc.x*a;
+    const newY = etState.smoothY*(1-a)+sc.y*a;
+    // dead zone: 너무 미세한 떨림은 무시
+    const dx = newX - etState.smoothX, dy = newY - etState.smoothY;
+    if (Math.hypot(dx, dy) > ET_DEAD_ZONE_PX || !etState.smoothX) {
+      etState.smoothX = newX; etState.smoothY = newY;
+    }
     updateEtGazeDot(etState.smoothX, etState.smoothY);
     updateGazeCursor(etState.smoothX, etState.smoothY);
     processEtGazePoint(etState.smoothX, etState.smoothY);
@@ -1316,12 +1326,25 @@ function drawEtIris(lm,vw,vh){
 // ── 시선 → 체스 칸 ──
 function processEtGazePoint(sx,sy) {
   const now=Date.now(), sq=etScreenToSquare(sx,sy);
-  if (sq!==etState.currentSquare) {
-    if (etState.currentSquare&&etState.squareEnteredAt) {
-      const d=now-etState.squareEnteredAt;
-      if(d>=etSettings.minDwell) etState.gazeData[etState.currentSquare]=(etState.gazeData[etState.currentSquare]||0)+d;
+  // 칸 전환 디바운스: N프레임 연속으로 같은 칸을 바라봐야 전환
+  if (sq !== etState.currentSquare) {
+    if (sq === _etPendingSq) {
+      _etPendingCount++;
+    } else {
+      _etPendingSq = sq;
+      _etPendingCount = 1;
     }
-    etState.currentSquare=sq; etState.squareEnteredAt=sq?now:null;
+    if (_etPendingCount >= ET_SQUARE_DEBOUNCE_FRAMES) {
+      // 확정: 이전 칸 시간 기록 후 전환
+      if (etState.currentSquare && etState.squareEnteredAt) {
+        const d = now - etState.squareEnteredAt;
+        if (d >= etSettings.minDwell) etState.gazeData[etState.currentSquare]=(etState.gazeData[etState.currentSquare]||0)+d;
+      }
+      etState.currentSquare = sq; etState.squareEnteredAt = sq ? now : null;
+      _etPendingSq = null; _etPendingCount = 0;
+    }
+  } else {
+    _etPendingSq = null; _etPendingCount = 0;
   }
 }
 
