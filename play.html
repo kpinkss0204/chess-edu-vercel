@@ -1158,11 +1158,12 @@ const ET = {
   accuracy: 0,
 
   init() {
-    // WebGazer 기본 UI 숨기기 (직접 그릴 것)
+    // WebGazer 기본 내장 UI 모두 끄기 (직접 렌더링)
     try {
-      webgazer.params.showVideoPreview = true;
-      webgazer.params.showFaceOverlay  = false;
-      webgazer.params.showFaceFeedbackBox = false;
+      webgazer.params.showVideoPreview     = false;
+      webgazer.params.showFaceOverlay      = false;
+      webgazer.params.showFaceFeedbackBox  = false;
+      webgazer.params.saveDataAcrossSessions = false;
     } catch(e) {}
   },
 
@@ -1170,33 +1171,45 @@ const ET = {
     if (this.running) return;
     setEtStatus('warning', '카메라 초기화 중...');
     try {
-      await webgazer
+      // ── 핵심 수정 ──
+      // TFFacemesh(MediaPipe) 대신 clmtrackr 사용 → 로컬 파일 불필요
+      // setRegression/setTracker는 begin() 이전에 호출해야 함
+      webgazer
         .setRegression('ridge')
-        .setTracker('TFFacemesh')
-        .setGazeListener((data, elapsedTime) => {
-          if (!data) return;
-          ET.onGaze(data.x, data.y, elapsedTime);
-        })
-        .begin();
+        .setTracker('clmtrackr')
+        .showVideoPreview(false)
+        .showFaceOverlay(false)
+        .showFaceFeedbackBox(false);
 
-      // WebGazer 비디오를 왼쪽 상단 고정 (작게)
-      webgazer.showVideoPreview(true);
-      const vid = document.getElementById('webgazerVideoContainer');
-      if (vid) {
-        vid.style.cssText = `
-          position:fixed!important; top:8px!important; left:8px!important;
-          width:130px!important; height:80px!important;
-          border-radius:10px!important; overflow:hidden!important;
-          border:1px solid rgba(79,142,247,0.35)!important;
-          opacity:0.85!important; z-index:790!important;
-          box-shadow:0 4px 16px rgba(0,0,0,0.4)!important;
-        `;
-      }
-      // canvas 오버레이도 함께 이동
-      const ovl = document.getElementById('webgazerFaceOverlay');
-      if (ovl) ovl.style.display = 'none';
-      const fc  = document.getElementById('webgazerFaceFeedbackBox');
-      if (fc)  fc.style.display = 'none';
+      webgazer.setGazeListener((data, elapsedTime) => {
+        if (!data) return;
+        ET.onGaze(data.x, data.y, elapsedTime);
+      });
+
+      await webgazer.begin();
+
+      // 내장 비디오 컨테이너가 생성됐으면 직접 스타일 적용
+      const styleVideo = () => {
+        const vid = document.getElementById('webgazerVideoContainer');
+        if (vid) {
+          vid.style.cssText = `
+            position:fixed!important; top:8px!important; left:8px!important;
+            width:130px!important; height:80px!important;
+            border-radius:10px!important; overflow:hidden!important;
+            border:1px solid rgba(79,142,247,0.35)!important;
+            opacity:0.85!important; z-index:790!important;
+            box-shadow:0 4px 16px rgba(0,0,0,0.4)!important;
+            display:block!important;
+          `;
+          // 내부 오버레이 숨기기
+          ['webgazerFaceOverlay','webgazerFaceFeedbackBox'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+          });
+        }
+      };
+      styleVideo();
+      setTimeout(styleVideo, 800);  // 비동기 DOM 삽입 대비
 
       this.running = true;
       setEtStatus('active', '시선 추적 중');
@@ -1206,9 +1219,20 @@ const ET = {
       this._startFocusTracking();
       this._startMiniHeatmap();
     } catch(e) {
-      setEtStatus('error', '카메라 접근 실패');
-      showToast('카메라 권한이 필요합니다 🎥');
+      setEtStatus('error', '시작 실패 — 콘솔 확인');
+      const msg = e && e.message ? e.message : String(e);
+      if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('notallowed')) {
+        showToast('카메라 권한을 허용해 주세요 🎥');
+      } else if (msg.toLowerCase().includes('notfound') || msg.toLowerCase().includes('no stream')) {
+        showToast('카메라를 찾을 수 없습니다');
+      } else {
+        showToast('시선 추적 시작 실패: ' + msg.slice(0, 40));
+      }
       console.error('WebGazer error:', e);
+      // 토글 원상복구
+      const tog = document.getElementById('et-enable-toggle');
+      if (tog) tog.checked = false;
+      ET.enabled = false;
     }
   },
 
