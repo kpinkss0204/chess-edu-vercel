@@ -13,10 +13,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-<!-- MediaPipe - 고정 버전 사용 -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous" onerror="window._mpLoadError=true"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js" crossorigin="anonymous" onerror="window._mpLoadError=true"></script>
+<!-- WebGazer.js -->
+<script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -187,13 +185,18 @@ body {
   border-radius: 6px;
   overflow: hidden;
 }
-#et-video, #et-cam-canvas {
+/* WebGazer가 주입하는 video/canvas를 감춤 — 사이드패널에서는 미리보기만 표시 */
+#webgazerVideoFeed {
   position: absolute; inset: 0;
-  width: 100%; height: 100%;
+  width: 100% !important; height: 100% !important;
   object-fit: cover;
+  transform: scaleX(-1);
 }
-#et-cam-canvas { pointer-events: none; }
-#et-video { transform: scaleX(-1); }
+#webgazerFaceOverlay, #webgazerFaceFeedbackBox {
+  position: absolute !important;
+  transform: scaleX(-1);
+}
+#webgazerGazeDot { display: none !important; }
 
 .et-cam-status {
   margin-top: 8px;
@@ -889,10 +892,9 @@ input[type=range] { width: 80px; accent-color: #00ff87; }
 
     <!-- 웹캠 섹션: 상단 고정 -->
     <div style="padding:10px;border-bottom:1px solid #1e1e2e;flex-shrink:0;">
-      <div style="font-size:9px;font-family:var(--font-mono);color:#555570;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">📷 웹캠 / 홍채 추적</div>
+      <div style="font-size:9px;font-family:var(--font-mono);color:#555570;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">📷 웹캠 / 시선 추적 (WebGazer)</div>
       <div id="et-cam-wrap">
-        <video id="et-video" autoplay playsinline muted></video>
-        <canvas id="et-cam-canvas"></canvas>
+        <!-- WebGazer가 자동으로 video 요소를 여기에 이동시킴 -->
       </div>
       <div class="et-cam-status">
         <span id="et-gaze-indicator"></span>
@@ -1021,56 +1023,59 @@ function handleLogout() {
 }
 
 // ══════════════════════════════════════════
-// Eye Tracker 상태
+// Eye Tracker 상태 (WebGazer.js 기반)
 // ══════════════════════════════════════════
-const IRIS_LEFT  = [468,469,470,471,472];
-const IRIS_RIGHT = [473,474,475,476,477];
-const ET_FILES   = ['a','b','c','d','e','f','g','h'];
-const ET_RANKS   = ['1','2','3','4','5','6','7','8'];
+const ET_FILES = ['a','b','c','d','e','f','g','h'];
+const ET_RANKS = ['1','2','3','4','5','6','7','8'];
 
-const BOARD_PALETTES = {
-  classic: { light: '#f0d9b5', dark: '#b58863' },
-};
+const BOARD_PALETTES = { classic: { light: '#f0d9b5', dark: '#b58863' } };
 
 let etState = {
-  camReady:       false,
-  calibrated:     false,
-  tracking:       false,
-  gazeData:       {},      // { 'e4': ms, ... } — 전체 세션 누적
-  sessionStart:   null,
-  currentSquare:  null,
-  squareEnteredAt:null,
+  camReady:        false,
+  calibrated:      false,   // WebGazer는 자체 캘리브 사용 → 항상 true after begin
+  tracking:        false,
+  gazeData:        {},
+  sessionStart:    null,
+  currentSquare:   null,
+  squareEnteredAt: null,
   smoothX: 0, smoothY: 0,
-  // 수별 스냅샷: [ { moveNum, san, color, gazeSnapshot, topSquares }, ... ]
-  moveSnapshots:  [],
-  // 현재 수가 시작되기 직전의 시선 데이터 (수를 두기 직전 단계의 gazeData 복사본)
-  prevMoveGaze:   {},
+  moveSnapshots:   [],
+  prevMoveGaze:    {},
 };
 
 let etSettings = { smoothing: 12, minDwell: 120, heatAlpha: 0.5 };
-// 시선 안정화: 이전 스크린 좌표 대비 이 픽셀 이상 벗어나야 업데이트
-const ET_DEAD_ZONE_PX = 18;
-// 칸 전환 디바운스: N 프레임 연속으로 같은 칸을 봐야 실제로 그 칸으로 인정
-const ET_SQUARE_DEBOUNCE_FRAMES = 4;
+const ET_DEAD_ZONE_PX = 14;
+const ET_SQUARE_DEBOUNCE_FRAMES = 3;
 let _etPendingSq = null, _etPendingCount = 0;
-let etCalibPoints = [], etCalibMatrix = null, etCalibIdx = 0;
-let etCalibListening = false, etLastEyeRaw = null;
-let etFaceMesh = null, etMpCamera = null;
-let etUseOnGame = false;   // 로비에서 토글한 값
+let etUseOnGame = false;
+let _wgStarted = false;  // WebGazer.begin() 호출 여부
 
 // DOM refs
-const etVideo      = document.getElementById('et-video');
-const etCamCanvas  = document.getElementById('et-cam-canvas');
-const etBoardCanvas= document.getElementById('et-board-canvas');
-const etHeatCanvas = document.getElementById('et-heat-canvas');
-const etGazeDot    = document.getElementById('et-gaze-dot');
+const etBoardCanvas = document.getElementById('et-board-canvas');
+const etHeatCanvas  = document.getElementById('et-heat-canvas');
+const etGazeDot     = document.getElementById('et-gaze-dot');
 const etCalibOverlay= document.getElementById('et-calib-overlay');
 const etCalibCanvas = document.getElementById('et-calib-canvas');
 
-const etCamCtx   = etCamCanvas.getContext('2d');
 const etBoardCtx = etBoardCanvas.getContext('2d');
 const etHeatCtx  = etHeatCanvas.getContext('2d');
 const etCalibCtx = etCalibCanvas.getContext('2d');
+
+// ── 디버그 로그 ──
+function etLog(msg, color) {
+  const el = document.getElementById('et-debug-log');
+  if (!el) { console.log('[ET]', msg); return; }
+  const t = new Date().toLocaleTimeString('ko',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const line = document.createElement('div');
+  line.style.color = color || '#7a7aaa';
+  line.textContent = `[${t}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  console.log('[ET]', msg);
+}
+function etLogOk(msg)  { etLog('✅ ' + msg, '#00ff87'); }
+function etLogErr(msg) { etLog('❌ ' + msg, '#ff4444'); }
+function etLogInfo(msg){ etLog('ℹ ' + msg,  '#aaaaff'); }
 
 // ── 로비 ET 토글 ──
 function toggleEtOnGame() {
@@ -1081,7 +1086,7 @@ function toggleEtOnGame() {
     panel.classList.remove('collapsed');
     panel.style.display = 'flex';
     showToast('Eye Tracker 활성화됨. 카메라 버튼을 눌러 시작하세요.');
-    setTimeout(()=>{ resizeEtBoard(); }, 100);
+    setTimeout(() => resizeEtBoard(), 100);
   } else {
     panel.classList.add('collapsed');
     panel.style.display = '';
@@ -1102,231 +1107,101 @@ function toggleEtPanel() {
   }
 }
 
-// ── ET 패널 초기 상태 ── 로비에서는 숨김
+// 로비에서는 ET 패널 숨김
 document.getElementById('et-panel').classList.add('collapsed');
 
-// ── 디버그 로그 ──
-let _etFrameLoop = null;
-function etLog(msg, color) {
-  const el = document.getElementById('et-debug-log');
-  if (!el) { console.log('[ET]', msg); return; }
-  const t = new Date().toLocaleTimeString('ko',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  const line = document.createElement('div');
-  line.style.color = color || '#7a7aaa';
-  line.textContent = `[${t}] ${msg}`;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-  console.log('[ET]', msg);
-}
-function etLogOk(msg)  { etLog('✅ ' + msg, '#00ff87'); }
-function etLogErr(msg) { etLog('❌ ' + msg, '#ff4444'); }
-function etLogInfo(msg){ etLog('ℹ ' + msg,  '#aaaaff'); }
-
-// ── MediaPipe 초기화 ──
-async function initEtMediaPipe() {
+// ══════════════════════════════════════════
+// WebGazer 초기화
+// ══════════════════════════════════════════
+async function initEtMediaPipe() {   // 함수명 유지 (기존 호출부 호환)
   const btn = document.getElementById('btn-et-cam');
   btn.disabled = true; btn.textContent = '로딩...';
-  setEtStatus('loading', '⏳ 로딩 중...');
-
-  // 디버그 로그 초기화
-  const dbg = document.getElementById('et-debug-log');
-  if (dbg) dbg.innerHTML = '';
+  setEtStatus('loading', '⏳ WebGazer 로딩 중...');
+  document.getElementById('et-debug-log').innerHTML = '';
 
   try {
-    // STEP 1: 라이브러리 로딩 확인
-    etLogInfo(`FaceMesh 타입: ${typeof FaceMesh}`);
-    etLogInfo(`Camera 타입: ${typeof Camera}`);
-    etLogInfo(`_mpLoadError: ${window._mpLoadError}`);
-
-    if (window._mpLoadError || typeof FaceMesh === 'undefined') {
-      throw new Error('MediaPipe(FaceMesh) 로딩 실패 — 네트워크 확인 후 새로고침');
+    if (typeof webgazer === 'undefined') {
+      throw new Error('WebGazer 라이브러리가 로딩되지 않았습니다. 네트워크를 확인하세요.');
     }
-    etLogOk('STEP1: 라이브러리 OK');
+    etLogOk('WebGazer 라이브러리 확인됨');
 
-    // STEP 2: FaceMesh 객체 생성
-    etLogInfo('STEP2: FaceMesh 초기화 중...');
-    etFaceMesh = new FaceMesh({
-      locateFile: f => {
-        const url = `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`;
-        etLogInfo(`  locateFile → ${f}`);
-        return url;
+    // WebGazer 기본 설정
+    webgazer.params.showVideoPreview  = true;   // 사이드패널에 미리보기 표시
+    webgazer.params.showFaceOverlay   = true;
+    webgazer.params.showFaceFeedbackBox = true;
+    webgazer.params.camConstraints    = { video: { width: 320, height: 240, facingMode: 'user' } };
+
+    // 시선 예측 콜백 등록
+    webgazer.setGazeListener((data, elapsedTime) => {
+      if (!data || !etState.tracking) return;
+      const { x, y } = data;
+
+      // 스무딩
+      const a = 1 / etSettings.smoothing;
+      const newX = etState.smoothX * (1 - a) + x * a;
+      const newY = etState.smoothY * (1 - a) + y * a;
+      const dx = newX - etState.smoothX, dy = newY - etState.smoothY;
+      if (Math.hypot(dx, dy) > ET_DEAD_ZONE_PX || !etState.smoothX) {
+        etState.smoothX = newX; etState.smoothY = newY;
       }
-    });
-    etFaceMesh.setOptions({
-      maxNumFaces: 1, refineLandmarks: true,
-      minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
-    });
-    etFaceMesh.onResults(onEtFaceMeshResults);
-    etLogOk('STEP2: FaceMesh 객체 생성 OK');
 
-    // STEP 3: getUserMedia
-    etLogInfo('STEP3: 카메라 권한 요청 중...');
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('이 브라우저는 getUserMedia를 지원하지 않습니다 (HTTPS 필요)');
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+      updateEtGazeDot(etState.smoothX, etState.smoothY);
+      updateGazeCursor(etState.smoothX, etState.smoothY);
+      processEtGazePoint(etState.smoothX, etState.smoothY);
+
+      const sq = etScreenToSquare(etState.smoothX, etState.smoothY);
+      document.getElementById('et-cam-text').textContent = sq ? `👁 응시: ${sq}` : '👁 보드 밖';
+      document.getElementById('et-gaze-indicator').classList.add('on');
+      highlightGazeSquare(sq);
     });
-    etLogOk(`STEP3: 스트림 획득 OK (트랙: ${stream.getVideoTracks().length}개)`);
 
-    etVideo.srcObject = stream;
-    await new Promise((res, rej) => {
-      etVideo.onloadedmetadata = () => { etLogOk('STEP3b: metadata OK'); res(); };
-      setTimeout(() => rej(new Error('카메라 metadata 타임아웃(8s)')), 8000);
-    });
-    await etVideo.play();
-    etLogOk(`STEP3c: video.play() OK (${etVideo.videoWidth}x${etVideo.videoHeight})`);
+    etLogInfo('WebGazer.begin() 호출 중...');
+    await webgazer.begin();
+    _wgStarted = true;
+    etLogOk('WebGazer 시작됨');
 
-    // STEP 4: 프레임 루프
-    if (typeof Camera !== 'undefined') {
-      etLogInfo('STEP4: Camera 클래스 사용');
-      etMpCamera = new Camera(etVideo, {
-        onFrame: async () => {
-          if (etFaceMesh && etVideo.readyState >= 2)
-            await etFaceMesh.send({ image: etVideo });
-        },
-        width: 640, height: 480,
-      });
-      await etMpCamera.start();
-      etLogOk('STEP4: Camera.start() OK');
-    } else {
-      etLogInfo('STEP4: rAF 루프 사용 (Camera 없음)');
-      let _sending = false;
-      const sendFrame = async () => {
-        if (etFaceMesh && !_sending && etVideo.readyState >= 2) {
-          _sending = true;
-          try { await etFaceMesh.send({ image: etVideo }); } catch(e) { etLogErr('send 오류: '+e.message); }
-          _sending = false;
-        }
-        _etFrameLoop = requestAnimationFrame(sendFrame);
-      };
-      _etFrameLoop = requestAnimationFrame(sendFrame);
-      etLogOk('STEP4: rAF 루프 시작 OK');
-    }
+    // WebGazer가 생성한 video 요소를 et-cam-wrap 안으로 이동
+    setTimeout(() => {
+      const wgVid = document.getElementById('webgazerVideoFeed');
+      const camWrap = document.getElementById('et-cam-wrap');
+      if (wgVid && camWrap && !camWrap.contains(wgVid)) {
+        camWrap.appendChild(wgVid);
+      }
+      // face overlay도 이동
+      const wgOverlay = document.getElementById('webgazerFaceOverlay');
+      if (wgOverlay && camWrap && !camWrap.contains(wgOverlay)) {
+        camWrap.appendChild(wgOverlay);
+        wgOverlay.style.position = 'absolute';
+        wgOverlay.style.inset = '0';
+      }
+      const wgFeedback = document.getElementById('webgazerFaceFeedbackBox');
+      if (wgFeedback && camWrap && !camWrap.contains(wgFeedback)) {
+        camWrap.appendChild(wgFeedback);
+        wgFeedback.style.position = 'absolute';
+      }
+    }, 800);
 
-    // STEP 5: 완료
     etState.camReady = true;
     document.getElementById('btn-et-calib').disabled = false;
     btn.textContent = '✓ 연결됨';
     setEtStatus('cam', '✅ 웹캠 준비됨 — 캘리브 버튼을 누르세요');
-    etLogOk('모든 단계 완료! 캘리브레이션을 진행하세요.');
-    showToast('카메라 연결됨! 캘리브레이션을 진행하세요.');
+    etLogOk('완료! 캘리브레이션을 진행하거나 바로 추적을 시작하세요.');
+    showToast('카메라 연결됨! 캘리브레이션 후 추적을 시작하세요.');
 
   } catch(e) {
     btn.disabled = false; btn.textContent = '▶ 카메라';
     const msg = e.name === 'NotAllowedError' ? '카메라 권한 거부 (브라우저 설정 확인)'
-               : e.name === 'NotFoundError'  ? '카메라 없음'
-               : e.name === 'NotReadableError' ? '카메라가 다른 앱에서 사용 중'
-               : (e.message || String(e));
-    etLogErr(`실패: [${e.name}] ${msg}`);
+              : e.name === 'NotFoundError'   ? '카메라 없음'
+              : (e.message || String(e));
+    etLogErr(`실패: [${e.name||'Error'}] ${msg}`);
     setEtStatus('error', '❌ ' + msg);
     showToast('카메라 오류: ' + msg);
-    console.error('[ET] initEtMediaPipe 실패:', e);
   }
-}
-
-// 눈꺼풀 코너 랜드마크 (MediaPipe FaceMesh)
-// 왼눈: 내안각 133, 외안각 33, 위꺼풀 중앙 159, 아래꺼풀 중앙 145
-// 오른눈: 내안각 362, 외안각 263, 위꺼풀 중앙 386, 아래꺼풀 중앙 374
-const EYE_L_INNER=133, EYE_L_OUTER=33,  EYE_L_TOP=159, EYE_L_BOT=145;
-const EYE_R_INNER=362, EYE_R_OUTER=263, EYE_R_TOP=386, EYE_R_BOT=374;
-
-function getIrisCenter(landmarks, indices) {
-  let sx=0,sy=0;
-  for(const i of indices){sx+=landmarks[i].x;sy+=landmarks[i].y;}
-  return{x:sx/indices.length,y:sy/indices.length};
-}
-
-// 홍채의 눈 안 상대 위치 계산 (-1 ~ +1 범위)
-// 머리가 움직여도 눈동자가 고정되면 값이 안 변함
-function getRelativeGaze(lm) {
-  const li = getIrisCenter(lm, IRIS_LEFT);
-  const ri = getIrisCenter(lm, IRIS_RIGHT);
-
-  // 왼눈 상대 위치
-  const llInner = lm[EYE_L_INNER], llOuter = lm[EYE_L_OUTER];
-  const llTop   = lm[EYE_L_TOP],   llBot   = lm[EYE_L_BOT];
-  const lEyeW   = Math.abs(llOuter.x - llInner.x) || 0.001;
-  const lEyeH   = Math.abs(llBot.y   - llTop.y)   || 0.001;
-  const lMidX   = (llInner.x + llOuter.x) / 2;
-  const lMidY   = (llTop.y   + llBot.y)   / 2;
-  const lgx = (li.x - lMidX) / lEyeW;  // -0.5 ~ +0.5
-  const lgy = (li.y - lMidY) / lEyeH;
-
-  // 오른눈 상대 위치
-  const rlInner = lm[EYE_R_INNER], rlOuter = lm[EYE_R_OUTER];
-  const rlTop   = lm[EYE_R_TOP],   rlBot   = lm[EYE_R_BOT];
-  const rEyeW   = Math.abs(rlOuter.x - rlInner.x) || 0.001;
-  const rEyeH   = Math.abs(rlBot.y   - rlTop.y)   || 0.001;
-  const rMidX   = (rlInner.x + rlOuter.x) / 2;
-  const rMidY   = (rlTop.y   + rlBot.y)   / 2;
-  const rgx = (ri.x - rMidX) / rEyeW;
-  const rgy = (ri.y - rMidY) / rEyeH;
-
-  // 양눈 평균
-  return { x: (lgx + rgx) / 2, y: (lgy + rgy) / 2 };
-}
-
-function onEtFaceMeshResults(results) {
-  const vw = etVideo.videoWidth||640, vh = etVideo.videoHeight||480;
-  etCamCanvas.width=vw; etCamCanvas.height=vh;
-  etCamCtx.save();
-  etCamCtx.scale(-1,1);
-  etCamCtx.translate(-vw,0);
-  etCamCtx.clearRect(0,0,vw,vh);
-  if (!results.multiFaceLandmarks?.length) {
-    document.getElementById('et-cam-text').textContent='얼굴을 찾을 수 없음';
-    document.getElementById('et-gaze-indicator').classList.remove('on');
-    etLastEyeRaw=null; etCamCtx.restore(); return;
-  }
-  const lm = results.multiFaceLandmarks[0];
-  const gaze = getRelativeGaze(lm);
-  // relative gaze: 대략 -0.3 ~ +0.3 범위. 캘리브/변환에서 스케일 처리
-  etLastEyeRaw = gaze;
-  drawEtIris(lm,vw,vh); etCamCtx.restore();
-  document.getElementById('et-gaze-indicator').classList.add('on');
-
-  if (etState.tracking && etState.calibrated) {
-    // relative gaze를 그대로 affine 변환 (캘리브도 같은 좌표계로 저장됨)
-    const sc = etEyeToScreen(etLastEyeRaw.x, etLastEyeRaw.y);
-    if (!sc) return;
-    const a = 1/etSettings.smoothing;
-    const newX = etState.smoothX*(1-a)+sc.x*a;
-    const newY = etState.smoothY*(1-a)+sc.y*a;
-    // dead zone: 너무 미세한 떨림은 무시
-    const dx = newX - etState.smoothX, dy = newY - etState.smoothY;
-    if (Math.hypot(dx, dy) > ET_DEAD_ZONE_PX || !etState.smoothX) {
-      etState.smoothX = newX; etState.smoothY = newY;
-    }
-    updateEtGazeDot(etState.smoothX, etState.smoothY);
-    updateGazeCursor(etState.smoothX, etState.smoothY);
-    processEtGazePoint(etState.smoothX, etState.smoothY);
-    const sq = etScreenToSquare(etState.smoothX, etState.smoothY);
-    document.getElementById('et-cam-text').textContent = sq ? `👁 응시: ${sq}` : '👁 보드 밖';
-    // 체스판 칸 하이라이트
-    highlightGazeSquare(sq);
-  }
-}
-
-function drawEtIris(lm,vw,vh){
-  const drawIris=(idx,col)=>{
-    const pts=idx.map(i=>({x:(1-lm[i].x)*vw,y:lm[i].y*vh}));
-    const cx=pts.reduce((s,p)=>s+p.x,0)/pts.length;
-    const cy=pts.reduce((s,p)=>s+p.y,0)/pts.length;
-    const r=Math.hypot(pts[0].x-pts[2].x,pts[0].y-pts[2].y)/2;
-    etCamCtx.beginPath(); etCamCtx.arc(cx,cy,r+3,0,Math.PI*2);
-    etCamCtx.strokeStyle=col; etCamCtx.lineWidth=2; etCamCtx.stroke();
-    etCamCtx.beginPath(); etCamCtx.arc(cx,cy,2,0,Math.PI*2);
-    etCamCtx.fillStyle=col; etCamCtx.fill();
-  };
-  drawIris(IRIS_LEFT,'rgba(0,255,135,0.9)');
-  drawIris(IRIS_RIGHT,'rgba(0,200,255,0.9)');
 }
 
 // ── 시선 → 체스 칸 ──
-function processEtGazePoint(sx,sy) {
-  const now=Date.now(), sq=etScreenToSquare(sx,sy);
-  // 칸 전환 디바운스: N프레임 연속으로 같은 칸을 바라봐야 전환
+function processEtGazePoint(sx, sy) {
+  const now = Date.now(), sq = etScreenToSquare(sx, sy);
   if (sq !== etState.currentSquare) {
     if (sq === _etPendingSq) {
       _etPendingCount++;
@@ -1335,10 +1210,10 @@ function processEtGazePoint(sx,sy) {
       _etPendingCount = 1;
     }
     if (_etPendingCount >= ET_SQUARE_DEBOUNCE_FRAMES) {
-      // 확정: 이전 칸 시간 기록 후 전환
       if (etState.currentSquare && etState.squareEnteredAt) {
         const d = now - etState.squareEnteredAt;
-        if (d >= etSettings.minDwell) etState.gazeData[etState.currentSquare]=(etState.gazeData[etState.currentSquare]||0)+d;
+        if (d >= etSettings.minDwell)
+          etState.gazeData[etState.currentSquare] = (etState.gazeData[etState.currentSquare] || 0) + d;
       }
       etState.currentSquare = sq; etState.squareEnteredAt = sq ? now : null;
       _etPendingSq = null; _etPendingCount = 0;
@@ -1348,7 +1223,7 @@ function processEtGazePoint(sx,sy) {
   }
 }
 
-function etScreenToSquare(sx,sy) {
+function etScreenToSquare(sx, sy) {
   const boardEl = document.getElementById('play-board');
   if (!boardEl) return null;
   const rect = boardEl.getBoundingClientRect();
@@ -1363,13 +1238,16 @@ function etScreenToSquare(sx,sy) {
   return ET_FILES[fc] + ET_RANKS[7 - fr];
 }
 
-function updateEtGazeDot(sx,sy){
-  const rect=etHeatCanvas.getBoundingClientRect();
-  const px=(sx-rect.left)/rect.width*100, py=(sy-rect.top)/rect.height*100;
-  if(px>=0&&px<=100&&py>=0&&py<=100){
-    etGazeDot.style.display='block';
-    etGazeDot.style.left=px+'%'; etGazeDot.style.top=py+'%';
-  } else { etGazeDot.style.display='none'; }
+function updateEtGazeDot(sx, sy) {
+  const rect = etHeatCanvas.getBoundingClientRect();
+  const px = (sx - rect.left) / rect.width * 100;
+  const py = (sy - rect.top) / rect.height * 100;
+  if (px >= 0 && px <= 100 && py >= 0 && py <= 100) {
+    etGazeDot.style.display = 'block';
+    etGazeDot.style.left = px + '%'; etGazeDot.style.top = py + '%';
+  } else {
+    etGazeDot.style.display = 'none';
+  }
 }
 
 const _gazeCursorEl = document.getElementById('gaze-cursor');
@@ -1380,157 +1258,140 @@ function updateGazeCursor(sx, sy) {
   _gazeSqLabel.textContent = etScreenToSquare(sx, sy) || '';
 }
 function showGazeCursor() { _gazeCursorEl.style.display = 'block'; }
-function hideGazeCursor() { _gazeCursorEl.style.display = 'none'; }
+function hideGazeCursor()  { _gazeCursorEl.style.display = 'none'; }
 
-// 체스판 칸에 시선 하이라이트
+// 체스판 칸 시선 하이라이트
 let _lastGazeSq = null;
 function highlightGazeSquare(sq) {
   if (sq === _lastGazeSq) return;
-  // 이전 칸 제거
-  if (_lastGazeSq) {
-    const els = document.querySelectorAll('.sq.gaze-highlight');
-    els.forEach(e => e.classList.remove('gaze-highlight'));
-  }
+  document.querySelectorAll('.sq.gaze-highlight').forEach(e => e.classList.remove('gaze-highlight'));
   if (sq) {
     const col = ET_FILES.indexOf(sq[0]);
     const row = 7 - ET_RANKS.indexOf(sq[1]);
     const flipped = _myColor === 'b';
-    const ri = flipped ? 7-row : row;
-    const ci = flipped ? 7-col : col;
-    const idx = ri*8+ci;
+    const ri = flipped ? 7 - row : row;
+    const ci = flipped ? 7 - col : col;
+    const idx = ri * 8 + ci;
     const boardEl = document.getElementById('play-board');
-    if (boardEl && boardEl.children[idx]) {
+    if (boardEl && boardEl.children[idx])
       boardEl.children[idx].classList.add('gaze-highlight');
-    }
   }
   _lastGazeSq = sq;
 }
 
 // ── ET 히트맵 렌더링 ──
-function renderEtHeatmap(){
-  const w=etHeatCanvas.width, sq=w/8;
-  etHeatCtx.clearRect(0,0,w,w);
-  const live={...etState.gazeData};
-  if(etState.currentSquare&&etState.squareEnteredAt){
-    const d=Date.now()-etState.squareEnteredAt;
-    if(d>=etSettings.minDwell) live[etState.currentSquare]=(live[etState.currentSquare]||0)+d;
+function renderEtHeatmap() {
+  const w = etHeatCanvas.width, sq = w / 8;
+  etHeatCtx.clearRect(0, 0, w, w);
+  const live = { ...etState.gazeData };
+  if (etState.currentSquare && etState.squareEnteredAt) {
+    const d = Date.now() - etState.squareEnteredAt;
+    if (d >= etSettings.minDwell) live[etState.currentSquare] = (live[etState.currentSquare] || 0) + d;
   }
-  const vals=Object.values(live); if(!vals.length)return;
-  const maxMs=Math.max(...vals,1);
-  for(const[sqn,ms]of Object.entries(live)){
-    const c=ET_FILES.indexOf(sqn[0]),r=7-ET_RANKS.indexOf(sqn[1]);
-    if(c<0||r<0)continue;
-    const t=Math.min(ms/maxMs,1);
-    const red=Math.round(255*Math.min(t*2,1));
-    const green=Math.round(255*(1-Math.abs(t-0.5)*1.8));
-    const blue=Math.round(255*Math.max(1-t*2.5,0));
-    const alpha=etSettings.heatAlpha*(0.25+t*0.75);
-    etHeatCtx.fillStyle=`rgba(${red},${green},${blue},${alpha})`;
-    etHeatCtx.fillRect(c*sq,r*sq,sq,sq);
-    if(ms>=800){
-      etHeatCtx.fillStyle='rgba(255,255,255,0.9)';
-      etHeatCtx.font=`bold ${Math.round(sq*0.2)}px Space Mono,monospace`;
-      etHeatCtx.textAlign='center'; etHeatCtx.textBaseline='middle';
-      etHeatCtx.fillText(ms>=1000?`${(ms/1000).toFixed(1)}s`:`${ms}ms`,c*sq+sq/2,r*sq+sq/2);
+  const vals = Object.values(live); if (!vals.length) return;
+  const maxMs = Math.max(...vals, 1);
+  for (const [sqn, ms] of Object.entries(live)) {
+    const c = ET_FILES.indexOf(sqn[0]), r = 7 - ET_RANKS.indexOf(sqn[1]);
+    if (c < 0 || r < 0) continue;
+    const t = Math.min(ms / maxMs, 1);
+    const red   = Math.round(255 * Math.min(t * 2, 1));
+    const green = Math.round(255 * (1 - Math.abs(t - 0.5) * 1.8));
+    const blue  = Math.round(255 * Math.max(1 - t * 2.5, 0));
+    const alpha = etSettings.heatAlpha * (0.25 + t * 0.75);
+    etHeatCtx.fillStyle = `rgba(${red},${green},${blue},${alpha})`;
+    etHeatCtx.fillRect(c * sq, r * sq, sq, sq);
+    if (ms >= 800) {
+      etHeatCtx.fillStyle = 'rgba(255,255,255,0.9)';
+      etHeatCtx.font = `bold ${Math.round(sq * 0.2)}px Space Mono,monospace`;
+      etHeatCtx.textAlign = 'center'; etHeatCtx.textBaseline = 'middle';
+      etHeatCtx.fillText(ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`, c * sq + sq / 2, r * sq + sq / 2);
     }
   }
-  if(etState.currentSquare){
-    const c=ET_FILES.indexOf(etState.currentSquare[0]);
-    const r=7-ET_RANKS.indexOf(etState.currentSquare[1]);
-    if(c>=0&&r>=0){
-      etHeatCtx.strokeStyle='rgba(0,255,135,0.9)'; etHeatCtx.lineWidth=2;
-      etHeatCtx.strokeRect(c*sq+1,r*sq+1,sq-2,sq-2);
+  if (etState.currentSquare) {
+    const c = ET_FILES.indexOf(etState.currentSquare[0]);
+    const r = 7 - ET_RANKS.indexOf(etState.currentSquare[1]);
+    if (c >= 0 && r >= 0) {
+      etHeatCtx.strokeStyle = 'rgba(0,255,135,0.9)'; etHeatCtx.lineWidth = 2;
+      etHeatCtx.strokeRect(c * sq + 1, r * sq + 1, sq - 2, sq - 2);
     }
   }
 }
 
-function drawEtBoard(){
-  const w=etBoardCanvas.width, sq=w/8;
-  const pal=BOARD_PALETTES.classic;
-  etBoardCtx.clearRect(0,0,w,w);
-  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
-    etBoardCtx.fillStyle=(r+c)%2===0?pal.light:pal.dark;
-    etBoardCtx.fillRect(c*sq,r*sq,sq,sq);
+function drawEtBoard() {
+  const w = etBoardCanvas.width, sq = w / 8;
+  const pal = BOARD_PALETTES.classic;
+  etBoardCtx.clearRect(0, 0, w, w);
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    etBoardCtx.fillStyle = (r + c) % 2 === 0 ? pal.light : pal.dark;
+    etBoardCtx.fillRect(c * sq, r * sq, sq, sq);
   }
-  etBoardCtx.font=`bold ${sq*0.16}px Space Mono,monospace`;
-  etBoardCtx.textBaseline='top';
-  for(let c=0;c<8;c++){
-    etBoardCtx.fillStyle=(c%2===0)?pal.dark:pal.light;
-    etBoardCtx.textAlign='left';
-    etBoardCtx.fillText(ET_FILES[c],c*sq+2,7*sq+sq*0.8);
+  etBoardCtx.font = `bold ${sq * 0.16}px Space Mono,monospace`;
+  etBoardCtx.textBaseline = 'top';
+  for (let c = 0; c < 8; c++) {
+    etBoardCtx.fillStyle = (c % 2 === 0) ? pal.dark : pal.light;
+    etBoardCtx.textAlign = 'left';
+    etBoardCtx.fillText(ET_FILES[c], c * sq + 2, 7 * sq + sq * 0.8);
   }
-  etBoardCtx.textAlign='right';
-  for(let r=0;r<8;r++){
-    etBoardCtx.fillStyle=(r%2===0)?pal.light:pal.dark;
-    etBoardCtx.fillText(ET_RANKS[7-r],sq-2,r*sq+2);
+  etBoardCtx.textAlign = 'right';
+  for (let r = 0; r < 8; r++) {
+    etBoardCtx.fillStyle = (r % 2 === 0) ? pal.light : pal.dark;
+    etBoardCtx.fillText(ET_RANKS[7 - r], sq - 2, r * sq + 2);
   }
 }
 
-function resizeEtBoard(){
-  const wrap=document.getElementById('et-board-wrap');
-  const size=wrap.clientWidth||288; // 패널 width(320) - padding(32) fallback
-  if(size < 10) return; // 패널이 완전히 숨겨진 상태면 스킵
-  etBoardCanvas.width=size; etBoardCanvas.height=size;
-  etHeatCanvas.width=size;  etHeatCanvas.height=size;
+function resizeEtBoard() {
+  const wrap = document.getElementById('et-board-wrap');
+  const size = wrap.clientWidth || 288;
+  if (size < 10) return;
+  etBoardCanvas.width = size; etBoardCanvas.height = size;
+  etHeatCanvas.width  = size; etHeatCanvas.height  = size;
   drawEtBoard(); renderEtHeatmap();
 }
 
 // ── 통계 업데이트 ──
-function updateEtStats(){
-  const secs=etState.sessionStart?Math.floor((Date.now()-etState.sessionStart)/1000):0;
-  const m=Math.floor(secs/60),s=secs%60;
-  document.getElementById('et-stat-time').textContent=m>0?`${m}m ${s}s`:`${s}s`;
-  const keys=Object.keys(etState.gazeData);
-  document.getElementById('et-stat-sqs').textContent=keys.length;
-  document.getElementById('et-stat-snaps').textContent=etState.moveSnapshots.length;
-  if(keys.length){
-    const top=Object.entries(etState.gazeData).sort((a,b)=>b[1]-a[1])[0];
-    document.getElementById('et-stat-top').textContent=`${top[0]} (${(top[1]/1000).toFixed(1)}s)`;
+function updateEtStats() {
+  const secs = etState.sessionStart ? Math.floor((Date.now() - etState.sessionStart) / 1000) : 0;
+  const m = Math.floor(secs / 60), s = secs % 60;
+  document.getElementById('et-stat-time').textContent = m > 0 ? `${m}m ${s}s` : `${s}s`;
+  const keys = Object.keys(etState.gazeData);
+  document.getElementById('et-stat-sqs').textContent = keys.length;
+  document.getElementById('et-stat-snaps').textContent = etState.moveSnapshots.length;
+  if (keys.length) {
+    const top = Object.entries(etState.gazeData).sort((a, b) => b[1] - a[1])[0];
+    document.getElementById('et-stat-top').textContent = `${top[0]} (${(top[1] / 1000).toFixed(1)}s)`;
   }
-  const sorted=Object.entries(etState.gazeData).sort((a,b)=>b[1]-a[1]).slice(0,8);
-  const listEl=document.getElementById('et-sq-list');
-  if(!sorted.length) return;
-  const maxMs=sorted[0][1];
-  listEl.innerHTML=sorted.map(([sq,ms])=>`
+  const sorted = Object.entries(etState.gazeData).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const listEl = document.getElementById('et-sq-list');
+  if (!sorted.length) return;
+  const maxMs = sorted[0][1];
+  listEl.innerHTML = sorted.map(([sq, ms]) => `
     <div class="et-sq-row">
       <span class="et-sq-name">${sq}</span>
-      <div class="et-bar-bg"><div class="et-bar-fill" style="width:${Math.round(ms/maxMs*100)}%"></div></div>
-      <span class="et-sq-time">${ms>=1000?(ms/1000).toFixed(1)+'s':ms+'ms'}</span>
+      <div class="et-bar-bg"><div class="et-bar-fill" style="width:${Math.round(ms / maxMs * 100)}%"></div></div>
+      <span class="et-sq-time">${ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms'}</span>
     </div>`).join('');
 }
 
-// ════════════════════════════════════════════════
-// 수별 시선 스냅샷 저장 (체스 수가 발생할 때 호출)
-// ════════════════════════════════════════════════
+// ── 수별 시선 스냅샷 ──
 function captureGazeSnapshot(moveNum, san, color) {
-  if (!etState.tracking || !etState.calibrated) return;
-  // 이전 수 이후 누적된 시선 데이터 (전체 누적에서 이전 스냅까지의 차이)
-  const currentGaze = {...etState.gazeData};
+  if (!etState.tracking) return;
+  const currentGaze = { ...etState.gazeData };
   if (etState.currentSquare && etState.squareEnteredAt) {
     const d = Date.now() - etState.squareEnteredAt;
     if (d >= etSettings.minDwell)
-      currentGaze[etState.currentSquare] = (currentGaze[etState.currentSquare]||0) + d;
+      currentGaze[etState.currentSquare] = (currentGaze[etState.currentSquare] || 0) + d;
   }
-  // 이번 수에서의 증가분 계산
   const prevGaze = etState.prevMoveGaze;
   const deltaGaze = {};
   for (const [sq, ms] of Object.entries(currentGaze)) {
     const delta = ms - (prevGaze[sq] || 0);
     if (delta > 0) deltaGaze[sq] = delta;
   }
-  // 상위 5칸 정렬
   const topSquares = Object.entries(deltaGaze)
-    .sort((a,b)=>b[1]-a[1]).slice(0,5)
-    .map(([sq,ms])=>({square:sq, ms, seconds:+(ms/1000).toFixed(2)}));
-  const snapshot = {
-    moveNum, san, color,
-    gazeSnapshot: deltaGaze,  // 이번 수 동안의 응시 데이터
-    topSquares,
-  };
-  etState.moveSnapshots.push(snapshot);
-  // 다음 수를 위해 현재 상태 저장
-  etState.prevMoveGaze = {...currentGaze};
-  // UI 업데이트
+    .sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([sq, ms]) => ({ square: sq, ms, seconds: +(ms / 1000).toFixed(2) }));
+  etState.moveSnapshots.push({ moveNum, san, color, gazeSnapshot: deltaGaze, topSquares });
+  etState.prevMoveGaze = { ...currentGaze };
   renderMoveLog();
 }
 
@@ -1539,206 +1400,187 @@ function renderMoveLog() {
   if (!etState.moveSnapshots.length) return;
   el.innerHTML = etState.moveSnapshots.slice().reverse().map(snap => {
     const topSq = snap.topSquares[0];
-    const chips = snap.topSquares.map((s,i) =>
-      `<span class="et-move-sq-chip${i===0?' hot':''}">${s.square} ${s.seconds}s</span>`
+    const chips = snap.topSquares.map((s, i) =>
+      `<span class="et-move-sq-chip${i === 0 ? ' hot' : ''}">${s.square} ${s.seconds}s</span>`
     ).join('');
-    return `<div class="et-move-entry ${snap.color==='w'?'white-move':'black-move'}">
+    return `<div class="et-move-entry ${snap.color === 'w' ? 'white-move' : 'black-move'}">
       <div class="et-move-header">
-        <span class="et-move-num">${Math.ceil(snap.moveNum/2)}${snap.color==='w'?'.':'...'}</span>
+        <span class="et-move-num">${Math.ceil(snap.moveNum / 2)}${snap.color === 'w' ? '.' : '...'}</span>
         <span class="et-move-san">${snap.san}</span>
-        <span class="et-move-top-sq">${topSq?topSq.square:'—'}</span>
+        <span class="et-move-top-sq">${topSq ? topSq.square : '—'}</span>
       </div>
-      <div class="et-move-sq-bar">${chips||'<span class="et-move-sq-chip">데이터 없음</span>'}</div>
+      <div class="et-move-sq-bar">${chips || '<span class="et-move-sq-chip">데이터 없음</span>'}</div>
     </div>`;
   }).join('');
 }
 
-// ── 캘리브레이션 ──
+// ── WebGazer 캘리브레이션 (클릭 기반) ──
 const ET_CALIB_POSITIONS = [
   [0.1,0.1],[0.5,0.1],[0.9,0.1],
   [0.1,0.5],[0.5,0.5],[0.9,0.5],
   [0.1,0.9],[0.5,0.9],[0.9,0.9],
 ];
-function resizeEtCalibCanvas(){
-  etCalibCanvas.width=window.innerWidth; etCalibCanvas.height=window.innerHeight;
+let etCalibIdx = 0, etCalibListening = false;
+
+function resizeEtCalibCanvas() {
+  etCalibCanvas.width = window.innerWidth; etCalibCanvas.height = window.innerHeight;
 }
-function drawEtCalibPoint(idx){
-  const w=etCalibCanvas.width,h=etCalibCanvas.height;
-  etCalibCtx.clearRect(0,0,w,h);
-  const[px,py]=ET_CALIB_POSITIONS[idx];
-  const x=px*w,y=py*h;
-  etCalibCtx.beginPath(); etCalibCtx.arc(x,y,22,0,Math.PI*2);
-  etCalibCtx.strokeStyle='rgba(0,255,135,0.3)'; etCalibCtx.lineWidth=2; etCalibCtx.stroke();
-  etCalibCtx.beginPath(); etCalibCtx.arc(x,y,10,0,Math.PI*2);
-  etCalibCtx.fillStyle='#00ff87'; etCalibCtx.fill();
-  etCalibCtx.fillStyle='rgba(0,255,135,0.6)';
-  etCalibCtx.font='12px Space Mono,monospace'; etCalibCtx.textAlign='center';
-  etCalibCtx.fillText('이 점을 바라보며 클릭',x,y+34);
-  document.getElementById('et-calib-progress').textContent=`${idx} / ${ET_CALIB_POSITIONS.length} 완료`;
+function drawEtCalibPoint(idx) {
+  const w = etCalibCanvas.width, h = etCalibCanvas.height;
+  etCalibCtx.clearRect(0, 0, w, h);
+  const [px, py] = ET_CALIB_POSITIONS[idx];
+  const x = px * w, y = py * h;
+  etCalibCtx.beginPath(); etCalibCtx.arc(x, y, 22, 0, Math.PI * 2);
+  etCalibCtx.strokeStyle = 'rgba(0,255,135,0.3)'; etCalibCtx.lineWidth = 2; etCalibCtx.stroke();
+  etCalibCtx.beginPath(); etCalibCtx.arc(x, y, 10, 0, Math.PI * 2);
+  etCalibCtx.fillStyle = '#00ff87'; etCalibCtx.fill();
+  etCalibCtx.fillStyle = 'rgba(0,255,135,0.6)';
+  etCalibCtx.font = '12px Space Mono,monospace'; etCalibCtx.textAlign = 'center';
+  etCalibCtx.fillText('이 점을 바라보며 클릭', x, y + 34);
+  document.getElementById('et-calib-progress').textContent = `${idx} / ${ET_CALIB_POSITIONS.length} 완료`;
 }
-function startEtCalibration(){
-  etCalibPoints=[]; etCalibIdx=0; etCalibListening=true;
+
+function startEtCalibration() {
+  if (!_wgStarted) { showToast('먼저 카메라 버튼을 눌러 WebGazer를 시작하세요.'); return; }
+  etCalibIdx = 0; etCalibListening = true;
   resizeEtCalibCanvas(); etCalibOverlay.classList.add('show');
   drawEtCalibPoint(etCalibIdx);
   setEtStatusDot('calib');
 }
-etCalibCanvas.addEventListener('click',(e)=>{
-  if(!etCalibListening)return;
-  if(!etLastEyeRaw){showToast('눈이 감지되지 않습니다.');return;}
-  const[px,py]=ET_CALIB_POSITIONS[etCalibIdx];
-  etCalibPoints.push({screenX:px*window.innerWidth,screenY:py*window.innerHeight,eyeX:etLastEyeRaw.x,eyeY:etLastEyeRaw.y});
+
+etCalibCanvas.addEventListener('click', (e) => {
+  if (!etCalibListening) return;
+  const [px, py] = ET_CALIB_POSITIONS[etCalibIdx];
+  const sx = px * window.innerWidth, sy = py * window.innerHeight;
+  // WebGazer에 캘리브레이션 포인트 등록
+  webgazer.recordScreenPosition(sx, sy, 'click');
   etCalibIdx++;
-  if(etCalibIdx>=ET_CALIB_POSITIONS.length){finishEtCalibration();}
-  else{drawEtCalibPoint(etCalibIdx);}
+  if (etCalibIdx >= ET_CALIB_POSITIONS.length) {
+    finishEtCalibration();
+  } else {
+    drawEtCalibPoint(etCalibIdx);
+  }
 });
-function finishEtCalibration(){
-  etCalibListening=false; etCalibOverlay.classList.remove('show');
-  etCalibMatrix=computeEtAffine(etCalibPoints);
-  etState.calibrated=true;
-  document.getElementById('btn-et-track').disabled=false;
-  setEtStatus('ready','캘리브레이션 완료');
+
+function finishEtCalibration() {
+  etCalibListening = false; etCalibOverlay.classList.remove('show');
+  etState.calibrated = true;
+  document.getElementById('btn-et-track').disabled = false;
+  setEtStatus('ready', '캘리브레이션 완료 — 추적 시작 버튼을 누르세요');
   setEtStatusDot('ready');
   showToast('캘리브레이션 완료! 추적을 시작하세요.');
 }
-function computeEtAffine(pts){
-  const n=pts.length;
-  function solveLS(rhs){
-    let sX=0,sY=0,sX2=0,sY2=0,sXY=0,sRx=0,sRy=0,sR=0;
-    for(const p of pts){sX+=p.eyeX;sY+=p.eyeY;sX2+=p.eyeX**2;sY2+=p.eyeY**2;sXY+=p.eyeX*p.eyeY;}
-    for(let i=0;i<n;i++){sRx+=pts[i].eyeX*rhs[i];sRy+=pts[i].eyeY*rhs[i];sR+=rhs[i];}
-    const A=[[sX2,sXY,sX],[sXY,sY2,sY],[sX,sY,n]];
-    return solve3x3(A,[sRx,sRy,sR]);
-  }
-  const[a,b,c]=solveLS(pts.map(p=>p.screenX));
-  const[d,e,f]=solveLS(pts.map(p=>p.screenY));
-  return{a,b,c,d,e,f};
-}
-function solve3x3(A,b){
-  const m=A.map((r,i)=>[...r,b[i]]);
-  for(let col=0;col<3;col++){
-    let mr=col;
-    for(let r=col+1;r<3;r++)if(Math.abs(m[r][col])>Math.abs(m[mr][col]))mr=r;
-    [m[col],m[mr]]=[m[mr],m[col]];
-    for(let r=col+1;r<3;r++){const f=m[r][col]/m[col][col];for(let k=col;k<=3;k++)m[r][k]-=f*m[col][k];}
-  }
-  const x=[0,0,0];
-  for(let i=2;i>=0;i--){x[i]=m[i][3];for(let j=i+1;j<3;j++)x[i]-=m[i][j]*x[j];x[i]/=m[i][i];}
-  return x;
-}
-function etEyeToScreen(ex,ey){
-  if(!etCalibMatrix)return null;
-  const{a,b,c,d,e,f}=etCalibMatrix;
-  return{x:a*ex+b*ey+c,y:d*ex+e*ey+f};
-}
 
 // ── 상태 표시 ──
-function setEtStatus(type, text){
+function setEtStatus(type, text) {
   document.getElementById('et-cam-text').textContent = text;
   setEtStatusDot(type);
 }
-function setEtStatusDot(type){
-  const dot=document.getElementById('et-main-dot');
-  dot.className='et-status-dot';
-  if(type==='active'||type==='cam'||type==='ready')dot.classList.add('active');
-  else if(type==='calib')dot.classList.add('calib');
+function setEtStatusDot(type) {
+  const dot = document.getElementById('et-main-dot');
+  dot.className = 'et-status-dot';
+  if (type === 'active' || type === 'cam' || type === 'ready') dot.classList.add('active');
+  else if (type === 'calib') dot.classList.add('calib');
 }
 
 // ── 데이터 초기화 ──
-function resetEtData(){
-  etState.gazeData={};
-  etState.currentSquare=null; etState.squareEnteredAt=null;
-  etState.sessionStart=null; etState.sessionEnd=null;
-  etState.moveSnapshots=[];
-  etState.prevMoveGaze={};
+function resetEtData() {
+  etState.gazeData = {};
+  etState.currentSquare = null; etState.squareEnteredAt = null;
+  etState.sessionStart = null; etState.sessionEnd = null;
+  etState.moveSnapshots = []; etState.prevMoveGaze = {};
   renderEtHeatmap(); updateEtStats(); renderMoveLog();
   showToast('시선 데이터 초기화 완료');
 }
 
 // ── JSON 다운로드 ──
-function downloadGazeData(){
+function downloadGazeData() {
   const data = buildGazeExport();
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=`chess-gaze-${Date.now()}.json`; a.click();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `chess-gaze-${Date.now()}.json`; a.click();
 }
-
 function buildGazeExport() {
   return {
     timestamp: new Date().toISOString(),
-    sessionDuration: etState.sessionStart ? Math.floor(((etState.sessionEnd||Date.now())-etState.sessionStart)/1000) : 0,
+    sessionDuration: etState.sessionStart ? Math.floor(((etState.sessionEnd || Date.now()) - etState.sessionStart) / 1000) : 0,
     gazeData: etState.gazeData,
     topSquares: Object.entries(etState.gazeData)
-      .sort((a,b)=>b[1]-a[1]).slice(0,10)
-      .map(([sq,ms])=>({square:sq,ms,seconds:+(ms/1000).toFixed(2)})),
+      .sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .map(([sq, ms]) => ({ square: sq, ms, seconds: +(ms / 1000).toFixed(2) })),
     moveSnapshots: etState.moveSnapshots,
   };
 }
 
 // ── 이미지 내보내기 ──
-function exportHeatmapImg(){
-  const size=etBoardCanvas.width;
-  const exp=document.createElement('canvas'); exp.width=exp.height=size;
-  const ctx=exp.getContext('2d');
-  ctx.drawImage(etBoardCanvas,0,0); ctx.drawImage(etHeatCanvas,0,0);
-  exp.toBlob(blob=>{
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-    a.download=`chess-heatmap-${Date.now()}.png`; a.click();
+function exportHeatmapImg() {
+  const size = etBoardCanvas.width;
+  const exp = document.createElement('canvas'); exp.width = exp.height = size;
+  const ctx = exp.getContext('2d');
+  ctx.drawImage(etBoardCanvas, 0, 0); ctx.drawImage(etHeatCanvas, 0, 0);
+  exp.toBlob(blob => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `chess-heatmap-${Date.now()}.png`; a.click();
   });
 }
 
 // 루프
-setInterval(()=>{ if(etState.tracking){renderEtHeatmap(); updateEtStats();} },150);
-window.addEventListener('resize',()=>{
+setInterval(() => { if (etState.tracking) { renderEtHeatmap(); updateEtStats(); } }, 150);
+window.addEventListener('resize', () => {
   resizeEtBoard();
-  if(etCalibOverlay.classList.contains('show')){ resizeEtCalibCanvas(); drawEtCalibPoint(etCalibIdx); }
+  if (etCalibOverlay.classList.contains('show')) { resizeEtCalibCanvas(); drawEtCalibPoint(etCalibIdx); }
 });
 
 // ── 버튼 이벤트 ──
 document.getElementById('btn-et-cam').addEventListener('click', () => { initEtMediaPipe(); });
-document.getElementById('btn-et-calib').addEventListener('click',()=>{ startEtCalibration(); });
-document.getElementById('btn-et-track').addEventListener('click',()=>{
-  etState.tracking=true; etState.sessionStart=Date.now();
-  etGazeDot.style.display='block'; showGazeCursor();
-  document.getElementById('btn-et-track').disabled=true;
-  document.getElementById('btn-et-stop').disabled=false;
+document.getElementById('btn-et-calib').addEventListener('click', () => { startEtCalibration(); });
+document.getElementById('btn-et-track').addEventListener('click', () => {
+  if (!_wgStarted) { showToast('먼저 카메라 버튼을 누르세요.'); return; }
+  etState.tracking = true; etState.sessionStart = Date.now();
+  etState.calibrated = true;
+  etGazeDot.style.display = 'block'; showGazeCursor();
+  document.getElementById('btn-et-track').disabled = true;
+  document.getElementById('btn-et-stop').disabled = false;
   setEtStatusDot('active');
   showToast('시선 추적 시작!');
 });
-document.getElementById('btn-et-stop').addEventListener('click',()=>{
-  etState.tracking=false;
-  if(etState.currentSquare&&etState.squareEnteredAt){
-    const d=Date.now()-etState.squareEnteredAt;
-    if(d>=etSettings.minDwell) etState.gazeData[etState.currentSquare]=(etState.gazeData[etState.currentSquare]||0)+d;
+document.getElementById('btn-et-stop').addEventListener('click', () => {
+  etState.tracking = false;
+  if (etState.currentSquare && etState.squareEnteredAt) {
+    const d = Date.now() - etState.squareEnteredAt;
+    if (d >= etSettings.minDwell)
+      etState.gazeData[etState.currentSquare] = (etState.gazeData[etState.currentSquare] || 0) + d;
   }
-  etState.currentSquare=null; etState.squareEnteredAt=null;
-  etGazeDot.style.display='none'; hideGazeCursor();
-  document.getElementById('btn-et-track').disabled=false;
-  document.getElementById('btn-et-stop').disabled=true;
+  etState.currentSquare = null; etState.squareEnteredAt = null;
+  etGazeDot.style.display = 'none'; hideGazeCursor();
+  document.getElementById('et-gaze-indicator').classList.remove('on');
+  document.getElementById('btn-et-track').disabled = false;
+  document.getElementById('btn-et-stop').disabled = true;
   setEtStatusDot('ready');
   showToast('추적 중지됨.');
 });
-document.getElementById('et-smooth').addEventListener('input',function(){
-  etSettings.smoothing=+this.value; document.getElementById('et-smooth-val').textContent=this.value;
+document.getElementById('et-smooth').addEventListener('input', function () {
+  etSettings.smoothing = +this.value; document.getElementById('et-smooth-val').textContent = this.value;
 });
-document.getElementById('et-dwell').addEventListener('input',function(){
-  etSettings.minDwell=+this.value; document.getElementById('et-dwell-val').textContent=this.value;
+document.getElementById('et-dwell').addEventListener('input', function () {
+  etSettings.minDwell = +this.value; document.getElementById('et-dwell-val').textContent = this.value;
 });
-document.getElementById('et-alpha').addEventListener('input',function(){
-  etSettings.heatAlpha=this.value/10; document.getElementById('et-alpha-val').textContent=(this.value/10).toFixed(1);
+document.getElementById('et-alpha').addEventListener('input', function () {
+  etSettings.heatAlpha = this.value / 10; document.getElementById('et-alpha-val').textContent = (this.value / 10).toFixed(1);
 });
 
-window.addEventListener('load',()=>{
+window.addEventListener('load', () => {
   resizeEtBoard();
-  // 라이브러리 로딩 상태 자동 체크
   setTimeout(() => {
-    etLogInfo(`[페이지 로드] FaceMesh: ${typeof FaceMesh}, Camera: ${typeof Camera}, _mpLoadError: ${!!window._mpLoadError}`);
-    if (typeof FaceMesh === 'undefined') {
-      etLogErr('FaceMesh 없음 — CDN 차단 또는 네트워크 오류. HTTPS 환경인지 확인하세요.');
-      setEtStatus('error', '❌ MediaPipe 로딩 실패 (로그 확인)');
+    if (typeof webgazer === 'undefined') {
+      etLogErr('WebGazer 없음 — CDN 차단 또는 네트워크 오류. HTTPS 환경인지 확인하세요.');
+      setEtStatus('error', '❌ WebGazer 로딩 실패 (로그 확인)');
     } else {
-      etLogOk('MediaPipe 라이브러리 로딩 완료. ▶ 카메라 버튼을 누르세요.');
+      // WebGazer가 자체 gaze dot을 표시하지 않도록 설정
+      webgazer.showPredictionPoints(false);
+      etLogOk('WebGazer 라이브러리 로딩 완료. ▶ 카메라 버튼을 누르세요.');
     }
-  }, 1500);
+  }, 1200);
 });
 
 // ══════════════════════════════════════════
@@ -2053,8 +1895,9 @@ function joinGame(gameId,myColor,gameData){
     panel.style.display = 'flex';
     setTimeout(() => resizeEtBoard(), 50);
   }
-  if (etState.calibrated && !etState.tracking) {
+  if (_wgStarted && !etState.tracking) {
     etState.tracking=true; etState.sessionStart=Date.now(); etState.sessionEnd=null;
+    etState.calibrated=true;
     etGazeDot.style.display='block'; showGazeCursor();
     document.getElementById('btn-et-track').disabled=true;
     document.getElementById('btn-et-stop').disabled=false;
