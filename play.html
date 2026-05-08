@@ -863,6 +863,8 @@ input[type=range] { width: 80px; accent-color: #00ff87; }
             <button class="et-btn et-btn-primary" id="btn-et-cam">▶ 카메라</button>
             <button class="et-btn et-btn-ghost"   id="btn-et-calib" disabled>◎ 캘리브</button>
           </div>
+          <!-- 디버그 로그 -->
+          <div id="et-debug-log" style="margin-top:8px;background:#050508;border:1px solid #2a2a3e;border-radius:6px;padding:6px 8px;font-family:monospace;font-size:10px;color:#7a7aaa;max-height:130px;overflow-y:auto;line-height:1.7;white-space:pre-wrap;word-break:break-all;"></div>
           <div class="et-btn-row">
             <button class="et-btn et-btn-primary"  id="btn-et-track" disabled>👁 추적 시작</button>
             <button class="et-btn et-btn-danger"   id="btn-et-stop"  disabled>■ 중지</button>
@@ -1052,81 +1054,120 @@ function toggleEtPanel() {
 // ── ET 패널 초기 상태 ── (로비에서는 숨김, 대국 시작 시 토글 가능)
 // collapsed 클래스는 toggleEtOnGame()과 toggleEtPanel()로만 제어
 
-// ── MediaPipe 초기화 ──
+// ── 디버그 로그 ──
 let _etFrameLoop = null;
+function etLog(msg, color) {
+  const el = document.getElementById('et-debug-log');
+  if (!el) { console.log('[ET]', msg); return; }
+  const t = new Date().toLocaleTimeString('ko',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const line = document.createElement('div');
+  line.style.color = color || '#7a7aaa';
+  line.textContent = `[${t}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  console.log('[ET]', msg);
+}
+function etLogOk(msg)  { etLog('✅ ' + msg, '#00ff87'); }
+function etLogErr(msg) { etLog('❌ ' + msg, '#ff4444'); }
+function etLogInfo(msg){ etLog('ℹ ' + msg,  '#aaaaff'); }
 
+// ── MediaPipe 초기화 ──
 async function initEtMediaPipe() {
-  setEtStatus('loading', '⏳ 로딩 중...');
   const btn = document.getElementById('btn-et-cam');
   btn.disabled = true; btn.textContent = '로딩...';
+  setEtStatus('loading', '⏳ 로딩 중...');
+
+  // 디버그 로그 초기화
+  const dbg = document.getElementById('et-debug-log');
+  if (dbg) dbg.innerHTML = '';
 
   try {
-    // 1) FaceMesh 객체 존재 확인
-    if (window._mpLoadError || typeof FaceMesh === 'undefined') {
-      throw new Error('MediaPipe 라이브러리 로딩 실패. 네트워크 연결을 확인하고 페이지를 새로고침해 주세요.');
-    }
+    // STEP 1: 라이브러리 로딩 확인
+    etLogInfo(`FaceMesh 타입: ${typeof FaceMesh}`);
+    etLogInfo(`Camera 타입: ${typeof Camera}`);
+    etLogInfo(`_mpLoadError: ${window._mpLoadError}`);
 
-    // 2) FaceMesh 초기화
+    if (window._mpLoadError || typeof FaceMesh === 'undefined') {
+      throw new Error('MediaPipe(FaceMesh) 로딩 실패 — 네트워크 확인 후 새로고침');
+    }
+    etLogOk('STEP1: 라이브러리 OK');
+
+    // STEP 2: FaceMesh 객체 생성
+    etLogInfo('STEP2: FaceMesh 초기화 중...');
     etFaceMesh = new FaceMesh({
-      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`
+      locateFile: f => {
+        const url = `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`;
+        etLogInfo(`  locateFile → ${f}`);
+        return url;
+      }
     });
     etFaceMesh.setOptions({
-      maxNumFaces: 1,
-      refineLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5,
+      maxNumFaces: 1, refineLandmarks: true,
+      minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
     });
     etFaceMesh.onResults(onEtFaceMeshResults);
+    etLogOk('STEP2: FaceMesh 객체 생성 OK');
 
-    // 3) 카메라 스트림 획득
+    // STEP 3: getUserMedia
+    etLogInfo('STEP3: 카메라 권한 요청 중...');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('이 브라우저는 getUserMedia를 지원하지 않습니다 (HTTPS 필요)');
+    }
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
     });
+    etLogOk(`STEP3: 스트림 획득 OK (트랙: ${stream.getVideoTracks().length}개)`);
+
     etVideo.srcObject = stream;
     await new Promise((res, rej) => {
-      etVideo.onloadedmetadata = res;
-      setTimeout(() => rej(new Error('카메라 타임아웃')), 8000);
+      etVideo.onloadedmetadata = () => { etLogOk('STEP3b: metadata OK'); res(); };
+      setTimeout(() => rej(new Error('카메라 metadata 타임아웃(8s)')), 8000);
     });
     await etVideo.play();
+    etLogOk(`STEP3c: video.play() OK (${etVideo.videoWidth}x${etVideo.videoHeight})`);
 
-    // 4) Camera 클래스 사용 가능하면 우선 사용, 아니면 rAF 루프
+    // STEP 4: 프레임 루프
     if (typeof Camera !== 'undefined') {
+      etLogInfo('STEP4: Camera 클래스 사용');
       etMpCamera = new Camera(etVideo, {
         onFrame: async () => {
-          if (etFaceMesh && etVideo.readyState >= 2) {
+          if (etFaceMesh && etVideo.readyState >= 2)
             await etFaceMesh.send({ image: etVideo });
-          }
         },
         width: 640, height: 480,
       });
       await etMpCamera.start();
+      etLogOk('STEP4: Camera.start() OK');
     } else {
-      // rAF 기반 루프 (Camera 클래스 없을 때)
+      etLogInfo('STEP4: rAF 루프 사용 (Camera 없음)');
       let _sending = false;
       const sendFrame = async () => {
-        if (!etFaceMesh) return;
-        if (!_sending && etVideo.readyState >= 2) {
+        if (etFaceMesh && !_sending && etVideo.readyState >= 2) {
           _sending = true;
-          try { await etFaceMesh.send({ image: etVideo }); } catch(e) {}
+          try { await etFaceMesh.send({ image: etVideo }); } catch(e) { etLogErr('send 오류: '+e.message); }
           _sending = false;
         }
         _etFrameLoop = requestAnimationFrame(sendFrame);
       };
       _etFrameLoop = requestAnimationFrame(sendFrame);
+      etLogOk('STEP4: rAF 루프 시작 OK');
     }
 
-    // 5) 완료
+    // STEP 5: 완료
     etState.camReady = true;
     document.getElementById('btn-et-calib').disabled = false;
     btn.textContent = '✓ 연결됨';
     setEtStatus('cam', '✅ 웹캠 준비됨 — 캘리브 버튼을 누르세요');
+    etLogOk('모든 단계 완료! 캘리브레이션을 진행하세요.');
     showToast('카메라 연결됨! 캘리브레이션을 진행하세요.');
 
   } catch(e) {
     btn.disabled = false; btn.textContent = '▶ 카메라';
-    const msg = e.name === 'NotAllowedError' ? '카메라 권한이 거부됐습니다. 브라우저 설정에서 허용해 주세요.'
-               : e.name === 'NotFoundError'  ? '카메라를 찾을 수 없습니다.'
-               : e.message || '카메라 오류';
+    const msg = e.name === 'NotAllowedError' ? '카메라 권한 거부 (브라우저 설정 확인)'
+               : e.name === 'NotFoundError'  ? '카메라 없음'
+               : e.name === 'NotReadableError' ? '카메라가 다른 앱에서 사용 중'
+               : (e.message || String(e));
+    etLogErr(`실패: [${e.name}] ${msg}`);
     setEtStatus('error', '❌ ' + msg);
     showToast('카메라 오류: ' + msg);
     console.error('[ET] initEtMediaPipe 실패:', e);
@@ -1562,7 +1603,19 @@ document.getElementById('et-alpha').addEventListener('input',function(){
   etSettings.heatAlpha=this.value/10; document.getElementById('et-alpha-val').textContent=(this.value/10).toFixed(1);
 });
 
-window.addEventListener('load',()=>{ resizeEtBoard(); });
+window.addEventListener('load',()=>{
+  resizeEtBoard();
+  // 라이브러리 로딩 상태 자동 체크
+  setTimeout(() => {
+    etLogInfo(`[페이지 로드] FaceMesh: ${typeof FaceMesh}, Camera: ${typeof Camera}, _mpLoadError: ${!!window._mpLoadError}`);
+    if (typeof FaceMesh === 'undefined') {
+      etLogErr('FaceMesh 없음 — CDN 차단 또는 네트워크 오류. HTTPS 환경인지 확인하세요.');
+      setEtStatus('error', '❌ MediaPipe 로딩 실패 (로그 확인)');
+    } else {
+      etLogOk('MediaPipe 라이브러리 로딩 완료. ▶ 카메라 버튼을 누르세요.');
+    }
+  }, 1500);
+});
 
 // ══════════════════════════════════════════
 // 체스 엔진
