@@ -927,65 +927,119 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 }
 
 /* ===== BEST MOVE EXPLAIN PANEL ===== */
+/* ===== BEST EXPLAIN PANEL — ChessInside style ===== */
 #best-explain-panel {
-  margin: 0 0 6px 0;
+  margin: 0 0 8px 0;
   background: var(--bg-card);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
 }
+
+/* 상단 타이틀 바 */
+.best-explain-header {
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(255,255,255,0.03);
+}
+.best-explain-header-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+/* 수 시퀀스 바 */
 .best-seq-bar {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 6px 8px;
-  background: rgba(255,255,255,0.03);
-  border-bottom: 1px solid var(--border-color);
+  gap: 3px;
   flex-wrap: wrap;
-  min-height: 32px;
+  min-height: 28px;
 }
 .best-seq-move {
-  display: inline-flex; align-items: center; gap: 2px;
-  padding: 2px 6px; border-radius: 4px;
-  font-size: 12px; font-weight: 700;
-  background: rgba(80,144,208,0.15);
-  color: var(--text-primary); cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.12s; white-space: nowrap;
-}
-.best-seq-move:hover { background: rgba(80,144,208,0.3); border-color: var(--accent-blue); }
-.best-seq-move.active {
-  background: var(--accent-blue); color: #fff; border-color: var(--accent-blue);
-}
-.best-seq-move img { width: 14px; height: 14px; object-fit: contain; }
-.best-seq-num {
-  font-size: 10px; color: var(--text-muted); margin: 0 2px; white-space: nowrap;
-}
-.best-explain-title {
-  padding: 8px 10px 4px;
-  font-size: 12.5px; font-weight: 800; color: var(--text-primary);
-}
-.best-explain-title .be-move {
   display: inline-flex; align-items: center; gap: 3px;
-  color: var(--accent-blue);
+  padding: 3px 8px; border-radius: 6px;
+  font-size: 13px; font-weight: 700;
+  background: rgba(80,144,208,0.12);
+  color: var(--text-primary); cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: all 0.13s; white-space: nowrap;
 }
+.best-seq-move:hover {
+  background: rgba(80,144,208,0.28);
+  border-color: var(--accent-blue);
+}
+.best-seq-move.active {
+  background: var(--accent-blue);
+  color: #fff;
+  border-color: var(--accent-blue);
+  box-shadow: 0 1px 4px rgba(80,144,208,0.4);
+}
+.best-seq-move img { width: 15px; height: 15px; object-fit: contain; }
+.best-seq-num {
+  font-size: 11px; color: var(--text-muted);
+  margin: 0 1px; white-space: nowrap; font-weight: 600;
+}
+
+/* 메인 타이틀: "Qa1이/가 좋은 이유:" */
+.best-explain-title {
+  padding: 12px 14px 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  line-height: 1.3;
+}
+.be-move-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(80,144,208,0.15);
+  color: var(--accent-blue);
+  font-weight: 800;
+  font-size: 14px;
+  padding: 1px 8px 1px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(80,144,208,0.3);
+}
+.be-move-chip img { width: 17px; height: 17px; object-fit: contain; }
+
+/* 이유 목록 */
 .best-reason-list {
-  padding: 4px 10px 10px;
-  display: flex; flex-direction: column; gap: 5px;
+  padding: 4px 14px 14px;
+  display: flex; flex-direction: column; gap: 7px;
 }
 .best-reason-item {
-  display: flex; align-items: flex-start; gap: 8px;
-  font-size: 12px; line-height: 1.55; color: var(--text-secondary);
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 12.5px; line-height: 1.55;
+  color: var(--text-secondary);
 }
 .best-reason-icon {
   flex-shrink: 0;
-  width: 14px; height: 14px; border-radius: 3px;
-  margin-top: 2px;
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
 }
 .reason-positive { background: var(--accent-blue); }
-.reason-neutral  { background: rgba(80,144,208,0.4); }
-.reason-warning  { background: #e0a030; }
+.reason-neutral  { background: rgba(80,144,208,0.45); }
 .reason-good     { background: #7fa650; }
+.reason-warning  { background: #e0a030; }
+
+/* 이유 뒤 + 마커 */
+.best-reason-plus {
+  margin-left: 4px;
+  color: #e0a030;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1;
+  vertical-align: middle;
+}
 
 /* ===== THREAT ANALYSIS PANEL ===== */
 #threat-panel {
@@ -1708,12 +1762,14 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 
         <!-- 최선수 설명 패널 -->
         <div id="best-explain-panel" style="display:none;">
-          <div class="threat-header">
-            <span class="threat-title">📖 최선수 설명</span>
-            <button class="threat-refresh-btn" onclick="runBestMoveExplain()" title="새로고침">↻</button>
+          <!-- 헤더: 라벨 + 수순 바 + 새로고침 -->
+          <div class="best-explain-header">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+              <span class="best-explain-header-label">Explaining the next best moves</span>
+              <button class="threat-refresh-btn" onclick="runBestMoveExplain()" title="새로고침">↻</button>
+            </div>
+            <div id="best-explain-seq" class="best-seq-bar"></div>
           </div>
-          <!-- 수순 바 -->
-          <div id="best-explain-seq" class="best-seq-bar"></div>
           <!-- 설명 본문 -->
           <div id="best-explain-content">
             <div class="threat-loading">분석 중...</div>

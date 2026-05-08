@@ -146,6 +146,44 @@ function buildChessContext() {
     else if (v < -1) advantageDesc = '흑이 약간 우세';
   }
 
+  // 최선수 설명 패널 데이터 수집 (이미 분석된 경우)
+  let bestExplainData = null;
+  try {
+    const beEl = document.getElementById('best-explain-content');
+    if (beEl && lastBestExplainFen) {
+      const reasonItems = beEl.querySelectorAll('.best-reason-item span');
+      const reasons = Array.from(reasonItems).map(el => el.innerText.trim()).filter(Boolean);
+      const titleEl = beEl.querySelector('.best-explain-title');
+      const title   = titleEl ? titleEl.innerText.trim() : null;
+      if (reasons.length > 0) {
+        bestExplainData = { move: bestExplainMoves[0] || null, title, reasons };
+      }
+    }
+  } catch(e) { /* 무시 */ }
+
+  // 위협 패널에서 마지막으로 분석된 위협 데이터 포함
+  let threatData = null;
+  try {
+    const tEl = document.getElementById('threat-content');
+    if (tEl) {
+      const ideaEl = tEl.querySelector('.threat-label-idea');
+      const probEl = tEl.querySelector('.threat-label-prob');
+      const solEl  = tEl.querySelector('.threat-label-sol');
+      const getBody = (labelEl) => {
+        if (!labelEl) return null;
+        const section = labelEl.closest('.threat-section');
+        const body = section && section.querySelector('.threat-section-body');
+        return body ? body.innerText.trim() : null;
+      };
+      const idea = getBody(ideaEl);
+      const prob = getBody(probEl);
+      const sol  = getBody(solEl);
+      if (idea || prob || sol) {
+        threatData = { idea, prob, sol };
+      }
+    }
+  } catch(e) { /* 무시 */ }
+
   return {
     turn, fen, bestMove, bestLine, line2, line3, evaluation, depth, cpFromWhite,
     lastMove, lastMoveSan, lastMoveAnnotation,
@@ -153,6 +191,8 @@ function buildChessContext() {
     pgnMoves: pgnMoves.trim(),
     phase, moveCount, advantageDesc,
     fullMove: game.fullMove,
+    threatData,
+    bestExplainData,
   };
 }
 
@@ -222,7 +262,40 @@ async function runPositionCommentary() {
     }
 
     // 최신 컨텍스트 다시 빌드 (라인이 갱신됐을 수 있음)
-    const freshCtx = buildChessContext();
+    let freshCtx = buildChessContext();
+
+    // 위협 패널이 아직 로딩 중이면 완료까지 대기 (최대 4초)
+    if (threatLoading) {
+      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 완료 대기 중...`;
+      const tStart = Date.now();
+      while (threatLoading && Date.now() - tStart < 4000) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+      // 위협 데이터가 반영된 최신 컨텍스트로 재빌드
+      freshCtx = buildChessContext();
+    }
+
+    // 위협 패널이 비어있으면 백그라운드에서 먼저 위협 분석 실행 후 결과 기다림
+    if (!freshCtx.threatData && !threatLoading) {
+      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 중...`;
+      await runThreatAnalysis();
+      const tStart2 = Date.now();
+      while (threatLoading && Date.now() - tStart2 < 4000) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+      freshCtx = buildChessContext();
+    }
+
+    // 최선수 이유 분석이 없으면 백그라운드에서 먼저 실행 후 결과 기다림
+    if (!freshCtx.bestExplainData && !bestExplainLoading && pvData && pvData[1] && pvData[1].moves && pvData[1].moves.length > 0) {
+      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 최선수 이유 분석 중...`;
+      await runBestMoveExplain(0);
+      const bStart = Date.now();
+      while (bestExplainLoading && Date.now() - bStart < 4000) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+      freshCtx = buildChessContext();
+    }
 
     responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> AI 해설 생성 중...`;
 
@@ -329,19 +402,40 @@ function buildCommentaryPrompt(ctx) {
   if (ctx.line2)    lines.push(`[엔진 2순위 라인] ${ctx.line2}`);
   if (ctx.line3)    lines.push(`[엔진 3순위 라인] ${ctx.line3}`);
 
+  // 위협 패널 데이터 (체스인사이드 Idea→Problem→Solution 구조)
+  if (ctx.threatData) {
+    lines.push(``);
+    lines.push(`[위협 분석 데이터 — 해설에 반드시 반영할 것]`);
+    if (ctx.threatData.idea) lines.push(`핵심 계획(Idea): ${ctx.threatData.idea}`);
+    if (ctx.threatData.prob) lines.push(`문제점(Problem): ${ctx.threatData.prob}`);
+    if (ctx.threatData.sol)  lines.push(`최선책(Solution): ${ctx.threatData.sol}`);
+  }
+
+  // 최선수 이유 분석 데이터
+  if (ctx.bestExplainData) {
+    lines.push(``);
+    lines.push(`[최선수 이유 분석 데이터 — 최선수 분석 섹션에 반드시 반영할 것]`);
+    lines.push(`최선수: ${ctx.bestExplainData.move || ctx.bestMove}`);
+    if (ctx.bestExplainData.reasons && ctx.bestExplainData.reasons.length > 0) {
+      lines.push(`이 수가 좋은 이유:`);
+      ctx.bestExplainData.reasons.forEach((r, i) => lines.push(`  ${i+1}. ${r}`));
+    }
+  }
+
   if (ctx.pgnMoves) lines.push(`전체 기보: ${ctx.pgnMoves}`);
   lines.push(`FEN: ${ctx.fen}`);
 
   lines.push(``);
   lines.push(`[해설 작성 지침]`);
-  lines.push(`스톡피시 엔진 라인을 기반으로, 현재 포지션을 체스인사이드 스타일로 해설하세요.`);
+  lines.push(`스톡피시 엔진 라인과 위협 분석 데이터(핵심 계획/문제점/최선책)를 함께 참고하여, 체스인사이드 스타일로 해설하세요.`);
+  lines.push(`위협 분석 데이터가 있다면 **위협 & 아이디어** 섹션에 반드시 녹여서 작성하세요. 핵심 계획→문제점→최선책 흐름을 자연스러운 한국어로 풀어서 설명하세요.`);
   lines.push(`해설은 반드시 **포지션 상황** 섹션으로 시작합니다.`);
   lines.push(`그 뒤로는 포지션의 특성에 따라 아래 섹션들을 필요한 것만 선택해서 작성하세요:`);
   lines.push(``);
   lines.push(`- **약점 분석** : 백 또는 흑에게 구체적인 구조적/전략적 약점이 존재할 때만 작성. 균형 잡힌 오프닝 초반처럼 약점이 불분명하면 생략.`);
   lines.push(`- **강점 분석** : 한쪽이 공간적 우위, 기물 활동성, 폰 구조 등에서 뚜렷한 강점을 가질 때만 작성. 특이사항이 없으면 생략.`);
   lines.push(`- **위협 & 아이디어** : 즉각적인 위협(전술, 포크, 핀, 킹 안전 위협 등)이나 중요한 전략적 아이디어가 있을 때만 작성. 아무것도 없으면 생략.`);
-  lines.push(`- **최선수 분석** : 엔진 1순위 첫 수를 항상 분석. 왜 좋은지 2~3가지 이유를 간결하게.`);
+  lines.push(`- **최선수 분석** : 엔진 1순위 첫 수를 항상 분석. 최선수 이유 분석 데이터가 있으면 그 이유들을 자연스러운 문장으로 풀어서 설명하고, 이후 수순과 연결하세요. 데이터가 없으면 엔진 라인에서 직접 이유 2~3가지를 도출하세요.`);
   lines.push(`- **이후 수순** : 앞으로 전개될 핵심 흐름과 양 측의 계획을 해설.`);
   lines.push(``);
   lines.push(`[형식 규칙]`);
@@ -377,6 +471,14 @@ function buildCoachPrompt(ctx, question) {
   if (ctx.bestLine) lines.push(`[엔진 1순위 라인] ${ctx.bestLine}`);
   if (ctx.line2)    lines.push(`[엔진 2순위 라인] ${ctx.line2}`);
   if (ctx.line3)    lines.push(`[엔진 3순위 라인] ${ctx.line3}`);
+
+  if (ctx.threatData) {
+    lines.push(``);
+    lines.push(`[위협 분석 데이터]`);
+    if (ctx.threatData.idea) lines.push(`핵심 계획(Idea): ${ctx.threatData.idea}`);
+    if (ctx.threatData.prob) lines.push(`문제점(Problem): ${ctx.threatData.prob}`);
+    if (ctx.threatData.sol)  lines.push(`최선책(Solution): ${ctx.threatData.sol}`);
+  }
 
   if (ctx.pgnMoves) lines.push(`전체 기보: ${ctx.pgnMoves}`);
   lines.push(`FEN: ${ctx.fen}`);
@@ -614,12 +716,26 @@ async function runThreatAnalysis() {
 
   const panel     = document.getElementById('threat-panel');
   const contentEl = document.getElementById('threat-content');
-  panel.style.display = 'block';
-  contentEl.innerHTML = '<div class="threat-loading">⚡ 위협 분석 중...</div>';
+  if (panel) panel.style.display = 'block';
+  if (contentEl) contentEl.innerHTML = '<div class="threat-loading">⚡ 위협 분석 중...</div>';
   threatLoading   = true;
   lastThreatFen   = fenKey;
 
   try {
+    // 체크메이트 즉시 감지 — API 호출 없이 클라이언트에서 바로 처리
+    const mover    = ctx.turn === 'w' ? '백' : '흑';
+    const isMate   = ctx.bestMove && ctx.bestMove.includes('#');
+
+    if (isMate) {
+      const mateText = [
+        `**핵심 계획:** ${mover}은 ${ctx.bestMove}로 즉각 체크메이트를 만들 수 있습니다.`,
+        `**문제점:** 즉각적인 체크메이트가 있어 문제점 없음.`,
+        `**최선책:** ${ctx.bestMove}를 바로 두어 게임을 끝내세요.`,
+      ].join('\n');
+      renderThreatPanel(mateText);
+      return;
+    }
+
     const answer  = await callThreatAPI(ctx);
     const cleaned = cleanKorean(answer);
     renderThreatPanel(cleaned);
@@ -633,22 +749,40 @@ async function runThreatAnalysis() {
 }
 
 async function callThreatAPI(ctx) {
+  const mover     = ctx.turn === 'w' ? '백(White)' : '흑(Black)';
+  const opponent  = ctx.turn === 'w' ? '흑(Black)' : '백(White)';
+
+  // 체크메이트/즉승 여부 감지: 엔진 1순위 수에 # 포함 여부
+  const isMate    = ctx.bestMove && ctx.bestMove.includes('#');
+  // 엔진 1순위 수에 + 포함 (체크) 여부
+  const isCheck   = ctx.bestMove && (ctx.bestMove.includes('+') || isMate);
+
   const THREAT_SYSTEM = `You are a Korean chess analyst. Output ONLY in Korean (한국어).
 Never use Japanese, Chinese characters, Arabic, or any non-Korean script.
 Chess move notation (Nf3, e4, dxc4, O-O) stays in algebraic form.
 
-Output format — use EXACTLY these three section headers:
-**핵심 계획:** (백/흑의 주요 위협과 공격 아이디어 1~2문장)
-**문제점:** (상대방이 대응할 수 있는 반격 또는 방어 수단 1~2문장)
-**최선책:** (최선의 대응 수순 또는 해결책 1~2문장. 구체적인 수를 포함할 것)
+CRITICAL RULES:
+- The side to move is ${mover}. ALL analysis must be from ${mover}'s perspective.
+- **핵심 계획** = ${mover}의 공격 아이디어 또는 위협. 절대 ${opponent}의 수를 이 섹션에 쓰지 말 것.
+- **문제점** = ${mover}가 직면한 실제 어려움 또는 ${opponent}의 반격 수단. 만약 ${mover}에게 즉각적인 체크메이트(#)나 결정적 수가 있다면 문제점이 없으므로 "즉각적인 결정타가 있어 문제점 없음"이라고 쓸 것.
+- **최선책** = ${mover}의 최선의 수순 (엔진 최선수 기반).
+- 절대로 차례가 아닌 쪽의 수를 '핵심 계획'에 쓰지 말 것.
+- 체크메이트 수가 있으면 **핵심 계획**에 반드시 체크메이트 가능성을 명시할 것.
 
-Keep each section to 1-2 sentences. Total response under 300 characters.`;
+Output format — use EXACTLY these three section headers:
+**핵심 계획:** (${mover}의 주요 위협과 공격 아이디어 1~2문장)
+**문제점:** (${mover}가 직면한 어려움. 즉승이 있으면 "문제점 없음" 명시)
+**최선책:** (${mover}의 최선 수순 1~2문장. 구체적인 수 표기 포함)
+
+Keep each section to 1-2 sentences. Total response under 350 characters.`;
 
   const userMsg = [
     `현재 포지션을 분석해주세요.`,
-    `차례: ${ctx.turn === 'w' ? '백(White)' : '흑(Black)'}`,
+    `차례: ${mover} — 반드시 ${mover}의 관점에서만 분석하세요.`,
+    isMate  ? `⚠️ 엔진이 즉각 체크메이트 수를 발견했습니다: ${ctx.bestMove}` : '',
+    isCheck && !isMate ? `엔진 최선수(체크): ${ctx.bestMove}` : '',
+    !isCheck ? (ctx.bestMove ? `엔진 최선수: ${ctx.bestMove}${ctx.bestLine ? ' → ' + ctx.bestLine : ''}` : '') : '',
     ctx.lastMoveSan ? `방금 둔 수: ${ctx.lastMoveSan}` : '',
-    ctx.bestMove    ? `엔진 최선수: ${ctx.bestMove}${ctx.bestLine ? ' → ' + ctx.bestLine : ''}` : '',
     ctx.pgnMoves    ? `기보: ${ctx.pgnMoves}` : '',
     `FEN: ${ctx.fen}`,
   ].filter(Boolean).join('\n');
@@ -803,19 +937,21 @@ function renderBestSeqBar(moves, activeIdx, ctx) {
   let turn    = ctx.turn;
 
   moves.forEach((san, i) => {
-    if (turn === 'w' || i === 0) {
-      html += `<span class="best-seq-num">${moveNum}${turn === 'b' && i === 0 ? '...' : '.'}</span>`;
-      if (turn === 'w') {}
+    // 수 번호: 백 차례마다, 또는 첫 수가 흑일 때
+    if (turn === 'w') {
+      html += `<span class="best-seq-num">${moveNum}.</span>`;
+    } else if (i === 0) {
+      html += `<span class="best-seq-num">${moveNum}...</span>`;
     }
 
-    let pieceCode = null;
     const color = turn;
+    let pieceCode;
     if (san === 'O-O' || san === 'O-O-O') pieceCode = color + 'K';
     else if (san && 'NBRQK'.includes(san[0])) pieceCode = color + san[0];
     else pieceCode = color + 'P';
     const imgTag = `<img src="${pieceImg(pieceCode)}" alt="">`;
 
-    html += `<span class="best-seq-move${i === activeIdx ? ' active' : ''}" 
+    html += `<span class="best-seq-move${i === activeIdx ? ' active' : ''}"
       onclick="runBestMoveExplain(${i})" title="${san}">${imgTag}${san}</span>`;
 
     if (turn === 'b') moveNum++;
@@ -875,44 +1011,55 @@ function renderBestExplain(text, focusMove, moves, activeIdx, ctx) {
   const escaped = text
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  const lines       = escaped.split('\n').map(l => l.trim()).filter(Boolean);
-  let   titleLine   = '';
+  // 이유 줄 파싱 (• / - / 숫자. 로 시작하는 줄)
+  const lines = escaped.split('\n').map(l => l.trim()).filter(Boolean);
   const reasonLines = [];
-
   for (const line of lines) {
     if (line.startsWith('•') || line.startsWith('-') || line.startsWith('·') || line.match(/^\d+\./)) {
       const txt = line.replace(/^[•\-·]\s*/, '').replace(/^\d+\.\s*/, '');
-      reasonLines.push(txt);
-    } else if (!titleLine) {
-      titleLine = line;
+      if (txt) reasonLines.push(txt);
     }
   }
+  // 이유가 없으면 모든 줄을 이유로
+  if (reasonLines.length === 0) {
+    lines.forEach(l => { if (l) reasonLines.push(l); });
+  }
 
-  const color = ctx.turn;
-  let pieceCode = null;
+  // 기물 아이콘 결정 (focusIdx 기준 차례 계산)
+  let turnForFocus = ctx.turn;
+  for (let k = 0; k < activeIdx; k++) turnForFocus = turnForFocus === 'w' ? 'b' : 'w';
+  const color = turnForFocus;
+  let pieceCode;
   if (focusMove === 'O-O' || focusMove === 'O-O-O') pieceCode = color + 'K';
   else if (focusMove && 'NBRQK'.includes(focusMove[0])) pieceCode = color + focusMove[0];
   else pieceCode = color + 'P';
-  const imgTag = `<img src="${pieceImg(pieceCode)}" style="width:16px;height:16px;vertical-align:middle;margin-right:2px;">`;
+  const pieceImg_ = `<img src="${pieceImg(pieceCode)}" alt="${focusMove}">`;
 
-  const iconClasses = ['reason-positive','reason-neutral','reason-good','reason-warning'];
+  // 아이콘 색상 순서: 파랑 → 반투명파랑 → 초록 → 노랑
+  const iconCls = ['reason-positive','reason-neutral','reason-good','reason-warning'];
 
-  let html = `<div class="best-explain-title"><span class="be-move">${imgTag}${focusMove}</span>이/가 좋은 이유:</div>`;
-  html += '<div class="best-reason-list">';
+  // 타이틀: "[기물아이콘 Qa1]이/가 좋은 이유:"
+  let html = `
+    <div class="best-explain-title">
+      <span class="be-move-chip">${pieceImg_}${focusMove}</span>이/가 좋은 이유:
+    </div>
+    <div class="best-reason-list">`;
 
-  if (reasonLines.length > 0) {
-    reasonLines.slice(0, 4).forEach((reason, i) => {
-      const cls = iconClasses[i % iconClasses.length];
-      html += `<div class="best-reason-item">
+  const highlight = s => s.replace(
+    /(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?|[a-h][1-8][+#]?)/g,
+    m => m.length >= 2 ? `<strong>${m}</strong>` : m
+  );
+
+  reasonLines.slice(0, 4).forEach((reason, i) => {
+    const cls = iconCls[i % iconCls.length];
+    html += `
+      <div class="best-reason-item">
         <div class="best-reason-icon ${cls}"></div>
-        <span>${reason.replace(/(O-O-O|O-O|[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8][+#=]?)/g, '<strong>$1</strong>')}</span>
+        <span>${highlight(reason)}<span class="best-reason-plus">+</span></span>
       </div>`;
-    });
-  } else {
-    html += `<div class="best-reason-item"><div class="best-reason-icon reason-positive"></div><span>${escaped}</span></div>`;
-  }
+  });
 
-  html += '</div>';
+  html += `</div>`;
   contentEl.innerHTML = html;
 }
 
