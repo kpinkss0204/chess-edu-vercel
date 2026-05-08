@@ -674,49 +674,36 @@ input[type=range] { width: 80px; accent-color: #00ff87; }
 
 /* ── 전체 화면 시선 커서 ── */
 #gaze-cursor {
-  position: fixed;
-  pointer-events: none;
-  z-index: 9999;
-  display: none;
-  transform: translate(-50%, -50%);
+  position: fixed; pointer-events: none; z-index: 9999;
+  display: none; transform: translate(-50%, -50%);
 }
 #gaze-cursor .gc-outer {
-  position: absolute;
-  width: 52px; height: 52px;
-  border: 2px solid rgba(0,255,135,0.3);
-  border-radius: 50%;
+  position: absolute; width: 52px; height: 52px;
+  border: 2px solid rgba(0,255,135,0.3); border-radius: 50%;
   transform: translate(-50%,-50%);
   animation: gc-pulse 1.8s ease-in-out infinite;
 }
 #gaze-cursor .gc-mid {
-  position: absolute;
-  width: 26px; height: 26px;
-  border: 1.5px solid rgba(0,255,135,0.6);
-  border-radius: 50%;
+  position: absolute; width: 26px; height: 26px;
+  border: 1.5px solid rgba(0,255,135,0.6); border-radius: 50%;
   transform: translate(-50%,-50%);
 }
 #gaze-cursor .gc-dot {
-  position: absolute;
-  width: 8px; height: 8px;
-  background: #00ff87;
-  border-radius: 50%;
+  position: absolute; width: 8px; height: 8px;
+  background: #00ff87; border-radius: 50%;
   transform: translate(-50%,-50%);
   box-shadow: 0 0 10px rgba(0,255,135,0.9), 0 0 24px rgba(0,255,135,0.4);
 }
 #gaze-cursor .gc-sq {
-  position: absolute;
-  top: 14px; left: 14px;
-  font-family: var(--font-mono);
-  font-size: 11px; font-weight: 700;
-  color: #00ff87;
-  text-shadow: 0 0 6px rgba(0,0,0,0.9), 0 1px 3px #000;
+  position: absolute; top: 14px; left: 14px;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  color: #00ff87; text-shadow: 0 0 6px rgba(0,0,0,0.9), 0 1px 3px #000;
   white-space: nowrap;
 }
 @keyframes gc-pulse {
-  0%,100% { transform: translate(-50%,-50%) scale(1);   opacity: 0.4; }
+  0%,100% { transform: translate(-50%,-50%) scale(1);    opacity: 0.4; }
   50%      { transform: translate(-50%,-50%) scale(1.15); opacity: 0.8; }
 }
-
 @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -763,7 +750,6 @@ input[type=range] { width: 80px; accent-color: #00ff87; }
 </head>
 <body>
 
-<!-- 전체 화면 시선 커서 -->
 <div id="gaze-cursor">
   <div class="gc-outer"></div>
   <div class="gc-mid"></div>
@@ -1061,7 +1047,7 @@ let etState = {
   prevMoveGaze:   {},
 };
 
-let etSettings = { smoothing: 7, minDwell: 80, heatAlpha: 0.5 };
+let etSettings = { smoothing: 4, minDwell: 80, heatAlpha: 0.5 };
 let etCalibPoints = [], etCalibMatrix = null, etCalibIdx = 0;
 let etCalibListening = false, etLastEyeRaw = null;
 let etFaceMesh = null, etMpCamera = null;
@@ -1234,10 +1220,46 @@ async function initEtMediaPipe() {
   }
 }
 
+// 눈꺼풀 코너 랜드마크 (MediaPipe FaceMesh)
+// 왼눈: 내안각 133, 외안각 33, 위꺼풀 중앙 159, 아래꺼풀 중앙 145
+// 오른눈: 내안각 362, 외안각 263, 위꺼풀 중앙 386, 아래꺼풀 중앙 374
+const EYE_L_INNER=133, EYE_L_OUTER=33,  EYE_L_TOP=159, EYE_L_BOT=145;
+const EYE_R_INNER=362, EYE_R_OUTER=263, EYE_R_TOP=386, EYE_R_BOT=374;
+
 function getIrisCenter(landmarks, indices) {
   let sx=0,sy=0;
   for(const i of indices){sx+=landmarks[i].x;sy+=landmarks[i].y;}
   return{x:sx/indices.length,y:sy/indices.length};
+}
+
+// 홍채의 눈 안 상대 위치 계산 (-1 ~ +1 범위)
+// 머리가 움직여도 눈동자가 고정되면 값이 안 변함
+function getRelativeGaze(lm) {
+  const li = getIrisCenter(lm, IRIS_LEFT);
+  const ri = getIrisCenter(lm, IRIS_RIGHT);
+
+  // 왼눈 상대 위치
+  const llInner = lm[EYE_L_INNER], llOuter = lm[EYE_L_OUTER];
+  const llTop   = lm[EYE_L_TOP],   llBot   = lm[EYE_L_BOT];
+  const lEyeW   = Math.abs(llOuter.x - llInner.x) || 0.001;
+  const lEyeH   = Math.abs(llBot.y   - llTop.y)   || 0.001;
+  const lMidX   = (llInner.x + llOuter.x) / 2;
+  const lMidY   = (llTop.y   + llBot.y)   / 2;
+  const lgx = (li.x - lMidX) / lEyeW;  // -0.5 ~ +0.5
+  const lgy = (li.y - lMidY) / lEyeH;
+
+  // 오른눈 상대 위치
+  const rlInner = lm[EYE_R_INNER], rlOuter = lm[EYE_R_OUTER];
+  const rlTop   = lm[EYE_R_TOP],   rlBot   = lm[EYE_R_BOT];
+  const rEyeW   = Math.abs(rlOuter.x - rlInner.x) || 0.001;
+  const rEyeH   = Math.abs(rlBot.y   - rlTop.y)   || 0.001;
+  const rMidX   = (rlInner.x + rlOuter.x) / 2;
+  const rMidY   = (rlTop.y   + rlBot.y)   / 2;
+  const rgx = (ri.x - rMidX) / rEyeW;
+  const rgy = (ri.y - rMidY) / rEyeH;
+
+  // 양눈 평균
+  return { x: (lgx + rgx) / 2, y: (lgy + rgy) / 2 };
 }
 
 function onEtFaceMeshResults(results) {
@@ -1253,13 +1275,15 @@ function onEtFaceMeshResults(results) {
     etLastEyeRaw=null; etCamCtx.restore(); return;
   }
   const lm = results.multiFaceLandmarks[0];
-  const li = getIrisCenter(lm,IRIS_LEFT), ri = getIrisCenter(lm,IRIS_RIGHT);
-  etLastEyeRaw = { x:(li.x+ri.x)/2, y:(li.y+ri.y)/2 };
+  const gaze = getRelativeGaze(lm);
+  // relative gaze: 대략 -0.3 ~ +0.3 범위. 캘리브/변환에서 스케일 처리
+  etLastEyeRaw = gaze;
   drawEtIris(lm,vw,vh); etCamCtx.restore();
   document.getElementById('et-gaze-indicator').classList.add('on');
 
   if (etState.tracking && etState.calibrated) {
-    const sc = etEyeToScreen(etLastEyeRaw.x*window.innerWidth, etLastEyeRaw.y*window.innerHeight);
+    // relative gaze를 그대로 affine 변환 (캘리브도 같은 좌표계로 저장됨)
+    const sc = etEyeToScreen(etLastEyeRaw.x, etLastEyeRaw.y);
     if (!sc) return;
     const a = 1/etSettings.smoothing;
     etState.smoothX = etState.smoothX*(1-a)+sc.x*a;
@@ -1302,7 +1326,6 @@ function processEtGazePoint(sx,sy) {
 }
 
 function etScreenToSquare(sx,sy) {
-  // 실제 체스판 DOM 기준으로 계산
   const boardEl = document.getElementById('play-board');
   if (!boardEl) return null;
   const rect = boardEl.getBoundingClientRect();
@@ -1311,7 +1334,6 @@ function etScreenToSquare(sx,sy) {
   const col = Math.floor(bx / rect.width * 8);
   const row = Math.floor(by / rect.height * 8);
   if (col < 0 || col > 7 || row < 0 || row > 7) return null;
-  // 흑 기준이면 보드가 뒤집혀 있으므로 반전
   const flipped = _myColor === 'b';
   const fc = flipped ? 7 - col : col;
   const fr = flipped ? 7 - row : row;
@@ -1327,21 +1349,15 @@ function updateEtGazeDot(sx,sy){
   } else { etGazeDot.style.display='none'; }
 }
 
-// ── 전체 화면 시선 커서 ──
-const _gazeCursorEl  = document.getElementById('gaze-cursor');
-const _gazeSqLabel   = document.getElementById('gc-sq-label');
-
+const _gazeCursorEl = document.getElementById('gaze-cursor');
+const _gazeSqLabel  = document.getElementById('gc-sq-label');
 function updateGazeCursor(sx, sy) {
-  // sx, sy 는 화면 픽셀 좌표 (etEyeToScreen 결과)
   _gazeCursorEl.style.left = sx + 'px';
   _gazeCursorEl.style.top  = sy + 'px';
-  // 현재 응시 칸 이름 표시
-  const sq = etScreenToSquare(sx, sy);
-  _gazeSqLabel.textContent = sq || '';
+  _gazeSqLabel.textContent = etScreenToSquare(sx, sy) || '';
 }
-
-function showGazeCursor()  { _gazeCursorEl.style.display = 'block'; }
-function hideGazeCursor()  { _gazeCursorEl.style.display = 'none'; }
+function showGazeCursor() { _gazeCursorEl.style.display = 'block'; }
+function hideGazeCursor() { _gazeCursorEl.style.display = 'none'; }
 
 // 체스판 칸에 시선 하이라이트
 let _lastGazeSq = null;
@@ -1547,7 +1563,7 @@ etCalibCanvas.addEventListener('click',(e)=>{
   if(!etCalibListening)return;
   if(!etLastEyeRaw){showToast('눈이 감지되지 않습니다.');return;}
   const[px,py]=ET_CALIB_POSITIONS[etCalibIdx];
-  etCalibPoints.push({screenX:px*window.innerWidth,screenY:py*window.innerHeight,eyeX:etLastEyeRaw.x*window.innerWidth,eyeY:etLastEyeRaw.y*window.innerHeight});
+  etCalibPoints.push({screenX:px*window.innerWidth,screenY:py*window.innerHeight,eyeX:etLastEyeRaw.x,eyeY:etLastEyeRaw.y});
   etCalibIdx++;
   if(etCalibIdx>=ET_CALIB_POSITIONS.length){finishEtCalibration();}
   else{drawEtCalibPoint(etCalibIdx);}
@@ -1659,8 +1675,7 @@ document.getElementById('btn-et-cam').addEventListener('click', () => { initEtMe
 document.getElementById('btn-et-calib').addEventListener('click',()=>{ startEtCalibration(); });
 document.getElementById('btn-et-track').addEventListener('click',()=>{
   etState.tracking=true; etState.sessionStart=Date.now();
-  etGazeDot.style.display='block';
-  showGazeCursor();
+  etGazeDot.style.display='block'; showGazeCursor();
   document.getElementById('btn-et-track').disabled=true;
   document.getElementById('btn-et-stop').disabled=false;
   setEtStatusDot('active');
@@ -1673,8 +1688,7 @@ document.getElementById('btn-et-stop').addEventListener('click',()=>{
     if(d>=etSettings.minDwell) etState.gazeData[etState.currentSquare]=(etState.gazeData[etState.currentSquare]||0)+d;
   }
   etState.currentSquare=null; etState.squareEnteredAt=null;
-  etGazeDot.style.display='none';
-  hideGazeCursor();
+  etGazeDot.style.display='none'; hideGazeCursor();
   document.getElementById('btn-et-track').disabled=false;
   document.getElementById('btn-et-stop').disabled=true;
   setEtStatusDot('ready');
@@ -2010,17 +2024,15 @@ function joinGame(gameId,myColor,gameData){
 
   showScreen('playing');renderBoard();startTimer();playSound('start');
 
-  // Eye Tracker 자동 활성화 (로비에서 켠 경우)
   if (etUseOnGame) {
     const panel = document.getElementById('et-panel');
     panel.classList.remove('collapsed');
     panel.style.display = 'flex';
     setTimeout(() => resizeEtBoard(), 50);
   }
-  // 캘리브레이션이 완료된 상태면 항상 자동 추적 시작
   if (etState.calibrated && !etState.tracking) {
     etState.tracking=true; etState.sessionStart=Date.now(); etState.sessionEnd=null;
-    showGazeCursor();
+    etGazeDot.style.display='block'; showGazeCursor();
     document.getElementById('btn-et-track').disabled=true;
     document.getElementById('btn-et-stop').disabled=false;
     setEtStatusDot('active');
