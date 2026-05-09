@@ -233,6 +233,34 @@ body {
 .et-btn.danger:hover { background: rgba(224,90,90,0.15); }
 .et-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* ── 디버그 패널 ── */
+#et-debug-panel {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.88);
+  border: 1px solid #f55;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 11px;
+  font-family: monospace;
+  color: #fff;
+  z-index: 99999;
+  display: none;
+  min-width: 320px;
+  max-width: 600px;
+  line-height: 1.7;
+  pointer-events: none;
+}
+#et-debug-panel.show { display: block; }
+#et-debug-panel .dbg-row { display: flex; justify-content: space-between; gap: 12px; }
+#et-debug-panel .dbg-key { color: #facc15; }
+#et-debug-panel .dbg-ok  { color: #4ade80; }
+#et-debug-panel .dbg-err { color: #f87171; }
+#et-debug-panel .dbg-warn { color: #fb923c; }
+#et-debug-panel h4 { color: #f55; margin-bottom: 4px; font-size: 12px; letter-spacing:.05em; }
+
 /* ── 시선 커서 (화면 위 빨간 점) ── */
 #et-gaze-dot {
   position: fixed;
@@ -1002,6 +1030,24 @@ body {
 <!-- 시선 커서 -->
 <div id="et-gaze-dot"></div>
 
+<!-- 디버그 패널 -->
+<div id="et-debug-panel">
+  <h4>🔍 WebGazer 디버그</h4>
+  <div class="dbg-row"><span class="dbg-key">webgazer 로드</span><span id="dbg-wg-loaded">확인중...</span></div>
+  <div class="dbg-row"><span class="dbg-key">begin() 호출</span><span id="dbg-begin">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">begin() 결과</span><span id="dbg-begin-result">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">GazeListener 등록</span><span id="dbg-listener">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">onGaze 호출 횟수</span><span id="dbg-gaze-count">0</span></div>
+  <div class="dbg-row"><span class="dbg-key">마지막 gaze x,y</span><span id="dbg-gaze-xy">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">gaze-dot display</span><span id="dbg-dot-display">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">gaze-dot z-index</span><span id="dbg-dot-z">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">WG video element</span><span id="dbg-wg-video">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">WG canvas z-index</span><span id="dbg-wg-canvas-z">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">ET.running</span><span id="dbg-running">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">ET.enabled</span><span id="dbg-enabled">-</span></div>
+  <div class="dbg-row"><span class="dbg-key">마지막 오류</span><span id="dbg-last-err" class="dbg-err">-</span></div>
+</div>
+
 <!-- 상단 집중도 바 -->
 <div id="et-focus-bar"><div id="et-focus-fill"></div></div>
 
@@ -1174,6 +1220,58 @@ const ET = {
   // 정확도
   accuracy: 0,
 
+  // ── 디버그 유틸 ──
+  _dbgCount: 0,
+  _dbgVisible: false,
+
+  toggleDebug() {
+    this._dbgVisible = !this._dbgVisible;
+    const panel = document.getElementById('et-debug-panel');
+    if (panel) panel.classList.toggle('show', this._dbgVisible);
+    if (this._dbgVisible) this._refreshDebug();
+  },
+
+  _dbg(id, val, cls) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = val;
+    el.className = cls || '';
+  },
+
+  _refreshDebug() {
+    // webgazer 로드 여부
+    const wgLoaded = typeof webgazer !== 'undefined';
+    this._dbg('dbg-wg-loaded', wgLoaded ? '✓ 로드됨' : '✗ 없음', wgLoaded ? 'dbg-ok' : 'dbg-err');
+
+    // gaze dot 상태
+    const dot = document.getElementById('et-gaze-dot');
+    if (dot) {
+      const cs = window.getComputedStyle(dot);
+      this._dbg('dbg-dot-display', cs.display + ' / visibility:' + cs.visibility,
+        cs.display === 'none' ? 'dbg-err' : 'dbg-ok');
+      this._dbg('dbg-dot-z', 'z-index:' + cs.zIndex);
+    }
+
+    // WebGazer 생성 요소 확인
+    const wgVideo = document.getElementById('webgazerVideoFeed') || document.querySelector('video[id^="webgazer"]');
+    this._dbg('dbg-wg-video', wgVideo ? '✓ video 있음 (readyState=' + wgVideo.readyState + ')' : '✗ video 없음',
+      wgVideo ? 'dbg-ok' : 'dbg-warn');
+
+    // WebGazer canvas z-index 확인
+    const wgCanvases = document.querySelectorAll('canvas[id^="webgazer"], #webgazerFaceFeedbackBox, #webgazerVideoContainer canvas');
+    let canvasZInfo = '';
+    wgCanvases.forEach(c => {
+      const cs2 = window.getComputedStyle(c);
+      canvasZInfo += (c.id || 'canvas') + ':z' + cs2.zIndex + ' ';
+    });
+    this._dbg('dbg-wg-canvas-z', canvasZInfo || '없음');
+
+    // ET 상태
+    this._dbg('dbg-running', String(ET.running), ET.running ? 'dbg-ok' : 'dbg-warn');
+    this._dbg('dbg-enabled', String(ET.enabled), ET.enabled ? 'dbg-ok' : 'dbg-warn');
+    this._dbg('dbg-gaze-count', String(this._dbgCount));
+  },
+
   init() {
     // WebGazer 기본 내장 UI 모두 끄기 (직접 렌더링)
     try {
@@ -1187,6 +1285,14 @@ const ET = {
   async start() {
     if (this.running) return;
     setEtStatus('warning', '카메라 초기화 중...');
+    // 디버그 패널 자동 표시
+    this._dbgVisible = true;
+    const dbgPanel = document.getElementById('et-debug-panel');
+    if (dbgPanel) dbgPanel.classList.add('show');
+    this._dbg('dbg-begin', '시작 전...', 'dbg-warn');
+    this._dbg('dbg-listener', '등록 전...', 'dbg-warn');
+    this._dbg('dbg-begin-result', '대기 중...', 'dbg-warn');
+    this._dbg('dbg-last-err', '-');
     try {
       // WebGazer 2.x: 체이닝 미지원, 각각 개별 호출 필요
       webgazer.setRegression('ridge');
@@ -1196,14 +1302,30 @@ const ET = {
       webgazer.params.showFaceFeedbackBox = false;
       webgazer.params.saveDataAcrossSessions = false;
 
+      // GazeListener는 begin() 이후에 등록하는 것이 더 안전 (2.x)
+      this._dbg('dbg-begin', '호출 중...', 'dbg-warn');
+      await webgazer.begin();
+      this._dbg('dbg-begin', '✓ 완료', 'dbg-ok');
+      this._dbg('dbg-begin-result', '성공');
+
+      // begin() 이후 listener 등록
       webgazer.setGazeListener((data, elapsedTime) => {
-        if (!data) return;
+        if (!data) {
+          ET._dbg('dbg-gaze-xy', 'null data 수신', 'dbg-warn');
+          return;
+        }
+        ET._dbgCount++;
+        if (ET._dbgCount <= 5 || ET._dbgCount % 30 === 0) {
+          ET._dbg('dbg-gaze-count', String(ET._dbgCount), 'dbg-ok');
+          ET._dbg('dbg-gaze-xy', Math.round(data.x) + ', ' + Math.round(data.y), 'dbg-ok');
+          ET._refreshDebug();
+        }
         ET.onGaze(data.x, data.y, elapsedTime);
       });
-
-      await webgazer.begin();
+      this._dbg('dbg-listener', '✓ 등록됨', 'dbg-ok');
 
       // 내장 비디오 컨테이너가 생성됐으면 직접 스타일 적용
+      // 또한 WebGazer가 생성하는 canvas가 gaze-dot 위를 덮지 않도록 z-index 강제 조정
       const styleVideo = () => {
         const vid = document.getElementById('webgazerVideoContainer');
         if (vid) {
@@ -1216,26 +1338,48 @@ const ET = {
             box-shadow:0 4px 16px rgba(0,0,0,0.4)!important;
             display:block!important;
           `;
-          // 내부 오버레이 숨기기
-          ['webgazerFaceOverlay','webgazerFaceFeedbackBox'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.display = 'none';
-          });
         }
+        // WebGazer가 삽입하는 캔버스/오버레이의 z-index를 gaze-dot(9999)보다 낮게 설정
+        ['webgazerFaceOverlay','webgazerFaceFeedbackBox',
+         'webgazerGazeDot','webgazerVideoCanvas','webgazer-canvas'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.style.zIndex = '100';
+            el.style.pointerEvents = 'none';
+            if (id !== 'webgazerVideoCanvas') el.style.display = 'none';
+          }
+        });
+        // id 없는 webgazer canvas 도 처리
+        document.querySelectorAll('canvas[data-webgazer], canvas[style*="position: fixed"]').forEach(c => {
+          if (c.id !== 'et-heatmap-canvas' && c.id !== 'et-mini-canvas') {
+            c.style.zIndex = '100';
+            c.style.pointerEvents = 'none';
+          }
+        });
+        ET._refreshDebug();
       };
       styleVideo();
-      setTimeout(styleVideo, 800);  // 비동기 DOM 삽입 대비
+      setTimeout(styleVideo, 500);
+      setTimeout(styleVideo, 1500);  // 비동기 DOM 삽입 대비
 
       this.running = true;
       setEtStatus('active', '시선 추적 중');
-      document.getElementById('et-gaze-dot').style.display = 'block';
+      const gazeDotEl = document.getElementById('et-gaze-dot');
+      gazeDotEl.style.display = 'block';
+      // 강제로 화면 중앙에 테스트 위치 (gaze data 오기 전 보임 확인용)
+      gazeDotEl.style.left = (window.innerWidth/2) + 'px';
+      gazeDotEl.style.top  = (window.innerHeight/2) + 'px';
+      this._dbg('dbg-dot-display', '✓ block (중앙 배치됨)', 'dbg-ok');
+      console.log('[ET Debug] gaze dot shown, element:', gazeDotEl, 'computed:', window.getComputedStyle(gazeDotEl).display);
       document.getElementById('et-focus-bar').classList.add('show');
 
       this._startFocusTracking();
       this._startMiniHeatmap();
     } catch(e) {
-      setEtStatus('error', '시작 실패 — 콘솔 확인');
       const msg = e && e.message ? e.message : String(e);
+      setEtStatus('error', '시작 실패 — 콘솔 확인');
+      this._dbg('dbg-begin-result', '✗ 오류: ' + msg.slice(0,60), 'dbg-err');
+      this._dbg('dbg-last-err', msg.slice(0,80), 'dbg-err');
       if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('notallowed')) {
         showToast('카메라 권한을 허용해 주세요 🎥');
       } else if (msg.toLowerCase().includes('notfound') || msg.toLowerCase().includes('no stream')) {
@@ -2433,6 +2577,25 @@ window.addEventListener('resize', () => {
 
 // ET 패널 초기 숨기기
 document.getElementById('et-panel').style.display = 'none';
+
+// 키보드 단축키: D 키로 디버그 패널 토글
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'd' || e.key === 'D') {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    ET.toggleDebug();
+  }
+});
+
+// 페이지 로드 시 webgazer 로드 여부 표시
+window.addEventListener('load', () => {
+  const wgLoaded = typeof webgazer !== 'undefined';
+  console.log('[ET Debug] webgazer loaded:', wgLoaded);
+  if (!wgLoaded) {
+    console.error('[ET Debug] webgazer is NOT defined! Check CDN URL.');
+  } else {
+    console.log('[ET Debug] webgazer version info:', Object.keys(webgazer).slice(0,10));
+  }
+});
 </script>
 </body>
 </html>
