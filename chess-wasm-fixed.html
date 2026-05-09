@@ -3051,38 +3051,45 @@ async function askCoachMobile() {
 //  우클릭 화살표 그리기
 // ══════════════════════════════════════════════════════
 (function() {
-  const ARROW_COLOR = 'rgba(255, 165, 0, 0.88)';
+  const ARROW_COLOR = 'rgba(255, 165, 0, 0.92)';
   const ARROW_SW    = 14;
   const MARKER_ID   = 'user-arrow-svg-head';
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
-  let _arrowStart = null;
-  let _userArrows = [];
+  let _arrowStart = null;   // 우클릭 시작 칸 { col, row }
+  let _userArrows = [];     // 그려진 화살표 목록
+  let _rightDragging = false; // 우클릭 드래그 중 여부
 
+  // ── SVG 오버레이 확보 ──────────────────────────────
   function ensureSvg() {
-    // chess-wasm-fixed / study-opening 등 기존 SVG overlay 재사용
+    // 기존 board-svg-overlay 재사용 (chess-wasm-fixed 전용)
     const existingSvg = document.getElementById('board-svg-overlay');
-    if (existingSvg && !document.getElementById('user-arrow-svg-arrows')) {
-      let defs = existingSvg.querySelector('defs');
-      if (!defs) { defs = document.createElementNS(SVG_NS,'defs'); existingSvg.prepend(defs); }
-      if (!document.getElementById(MARKER_ID)) {
-        const mk = document.createElementNS(SVG_NS, 'marker');
-        mk.setAttribute('id', MARKER_ID); mk.setAttribute('markerUnits', 'strokeWidth');
-        mk.setAttribute('markerWidth', '4'); mk.setAttribute('markerHeight', '4');
-        mk.setAttribute('refX', '2.5'); mk.setAttribute('refY', '2');
-        mk.setAttribute('orient', 'auto');
-        const mp = document.createElementNS(SVG_NS, 'path');
-        mp.setAttribute('d', 'M0,0 L4,2 L0,4 L1,2 Z');
-        mp.setAttribute('fill', ARROW_COLOR); mp.setAttribute('stroke', 'none');
-        mk.appendChild(mp); defs.appendChild(mk);
+    if (existingSvg) {
+      if (!document.getElementById('user-arrow-svg-arrows')) {
+        let defs = existingSvg.querySelector('defs');
+        if (!defs) { defs = document.createElementNS(SVG_NS,'defs'); existingSvg.prepend(defs); }
+        if (!document.getElementById(MARKER_ID)) {
+          const mk = document.createElementNS(SVG_NS, 'marker');
+          mk.setAttribute('id', MARKER_ID);
+          mk.setAttribute('markerUnits', 'strokeWidth');
+          mk.setAttribute('markerWidth', '4'); mk.setAttribute('markerHeight', '4');
+          mk.setAttribute('refX', '2.5'); mk.setAttribute('refY', '2');
+          mk.setAttribute('orient', 'auto');
+          const mp = document.createElementNS(SVG_NS, 'path');
+          mp.setAttribute('d', 'M0,0 L4,2 L0,4 L1,2 Z');
+          mp.setAttribute('fill', ARROW_COLOR); mp.setAttribute('stroke', 'none');
+          mk.appendChild(mp); defs.appendChild(mk);
+        }
+        const g2 = document.createElementNS(SVG_NS, 'g');
+        g2.id = 'user-arrow-svg-arrows';
+        existingSvg.appendChild(g2);
       }
-      const g2 = document.createElementNS(SVG_NS, 'g');
-      g2.id = 'user-arrow-svg-arrows';
-      existingSvg.appendChild(g2);
+      // SVG가 클릭 이벤트를 막으면 안 됨
+      existingSvg.style.pointerEvents = 'none';
       return existingSvg;
     }
-    if (existingSvg) return existingSvg;
 
+    // fallback: 직접 SVG 생성
     let svg = document.getElementById('user-arrow-svg');
     if (svg) return svg;
 
@@ -3096,10 +3103,12 @@ async function askCoachMobile() {
     svg.setAttribute('viewBox', '0 0 800 800');
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.classList.add('board-arrow-overlay');
+    svg.style.pointerEvents = 'none';
 
     const defs = document.createElementNS(SVG_NS, 'defs');
     const mk = document.createElementNS(SVG_NS, 'marker');
-    mk.setAttribute('id', MARKER_ID); mk.setAttribute('markerUnits', 'strokeWidth');
+    mk.setAttribute('id', MARKER_ID);
+    mk.setAttribute('markerUnits', 'strokeWidth');
     mk.setAttribute('markerWidth', '4'); mk.setAttribute('markerHeight', '4');
     mk.setAttribute('refX', '2.5'); mk.setAttribute('refY', '2');
     mk.setAttribute('orient', 'auto');
@@ -3116,8 +3125,35 @@ async function askCoachMobile() {
     return svg;
   }
 
-  function sqCenter(col, row) { return { px: col * 100 + 50, py: row * 100 + 50 }; }
+  // ── 좌표 계산 ──────────────────────────────────────
+  function sqCenter(col, row) {
+    return { px: col * 100 + 50, py: row * 100 + 50 };
+  }
 
+  // 마우스 위치 → 보드 칸 (보드 밖이면 경계 칸으로 클램프)
+  function getBoardSquare(e) {
+    const board = document.getElementById('chessboard');
+    if (!board) return null;
+    const rect = board.getBoundingClientRect();
+    // 보드 바깥이면 null 대신 경계 칸으로 클램프 (드래그 중 보드 밖으로 빠져도 OK)
+    const x = Math.max(0, Math.min(rect.width  - 1, e.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
+    return {
+      col: Math.floor(x / rect.width  * 8),
+      row: Math.floor(y / rect.height * 8)
+    };
+  }
+
+  // 마우스가 실제로 보드 위에 있는지
+  function isOverBoard(e) {
+    const board = document.getElementById('chessboard');
+    if (!board) return false;
+    const rect = board.getBoundingClientRect();
+    return e.clientX >= rect.left && e.clientX <= rect.right &&
+           e.clientY >= rect.top  && e.clientY <= rect.bottom;
+  }
+
+  // ── 화살표 그리기 ──────────────────────────────────
   function makeArrow(fromCol, fromRow, toCol, toRow) {
     const from = sqCenter(fromCol, fromRow);
     const to   = sqCenter(toCol, toRow);
@@ -3126,8 +3162,10 @@ async function askCoachMobile() {
     if (len < 1) return null;
     const ux = dx/len, uy = dy/len;
     const sw = ARROW_SW;
-    const sx = from.px + ux*sw*1.2, sy = from.py + uy*sw*1.2;
-    const ex = to.px   - ux*sw*2.5, ey = to.py   - uy*sw*2.5;
+    const sx = from.px + ux * sw * 1.1;
+    const sy = from.py + uy * sw * 1.1;
+    const ex = to.px   - ux * sw * 2.4;
+    const ey = to.py   - uy * sw * 2.4;
     if (Math.sqrt((ex-sx)**2+(ey-sy)**2) < 5) return null;
     const line = document.createElementNS(SVG_NS, 'line');
     line.setAttribute('x1', sx.toFixed(2)); line.setAttribute('y1', sy.toFixed(2));
@@ -3149,56 +3187,62 @@ async function askCoachMobile() {
     });
   }
 
-  function getBoardSquare(e) {
-    const board = document.getElementById('chessboard');
-    if (!board) return null;
-    const rect = board.getBoundingClientRect();
-    const x = e.clientX - rect.left, y = e.clientY - rect.top;
-    if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null;
-    return {
-      col: Math.max(0, Math.min(7, Math.floor(x / rect.width  * 8))),
-      row: Math.max(0, Math.min(7, Math.floor(y / rect.height * 8)))
-    };
-  }
-
+  // ── 이벤트 연결 ────────────────────────────────────
   function attachEvents() {
     const board = document.getElementById('chessboard');
     if (!board) { setTimeout(attachEvents, 300); return; }
     ensureSvg();
 
+    // 우클릭 시작: 시작 칸 기억
     board.addEventListener('contextmenu', function(e) {
       e.preventDefault();
-      const sq = getBoardSquare(e);
-      if (sq) _arrowStart = sq;
-    });
-
-    board.addEventListener('mouseup', function(e) {
-      if (e.button !== 2) return;
-      if (!_arrowStart) return;
-      const sq = getBoardSquare(e);
-      ensureSvg();
-      if (sq) {
-        if (sq.col === _arrowStart.col && sq.row === _arrowStart.row) {
-          _userArrows = [];
-        } else {
-          const idx = _userArrows.findIndex(a =>
-            a.fromCol===_arrowStart.col && a.fromRow===_arrowStart.row &&
-            a.toCol===sq.col && a.toRow===sq.row
-          );
-          if (idx >= 0) _userArrows.splice(idx, 1);
-          else _userArrows.push({ fromCol:_arrowStart.col, fromRow:_arrowStart.row, toCol:sq.col, toRow:sq.row });
-        }
-        redrawArrows();
-      }
-      _arrowStart = null;
     });
 
     board.addEventListener('mousedown', function(e) {
-      if (e.button === 0) {
+      if (e.button === 2) {
+        // 우클릭 드래그 시작
+        _rightDragging = true;
+        _arrowStart = getBoardSquare(e);
+      } else if (e.button === 0) {
+        // 좌클릭: 화살표 초기화
         _userArrows = [];
         redrawArrows();
         _arrowStart = null;
+        _rightDragging = false;
       }
+    });
+
+    // mouseup은 document에 등록 → 보드 밖에서 떼도 잡힘
+    document.addEventListener('mouseup', function(e) {
+      if (e.button !== 2) return;
+      if (!_rightDragging || !_arrowStart) {
+        _rightDragging = false;
+        _arrowStart = null;
+        return;
+      }
+      _rightDragging = false;
+
+      const sq = getBoardSquare(e);
+
+      // 시작 칸 == 끝 칸: 화살표 전체 초기화
+      if (sq.col === _arrowStart.col && sq.row === _arrowStart.row) {
+        _userArrows = [];
+      } else {
+        // 같은 화살표 재클릭 → 토글 제거, 아니면 추가
+        const idx = _userArrows.findIndex(a =>
+          a.fromCol === _arrowStart.col && a.fromRow === _arrowStart.row &&
+          a.toCol   === sq.col          && a.toRow   === sq.row
+        );
+        if (idx >= 0) _userArrows.splice(idx, 1);
+        else _userArrows.push({
+          fromCol: _arrowStart.col, fromRow: _arrowStart.row,
+          toCol: sq.col, toRow: sq.row
+        });
+      }
+
+      ensureSvg();
+      redrawArrows();
+      _arrowStart = null;
     });
   }
 
