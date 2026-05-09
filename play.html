@@ -922,6 +922,9 @@ function doMove(move, promoPiece) {
   const prevTurn = _turn;
   _turn = enemyColor(_turn);
 
+  // 수를 두면 화살표 초기화 (새 수 인덱스 기준으로 리셋)
+  _userArrows = [];
+
   // 사운드
   playMoveSound(move, boardBefore, prevTurn);
 
@@ -1101,6 +1104,7 @@ function joinGame(gameId, myColor, gameData) {
   _gameActive = true;
   _lastTickTime = Date.now();
   _sanMoves = [];
+  _gameArrows = {};
 
   const myName  = myColor==='w' ? gameData.whiteName : gameData.blackName;
   const oppName = myColor==='w' ? gameData.blackName  : gameData.whiteName;
@@ -1356,6 +1360,7 @@ ${pgn} ${resultStr}`;
       myColor: _myColor, whiteName, blackName,
       result: resultStr, resultRaw: result,
       moveCount: _sanMoves.length, pgn: fullPgn,
+      arrows: _gameArrows,
       playedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
   } catch(e) { console.warn('기보 저장 실패', e); }
@@ -1385,8 +1390,12 @@ function showToast(msg, duration=2500) {
 }
 
 // ══════════════════════════════════════════
-// 우클릭 화살표 그리기 (chess-wasm-fixed 동일)
+// 우클릭 화살표 그리기
 // ══════════════════════════════════════════
+// 게임 중 후보수 화살표: 수 인덱스 → 화살표 배열
+// { fc, fr, tc, tr }
+let _gameArrows = {}; // moveIndex → [{fc,fr,tc,tr}, ...]
+
 (function(){
   const ARROW_COLOR='rgba(255,165,0,0.92)';
   const ARROW_SW=14;
@@ -1438,19 +1447,28 @@ function showToast(msg, duration=2500) {
     board.addEventListener('contextmenu',e=>e.preventDefault());
     board.addEventListener('mousedown',e=>{
       if(e.button===2){_rightDragging=true;_arrowStart=getBoardSq(e);}
-      else if(e.button===0){_userArrows=[];redraw();_arrowStart=null;_rightDragging=false;}
+      else if(e.button===0){
+        // 좌클릭: 현재 수의 화살표 초기화
+        const curIdx=_sanMoves.length;
+        _userArrows=[];_gameArrows[curIdx]=[];
+        redraw();_arrowStart=null;_rightDragging=false;
+      }
     });
     document.addEventListener('mouseup',e=>{
       if(e.button!==2)return;
       if(!_rightDragging||!_arrowStart){_rightDragging=false;_arrowStart=null;return;}
       _rightDragging=false;
       const sq=getBoardSq(e);
+      const curIdx=_sanMoves.length;
+      if(!_gameArrows[curIdx])_gameArrows[curIdx]=[];
+      _userArrows=_gameArrows[curIdx];
       if(sq.col===_arrowStart.col&&sq.row===_arrowStart.row){
-        _userArrows=[];
+        _userArrows=[];_gameArrows[curIdx]=[];
       }else{
         const idx=_userArrows.findIndex(a=>a.fc===_arrowStart.col&&a.fr===_arrowStart.row&&a.tc===sq.col&&a.tr===sq.row);
         if(idx>=0)_userArrows.splice(idx,1);
         else _userArrows.push({fc:_arrowStart.col,fr:_arrowStart.row,tc:sq.col,tr:sq.row});
+        _gameArrows[curIdx]=_userArrows.slice();
       }
       redraw();_arrowStart=null;
     });
