@@ -83,7 +83,7 @@ body{font-family:var(--font-main);background:var(--bg-primary);color:var(--text-
 .vp-result-label.win{background:rgba(127,166,80,.2);color:var(--accent-green-bright)}
 .vp-result-label.lose{background:rgba(192,64,64,.15);color:#e07070}
 .vp-result-label.draw{background:rgba(160,160,160,.12);color:var(--text-secondary)}
-#viewer-board-wrap{width:100%;max-width:560px;aspect-ratio:1;position:relative}
+#viewer-board-wrap{width:100%;max-width:560px;aspect-ratio:1;position:relative;display:block}
 /* ── 화살표 오버레이 ── */
 .board-arrow-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
 /* ── 수 어노테이션 배지 ── */
@@ -95,7 +95,7 @@ body{font-family:var(--font-main);background:var(--bg-primary);color:var(--text-
 .move-candidate-arrow{color:rgba(255,165,0,.9);font-size:12px}
 .move-candidate-sq{font-weight:700;color:#fff;font-family:monospace}
 .move-san{position:relative}
-#viewer-board{width:100%;height:100%;display:grid;grid-template-columns:repeat(8,1fr);border:2px solid var(--border-light);border-radius:4px;overflow:hidden;user-select:none}
+#viewer-board{position:absolute;top:0;left:0;width:100%;height:100%;display:grid;grid-template-columns:repeat(8,1fr);border:2px solid var(--border-light);border-radius:4px;overflow:hidden;user-select:none}
 .vsq{aspect-ratio:1;display:flex;align-items:center;justify-content:center;position:relative}
 .vsq.light{background:var(--board-light)}.vsq.dark{background:var(--board-dark)}
 .vsq.last-from{background:rgba(205,210,106,.5)!important}.vsq.last-to{background:rgba(205,210,106,.7)!important}
@@ -1405,8 +1405,8 @@ function redrawViewerArrows(){
 
 // 마우스 위치 → 보드 칸(col,row) 변환 (뒤집기 적용)
 function getViewerBoardSq(e){
-  const board=document.getElementById('viewer-board');if(!board)return null;
-  const rect=board.getBoundingClientRect();
+  const wrap=document.getElementById('viewer-board-wrap');if(!wrap)return null;
+  const rect=wrap.getBoundingClientRect();
   const x=Math.max(0,Math.min(rect.width-1,e.clientX-rect.left));
   const y=Math.max(0,Math.min(rect.height-1,e.clientY-rect.top));
   const dispCol=Math.floor(x/rect.width*8);
@@ -1418,12 +1418,17 @@ function getViewerBoardSq(e){
 // 이벤트 연결 (보드 준비 후 실행)
 (function attachViewerArrowEvents(){
   function init(){
-    const board=document.getElementById('viewer-board');
-    if(!board){setTimeout(init,300);return;}
+    // viewer-board-wrap에 이벤트 위임 (viewer-board는 매번 innerHTML 재생성되므로)
+    const wrap=document.getElementById('viewer-board-wrap');
+    if(!wrap){setTimeout(init,300);return;}
 
-    board.addEventListener('contextmenu',e=>e.preventDefault());
+    wrap.addEventListener('contextmenu',e=>{
+      // 보드 위에서만 우클릭 기본 메뉴 막기
+      if(e.target.closest('#viewer-board-wrap'))e.preventDefault();
+    });
 
-    board.addEventListener('mousedown',e=>{
+    wrap.addEventListener('mousedown',e=>{
+      // SVG 오버레이 클릭도 포함 (pointer-events:none이라 board로 전달됨)
       if(e.button===2){
         _arrowRightDragging=true;
         _arrowDragStart=getViewerBoardSq(e);
