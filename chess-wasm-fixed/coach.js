@@ -286,15 +286,33 @@ async function runPositionCommentary() {
       freshCtx = buildChessContext();
     }
 
-    // 최선수 이유 분석이 없으면 백그라운드에서 먼저 실행 후 결과 기다림
-    if (!freshCtx.bestExplainData && !bestExplainLoading && pvData && pvData[1] && pvData[1].moves && pvData[1].moves.length > 0) {
-      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 최선수 이유 분석 중...`;
-      await runBestMoveExplain(0);
-      const bStart = Date.now();
-      while (bestExplainLoading && Date.now() - bStart < 4000) {
-        await new Promise(r => setTimeout(r, 300));
+    // 최선수 이유 분석: 항상 완료 상태를 확인하고, 없으면 실행 후 완료까지 대기
+    responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 최선수 이유 분석 중...`;
+
+    // 이미 로딩 중이면 완료까지 대기 (최대 8초)
+    if (bestExplainLoading) {
+      const bWait = Date.now();
+      while (bestExplainLoading && Date.now() - bWait < 8000) {
+        await new Promise(r => setTimeout(r, 200));
       }
-      freshCtx = buildChessContext();
+    }
+
+    // 현재 FEN과 맞는 bestExplainData가 없으면 새로 실행
+    freshCtx = buildChessContext();
+    const currentFen = freshCtx?.fen || '';
+    if (!freshCtx.bestExplainData || lastBestExplainFen !== currentFen) {
+      if (pvData && pvData[1] && pvData[1].moves && pvData[1].moves.length > 0) {
+        lastBestExplainFen = ''; // 강제 갱신
+        await runBestMoveExplain(0);
+        // 완료까지 대기 (최대 8초)
+        const bStart = Date.now();
+        while (bestExplainLoading && Date.now() - bStart < 8000) {
+          await new Promise(r => setTimeout(r, 200));
+        }
+        // DOM 렌더링 반영 대기
+        await new Promise(r => setTimeout(r, 300));
+        freshCtx = buildChessContext();
+      }
     }
 
     responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> AI 해설 생성 중...`;
@@ -386,6 +404,15 @@ async function askCoach() {
 function buildCommentaryPrompt(ctx) {
   const lines = [];
 
+  // pvData에서 직접 최신 라인 읽기 (ctx의 캐시된 값 대신)
+  const livePv1 = pvData && pvData[1];
+  const livePv2 = pvData && pvData[2];
+  const livePv3 = pvData && pvData[3];
+  const liveBestLine = livePv1 && livePv1.moves ? livePv1.moves.slice(0, 8).join(' ') : ctx.bestLine;
+  const liveLine2    = livePv2 && livePv2.moves ? livePv2.moves.slice(0, 6).join(' ') : ctx.line2;
+  const liveLine3    = livePv3 && livePv3.moves ? livePv3.moves.slice(0, 6).join(' ') : ctx.line3;
+  const liveBestMove = livePv1 && livePv1.moves && livePv1.moves[0] ? livePv1.moves[0] : ctx.bestMove;
+
   lines.push(`아래 체스 포지션을 보고, 체스인사이드 채널처럼 해설하세요.`);
   lines.push(``);
   lines.push(`핵심 원칙: 이 포지션에서 실제로 보이는 것을 있는 그대로 관찰하고 설명하세요.`);
@@ -403,9 +430,10 @@ function buildCommentaryPrompt(ctx) {
     lines.push(`방금 둔 수: ${ctx.lastMoveSan}${ann}`);
   }
 
-  if (ctx.bestLine) lines.push(`[엔진 1순위 라인] ${ctx.bestLine}`);
-  if (ctx.line2)    lines.push(`[엔진 2순위 라인] ${ctx.line2}`);
-  if (ctx.line3)    lines.push(`[엔진 3순위 라인] ${ctx.line3}`);
+  // 항상 최신 pvData 기반 라인 사용
+  if (liveBestLine) lines.push(`[엔진 1순위 라인 — 최선수 분석에 반드시 이 수순 사용] ${liveBestLine}`);
+  if (liveLine2)    lines.push(`[엔진 2순위 라인] ${liveLine2}`);
+  if (liveLine3)    lines.push(`[엔진 3순위 라인] ${liveLine3}`);
 
   if (ctx.threatData) {
     lines.push(``);
@@ -418,7 +446,7 @@ function buildCommentaryPrompt(ctx) {
   if (ctx.bestExplainData) {
     lines.push(``);
     lines.push(`[최선수 이유 데이터 — 자연스러운 문장으로 녹여서 사용할 것]`);
-    lines.push(`최선수: ${ctx.bestExplainData.move || ctx.bestMove}`);
+    lines.push(`최선수: ${ctx.bestExplainData.move || liveBestMove}`);
     if (ctx.bestExplainData.reasons && ctx.bestExplainData.reasons.length > 0) {
       ctx.bestExplainData.reasons.forEach((r, i) => lines.push(`  ${i+1}. ${r}`));
     }
@@ -431,7 +459,7 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`[작성 규칙]`);
   lines.push(`- 해설은 반드시 **포지션 상황** 섹션으로 시작`);
   lines.push(`- 이후 섹션은 상황에 맞는 것만 선택: **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순**`);
-  lines.push(`- **최선수 분석** 은 항상 포함. 엔진 라인을 따라가며 각 수의 구체적인 의도와 결과를 설명.`);
+  lines.push(`- **최선수 분석** 은 항상 포함. 반드시 [엔진 1순위 라인]의 수순을 그대로 사용해서 설명할 것.`);
   lines.push(`- 섹션 헤더는 반드시 **헤더명** 형태. 새 줄에서 시작, 헤더 다음 줄바꿈 하나.`);
   lines.push(`- 본문 안에 다른 섹션 이름을 쓰지 말 것.`);
   lines.push(`- 실제 수 표기 사용 필수. "이 수", "해당 수" 금지.`);
