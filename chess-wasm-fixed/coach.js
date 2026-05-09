@@ -286,36 +286,46 @@ async function runPositionCommentary() {
       freshCtx = buildChessContext();
     }
 
-    // 최선수 이유 분석: 항상 완료 상태를 확인하고, 없으면 실행 후 완료까지 대기
-    responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 최선수 이유 분석 중...`;
-
-    // 이미 로딩 중이면 완료까지 대기 (최대 8초)
-    if (bestExplainLoading) {
-      const bWait = Date.now();
-      while (bestExplainLoading && Date.now() - bWait < 8000) {
-        await new Promise(r => setTimeout(r, 200));
-      }
-    }
-
-    // 현재 FEN과 맞는 bestExplainData가 없으면 새로 실행
-    freshCtx = buildChessContext();
-    const currentFen = freshCtx?.fen || '';
-    if (!freshCtx.bestExplainData || lastBestExplainFen !== currentFen) {
-      if (pvData && pvData[1] && pvData[1].moves && pvData[1].moves.length > 0) {
-        lastBestExplainFen = ''; // 강제 갱신
-        await runBestMoveExplain(0);
-        // 완료까지 대기 (최대 8초)
-        const bStart = Date.now();
-        while (bestExplainLoading && Date.now() - bStart < 8000) {
-          await new Promise(r => setTimeout(r, 200));
-        }
-        // DOM 렌더링 반영 대기
-        await new Promise(r => setTimeout(r, 300));
+    // ── 최선수 이유: DOM/bestExplainLoading 의존 없이 직접 API 호출 ──
+    // pvData에서 현재 최신 라인을 직접 읽어 독립적으로 분석
+    let directBestExplainData = null;
+    const livePv1ForExplain = pvData && pvData[1];
+    if (livePv1ForExplain && livePv1ForExplain.moves && livePv1ForExplain.moves.length > 0) {
+      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 최선수 이유 분석 중...`;
+      try {
         freshCtx = buildChessContext();
+        const explainMoves = livePv1ForExplain.moves.slice(0, 6);
+        const rawExplain = await callBestExplainAPI(freshCtx, explainMoves, 0);
+        const cleanedExplain = cleanKorean(rawExplain);
+
+        // 결과 파싱: 타이틀과 이유 목록 추출
+        const explainLines = cleanedExplain.split('\n').map(l => l.trim()).filter(Boolean);
+        const reasons = [];
+        for (const line of explainLines) {
+          if (line.startsWith('•') || line.startsWith('-') || line.startsWith('·') || line.match(/^\d+\./)) {
+            const txt = line.replace(/^[•\-·]\s*/, '').replace(/^\d+\.\s*/, '').trim();
+            if (txt) reasons.push(txt);
+          }
+        }
+        if (reasons.length === 0) {
+          explainLines.slice(1).forEach(l => { if (l) reasons.push(l); });
+        }
+        directBestExplainData = {
+          move: explainMoves[0] || null,
+          reasons,
+        };
+      } catch(e) {
+        console.warn('[Coach] bestExplain 직접 호출 실패:', e);
       }
     }
 
     responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> AI 해설 생성 중...`;
+
+    freshCtx = buildChessContext();
+    // directBestExplainData를 freshCtx에 주입 (DOM 결과보다 우선)
+    if (directBestExplainData) {
+      freshCtx.bestExplainData = directBestExplainData;
+    }
 
     const answer = await callCommentaryAPI(freshCtx);
     const cleaned = sanitizeAnswer(answer);
