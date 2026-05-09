@@ -1327,20 +1327,23 @@ let _arrowDragStart=null,_arrowRightDragging=false;
 
 // ── Firebase 화살표 저장 ──────────────────
 async function saveArrowsToFirebase(){
-  if(!_fbDb){console.warn('[arrows] _fbDb 없음');return;}
-  if(!_user){console.warn('[arrows] _user 없음');return;}
-  if(!_currentRecord?.id){console.warn('[arrows] _currentRecord.id 없음',_currentRecord);return;}
+  if(!_fbDb||!_user||!_currentRecord?.id)return;
   try{
     const toSave={};
     Object.entries(_moveArrows).forEach(([k,v])=>{if(v&&v.length>0)toSave[k]=v;});
-    console.log('[arrows] 저장 시도:', _currentRecord.id, toSave);
-    // update 대신 set+merge 사용 (필드 없어도 생성)
-    await _fbDb.collection('game_records').doc(_currentRecord.id)
-      .set({moveArrows: toSave}, {merge:true});
-    console.log('[arrows] 저장 성공');
+    // game_records update 권한 없으므로 별도 컬렉션 'game_arrows' 사용
+    // docId = gameRecordId (1:1 매핑)
+    const ref = _fbDb.collection('game_arrows').doc(_currentRecord.id);
+    await ref.set({
+      uid: _user.uid,
+      gameRecordId: _currentRecord.id,
+      moveArrows: toSave,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, {merge: true});
+    console.log('[arrows] 저장 성공', Object.keys(toSave).length, '수');
   }catch(e){
     console.error('[arrows] 저장 실패:', e.code, e.message);
-    showToast('화살표 저장 실패: '+e.message, 3000);
+    showToast('화살표 저장 실패 ('+e.code+')', 3000);
   }
 }
 
@@ -1348,10 +1351,9 @@ async function saveArrowsToFirebase(){
 async function loadArrowsFromFirebase(docId){
   if(!_fbDb||!_user||!docId)return;
   try{
-    const snap=await _fbDb.collection('game_records').doc(docId).get();
+    const snap=await _fbDb.collection('game_arrows').doc(docId).get();
     const data=snap.data();
     if(data&&data.moveArrows){
-      // 키가 문자열로 저장되므로 숫자로 변환
       const loaded={};
       Object.entries(data.moveArrows).forEach(([k,v])=>{loaded[parseInt(k)]=v;});
       _moveArrows=loaded;
@@ -1361,7 +1363,11 @@ async function loadArrowsFromFirebase(docId){
     redrawViewerArrows();
     renderMoveTokens();
     highlightMoveToken(_viewIdx);
-  }catch(e){console.warn('[arrows] 불러오기 실패',e);}
+  }catch(e){
+    // 문서 없으면 정상 (처음 여는 게임)
+    _moveArrows={};
+    console.log('[arrows] 화살표 없음 (신규)');
+  }
 }
 
 // 칸 이름 (col=0→a, row=0→rank8)
