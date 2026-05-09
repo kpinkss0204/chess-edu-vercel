@@ -236,16 +236,21 @@ body {
 /* ── 시선 커서 (화면 위 빨간 점) ── */
 #et-gaze-dot {
   position: fixed;
-  width: 18px; height: 18px;
+  width: 24px; height: 24px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(79,142,247,0.9) 0%, rgba(79,142,247,0.3) 60%, transparent 100%);
-  border: 2px solid rgba(79,142,247,0.8);
+  background: radial-gradient(circle, rgba(255,80,80,1) 0%, rgba(255,80,80,0.6) 40%, transparent 100%);
+  border: 2px solid rgba(255,140,140,0.9);
   pointer-events: none;
   z-index: 9999;
   transform: translate(-50%, -50%);
   display: none;
-  transition: opacity 0.15s;
-  box-shadow: 0 0 10px rgba(79,142,247,0.5);
+  transition: left 0.05s linear, top 0.05s linear;
+  box-shadow: 0 0 12px rgba(255,60,60,0.8), 0 0 24px rgba(255,60,60,0.3);
+  animation: gaze-pulse 1.2s ease-in-out infinite;
+}
+@keyframes gaze-pulse {
+  0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+  50%      { transform: translate(-50%,-50%) scale(1.3); opacity: 0.75; }
 }
 
 /* ── 캘리브레이션 오버레이 ── */
@@ -656,7 +661,7 @@ body {
 .sq.in-check  { background: rgba(220,50,50,0.55) !important; }
 
 /* 시선 응시 하이라이트 */
-.sq.gaze-focus { outline: 2px solid rgba(79,142,247,0.5); outline-offset: -2px; }
+.sq.gaze-focus { outline: 3px solid rgba(255,80,80,0.85); outline-offset: -3px; background-color: rgba(255,80,80,0.18) !important; }
 
 .sq .piece { pointer-events: none; line-height: 1; }
 .sq {
@@ -1044,6 +1049,18 @@ body {
       </div>
     </div>
 
+    <!-- 현재 시선 위치 -->
+    <div class="et-accuracy-row" id="et-gaze-pos-row" style="display:none;">
+      <div>
+        <div class="et-acc-val" id="et-gaze-square" style="font-size:14px;letter-spacing:0.05em;">—</div>
+        <div class="et-acc-label">현재 바라보는 칸</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="et-acc-val" id="et-gaze-xy" style="font-size:11px;color:var(--text-muted);">—</div>
+        <div class="et-acc-label">화면 좌표</div>
+      </div>
+    </div>
+
     <!-- 미니 히트맵 -->
     <div class="et-heatmap-section">
       <div class="et-section-label">시선 히트맵</div>
@@ -1267,6 +1284,12 @@ const ET = {
       dot.style.top  = y + 'px';
     }
 
+    // 패널 좌표 표시 업데이트
+    const xyEl = document.getElementById('et-gaze-xy');
+    if (xyEl) xyEl.textContent = Math.round(x) + ', ' + Math.round(y);
+    const posRow = document.getElementById('et-gaze-pos-row');
+    if (posRow) posRow.style.display = '';
+
     // 히트맵 데이터
     this.heatData.push({x, y});
     if (this.heatData.length > 3000) this.heatData.shift();
@@ -1359,6 +1382,11 @@ const ET = {
         break;
       }
     }
+    // 패널에 현재 칸 표시 (예: e4, d5 등 체스 표기)
+    const file = 'abcdefgh'[c];
+    const rank = 8 - r;
+    const sqEl = document.getElementById('et-gaze-square');
+    if (sqEl) sqEl.textContent = file + rank;
   },
   _clearGazeHighlight() {
     if (!this._gazeSquare) return;
@@ -1368,6 +1396,8 @@ const ET = {
       sq.classList.remove('gaze-focus');
     }
     this._gazeSquare = null;
+    const sqEl = document.getElementById('et-gaze-square');
+    if (sqEl) sqEl.textContent = '—';
   },
 
   _startFocusTracking() {
@@ -2130,19 +2160,24 @@ function joinGame(gameId, myColor, gameData) {
   playSound('start');
 
   _firstMoveDone = false;
-  _firstMoveTimer = setTimeout(() => {
-    if (_gameActive && !_firstMoveDone) {
-      if (_gameRef) _gameRef.update({ status: 'draw_no_move' });
-    }
-  }, 10000);
 
+  // _gameRef를 타이머보다 먼저 설정 (콜백에서 null 방지)
   _gameRef = _rtDb.ref('games/'+gameId);
   startHeartbeat(gameId, myColor);
   _disconnectRef = null;
 
+  // 흑은 백이 먼저 두길 기다려야 하므로 타이머를 넉넉하게
+  _firstMoveTimer = setTimeout(() => {
+    if (_gameActive && !_firstMoveDone) {
+      if (_gameRef) _gameRef.update({ status: 'draw_no_move' });
+    }
+  }, 20000);
+
   _gameRef.child('moves').on('child_added', snap => {
     const d = snap.val();
     if (!d || d.uid === _user.uid) return;
+    // 상대 수 도착 시에도 firstMoveDone 처리 (흑 보호)
+    if (!_firstMoveDone) { _firstMoveDone = true; clearTimeout(_firstMoveTimer); }
     applyRemoteMove(d);
   });
   _gameRef.child('status').on('value', snap => {
