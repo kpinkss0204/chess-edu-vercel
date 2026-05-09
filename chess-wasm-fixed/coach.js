@@ -756,38 +756,35 @@ async function callThreatAPI(ctx) {
   const isCheck   = ctx.bestMove && (ctx.bestMove.includes('+') || isMate);
 
   const THREAT_SYSTEM = `You are a Korean chess analyst. Output ONLY in Korean (한국어).
-Never use Japanese, Chinese characters, Arabic, or any non-Korean script.
-Chess move notation (Nf3, e4, dxc4, O-O) stays in algebraic form.
+Chess move notation stays in algebraic form (Nf3, e4, dxc4, O-O).
 
-MODEL YOUR OUTPUT after this Chesstempo-style format (translate to Korean):
-  Idea: "White wants to win the knight: 21.Bxd5 exd5 22.Rxd5 Qe8 23.Rxd7 with a decisive advantage."
-  Problem: "Black can play Qb6: 21.Bxd5 exd5 22.Rxd5 Qb6 and now White's plan fails — 23.Rxd7 Qxb2 decreasing White's advantage."
-  Solution: "Playing Qa1 before Bxd5 solves the problem: 21.Qa1.. 22.Bxd5 exd5 23.Rxd5 Qb6 24.Rxd7 and 24...Qb2 does not capture the queen."
+CRITICAL: You will be given the actual engine lines and FEN for the current position. Use ONLY those moves. Never invent or hallucinate moves. Never copy from examples.
 
-CRITICAL RULES:
-- ${mover}의 관점에서만 분석. 차례가 아닌 쪽의 수를 **핵심 계획**에 쓰지 말 것.
-- **핵심 계획**: ${mover}의 공격 아이디어. 구체적인 수 나열과 결과 포함. (예: "백은 Bxd5로 나이트를 잡으려 한다: Bxd5 exd5 Rxd5로 결정적 우위.")
-- **문제점**: ${opponent}의 반격 수단과 그 수순. 즉승이 있으면 "즉각적인 결정타가 있어 문제점 없음."
-- **최선책**: 문제점을 해결하는 ${mover}의 수순. 왜 그 수가 문제를 해결하는지 설명.
-- 각 섹션마다 반드시 실제 수 표기(Bxd5, Qa1 등)를 포함할 것. 막연한 설명 금지.
-- 체크메이트 수가 있으면 **핵심 계획**에 명시.
+Analyze the position using the provided engine data and write three sections:
+**핵심 계획:** — What does ${mover} want to do? State the concrete threat using the ACTUAL moves from the engine line provided. Format: "${mover}은 [move]로 [goal]을 노린다: [line] → [result]."
+**문제점:** — What can ${opponent} do to counter? If engine line 2 or 3 shows a defensive resource, describe it with exact moves. If there's immediate checkmate or no counter, write "즉각적인 결정타가 있어 문제점 없음."
+**최선책:** — What is ${mover}'s best response to the problem? Use the engine 1st line moves. Explain why it solves the issue.
 
-Output format — use EXACTLY these three section headers:
-**핵심 계획:** (구체적 수 나열 포함, 1~2문장)
-**문제점:** (상대 반격 수순 포함, 1~2문장)
-**최선책:** (해결 수순 포함, 1~2문장)
-
-Total response under 450 characters.`;
+Rules:
+- Use ONLY moves from the engine lines provided. Do not invent any move.
+- Every section must contain actual algebraic move notation from the data.
+- No vague phrases like "기물 발전", "중앙 장악", "상대를 약화".
+- Keep each section 1~2 sentences. Total under 400 characters.`;
 
   const userMsg = [
-    `현재 포지션을 분석해주세요.`,
-    `차례: ${mover} — 반드시 ${mover}의 관점에서만 분석하세요.`,
-    isMate  ? `⚠️ 엔진이 즉각 체크메이트 수를 발견했습니다: ${ctx.bestMove}` : '',
+    `[현재 포지션 분석 — 아래 데이터만 사용하고 수를 절대 만들어내지 마세요]`,
+    `차례: ${mover}`,
+    ctx.bestLine  ? `엔진 1순위 라인 (최선): ${ctx.bestLine}` : '',
+    ctx.line2     ? `엔진 2순위 라인: ${ctx.line2}` : '',
+    ctx.line3     ? `엔진 3순위 라인: ${ctx.line3}` : '',
+    isMate        ? `⚠️ 즉각 체크메이트 가능: ${ctx.bestMove}` : '',
     isCheck && !isMate ? `엔진 최선수(체크): ${ctx.bestMove}` : '',
-    !isCheck ? (ctx.bestMove ? `엔진 최선수: ${ctx.bestMove}${ctx.bestLine ? ' → ' + ctx.bestLine : ''}` : '') : '',
     ctx.lastMoveSan ? `방금 둔 수: ${ctx.lastMoveSan}` : '',
-    ctx.pgnMoves    ? `기보: ${ctx.pgnMoves}` : '',
+    ctx.pgnMoves  ? `기보: ${ctx.pgnMoves}` : '',
     `FEN: ${ctx.fen}`,
+    ``,
+    `위 엔진 라인의 실제 수만 사용해서 핵심 계획/문제점/최선책을 분석하세요.`,
+    `엔진 라인에 없는 수(예시에서 본 수, 상상한 수)를 절대 쓰지 마세요.`,
   ].filter(Boolean).join('\n');
 
   const response = await fetch('/api/groq', {
@@ -965,27 +962,24 @@ function renderBestSeqBar(moves, activeIdx, ctx) {
 
 async function callBestExplainAPI(ctx, moves, focusIdx) {
   const EXPLAIN_SYSTEM = `You are a Korean chess coach. Output ONLY in Korean (한국어).
-Never use Japanese, Chinese characters, or non-Korean script.
 Chess move notation (Nf3, e4, O-O) stays in English algebraic form.
 
-The user wants to understand WHY a specific move is good. Give CONCRETE tactical/positional reasons — not vague ones.
+CRITICAL: Use ONLY the moves provided in the engine line. Never invent or hallucinate moves.
 
-BAD reasons (never use these): "기물의 발전을 방해합니다", "중앙을 장악할 수 있습니다", "상대방을 약화시킵니다"
-GOOD reasons (like this):
-  • 흑 퀸의 b2 위협(Qf6-b2)을 피합니다
-  • a7 룩을 지원합니다
-  • Bxd5 위협을 만들어냅니다
-  • d1 룩을 지원합니다
+The user wants to understand WHY a specific move is good. Give CONCRETE reasons based on what actually happens in this position — not generic chess advice.
 
-For each reason, explain the SPECIFIC threat escaped, square controlled, piece supported, or tactic enabled.
-If the move escapes a threat — name the exact threat (e.g. "Qb6-b2 퀸 침투를 차단").
-If it creates a threat — name the exact follow-up (e.g. "Bxd5 포크를 위협").
-If it supports a piece — name which piece on which square and why it matters.
+For each reason, answer one of these questions using actual moves from the data:
+- What specific threat does this move escape? (예: "Qb2 침투 위협을 피합니다")
+- What specific threat does this move create? (예: "Bxd5 포크를 위협합니다")
+- What piece/square does it support and why does that matter? (예: "a7 룩이 d7 침투를 준비할 수 있게 됩니다")
+- What tactical idea does it enable? (예: "흑 퀸이 b2를 잡으려 해도 이제 룩으로 막을 수 있습니다")
+
+BANNED phrases (never use): "기물의 발전을 방해합니다", "중앙을 장악할 수 있습니다", "상대방을 약화시킵니다", "기물 교환으로 물량을 줄입니다", "폰 구조를 강화합니다"
 
 Output format:
 Line 1: "[수 표기]이/가 좋은 이유:" (예: "Qa1이 좋은 이유:")
-Then list 3-4 bullet reasons, each starting with "• " followed by one concrete Korean sentence.
-Keep total response under 300 characters.`;
+Then 3-4 bullets, each starting with "• ", one concrete sentence each.
+Total under 300 characters.`;
 
   const focusMove = moves[focusIdx] || moves[0];
   const seq       = moves.slice(0, 5).join(' ');
