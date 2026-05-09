@@ -490,13 +490,13 @@ function showToast(msg) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 대국 기록 불러오기 (game_records 컬렉션 — records.html과 공유)
+// 대국 기록 화살표 시스템
 // ═══════════════════════════════════════════════════════════
 
-// 현재 불러온 기록의 화살표: moveIndex(1-based) → [{fromCol,fromRow,toCol,toRow},...]
+// moveIndex(1-based) → [{fromCol,fromRow,toCol,toRow}, ...]
+// play.html 저장 형식: {fc, fr, tc, tr}
 let _recordArrows = {};
 
-// records.html 저장 형식(fc,fr,tc,tr) → 분석보드 표시 형식 변환 후 저장
 function _loadRecordArrows(arrows) {
   _recordArrows = {};
   if (!arrows) return;
@@ -508,80 +508,97 @@ function _loadRecordArrows(arrows) {
   });
 }
 
-// 현재 historyIndex(0-based)에 대응하는 화살표 표시
-// historyIndex + 1 = moveIndex (1번 수가 index 0)
-function _renderRecordArrowsForCurrentMove() {
+// ChessGame.prototype.renderBoard를 한 번만 패치
+// — 매 renderBoard 호출 끝에 화살표를 덧그림
+function _installArrowPatch() {
+  if (typeof ChessGame === 'undefined') { setTimeout(_installArrowPatch, 200); return; }
+  if (ChessGame.prototype.renderBoard._arrowPatched) return;
+
+  const _orig = ChessGame.prototype.renderBoard;
+  ChessGame.prototype.renderBoard = function(...args) {
+    const r = _orig.apply(this, args);
+    _drawRecordArrows(this);
+    return r;
+  };
+  ChessGame.prototype.renderBoard._arrowPatched = true;
+}
+
+function _drawRecordArrows(gameInst) {
   const g = document.getElementById('user-arrow-svg-arrows');
   if (!g) return;
-  g.innerHTML = '';
 
-  const moveIdx = game ? game.historyIndex + 1 : 0; // 0이면 시작 전
-  const arrows = _recordArrows[moveIdx] || [];
-  if (!arrows.length) return;
+  // 기존 대국기록 화살표만 제거 (class로 구분)
+  g.querySelectorAll('.record-arrow').forEach(el => el.remove());
 
-  const ARROW_COLOR = 'rgba(255, 165, 0, 0.92)';
-  const ARROW_SW = 14;
+  if (!Object.keys(_recordArrows).length) return;
+
+  // historyIndex: -1=시작 전, 0=1번 수 후
+  // moveIndex = historyIndex + 1 (1번 수 = index 1)
+  const moveIdx = (gameInst ? gameInst.historyIndex : -1) + 1;
+  const arrows = _recordArrows[moveIdx];
+  if (!arrows || !arrows.length) return;
+
+  const ARROW_COLOR = 'rgba(255,165,0,0.92)';
+  const SW = 14;
   const SVG_NS = 'http://www.w3.org/2000/svg';
-  const flipped = game && game.flipped;
+  const flipped = gameInst && gameInst.flipped;
+
+  // marker가 없으면 생성
+  const svgEl = document.getElementById('board-svg-overlay') || g.closest('svg');
+  if (svgEl && !svgEl.querySelector('#rec-arrow-head')) {
+    let defs = svgEl.querySelector('defs');
+    if (!defs) { defs = document.createElementNS(SVG_NS,'defs'); svgEl.prepend(defs); }
+    const mk = document.createElementNS(SVG_NS,'marker');
+    mk.setAttribute('id','rec-arrow-head');
+    mk.setAttribute('markerUnits','strokeWidth');
+    mk.setAttribute('markerWidth','4'); mk.setAttribute('markerHeight','4');
+    mk.setAttribute('refX','2.5'); mk.setAttribute('refY','2');
+    mk.setAttribute('orient','auto');
+    const mp = document.createElementNS(SVG_NS,'path');
+    mp.setAttribute('d','M0,0 L4,2 L0,4 L1,2 Z');
+    mp.setAttribute('fill',ARROW_COLOR);
+    mk.appendChild(mp); defs.appendChild(mk);
+  }
 
   arrows.forEach(a => {
-    // col/row (0=a/rank8) → SVG 800×800 좌표
-    const dispFromCol = flipped ? 7 - a.fromCol : a.fromCol;
-    const dispFromRow = flipped ? 7 - a.fromRow : a.fromRow;
-    const dispToCol   = flipped ? 7 - a.toCol   : a.toCol;
-    const dispToRow   = flipped ? 7 - a.toRow   : a.toRow;
+    const dc = flipped ? 7 - a.fromCol : a.fromCol;
+    const dr = flipped ? 7 - a.fromRow : a.fromRow;
+    const tc = flipped ? 7 - a.toCol   : a.toCol;
+    const tr = flipped ? 7 - a.toRow   : a.toRow;
 
-    const fx = dispFromCol * 100 + 50, fy = dispFromRow * 100 + 50;
-    const tx = dispToCol   * 100 + 50, ty = dispToRow   * 100 + 50;
-    const dx = tx - fx, dy = ty - fy;
-    const len = Math.sqrt(dx*dx + dy*dy);
+    const fx = dc*100+50, fy = dr*100+50;
+    const tx = tc*100+50, ty = tr*100+50;
+    const dx = tx-fx, dy = ty-fy;
+    const len = Math.sqrt(dx*dx+dy*dy);
     if (len < 1) return;
     const ux = dx/len, uy = dy/len;
-    const sx = fx + ux * ARROW_SW * 1.1;
-    const sy = fy + uy * ARROW_SW * 1.1;
-    const ex = tx - ux * ARROW_SW * 2.4;
-    const ey = ty - uy * ARROW_SW * 2.4;
+    const sx = fx+ux*SW*1.1, sy = fy+uy*SW*1.1;
+    const ex = tx-ux*SW*2.4, ey = ty-uy*SW*2.4;
     if (Math.sqrt((ex-sx)**2+(ey-sy)**2) < 5) return;
 
-    const line = document.createElementNS(SVG_NS, 'line');
-    line.setAttribute('x1', sx.toFixed(2)); line.setAttribute('y1', sy.toFixed(2));
-    line.setAttribute('x2', ex.toFixed(2)); line.setAttribute('y2', ey.toFixed(2));
-    line.setAttribute('stroke', ARROW_COLOR);
-    line.setAttribute('stroke-width', ARROW_SW);
-    line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('marker-end', 'url(#user-arrow-svg-head)');
+    const line = document.createElementNS(SVG_NS,'line');
+    line.classList.add('record-arrow');
+    line.setAttribute('x1',sx.toFixed(2)); line.setAttribute('y1',sy.toFixed(2));
+    line.setAttribute('x2',ex.toFixed(2)); line.setAttribute('y2',ey.toFixed(2));
+    line.setAttribute('stroke',ARROW_COLOR);
+    line.setAttribute('stroke-width',SW);
+    line.setAttribute('stroke-linecap','round');
+    line.setAttribute('marker-end','url(#rec-arrow-head)');
     g.appendChild(line);
   });
 }
 
-// ChessGame 수 이동 함수들을 패치해 화살표 재렌더를 후킹
-function _patchGameNavigationForArrows() {
-  if (!game || _patchGameNavigationForArrows._done) return;
-  _patchGameNavigationForArrows._done = true;
-
-  const methods = ['prevMove','nextMove','goToStart','goToEnd','gotoMove','_applyHistState'];
-  methods.forEach(name => {
-    const orig = game[name]?.bind(game) || ChessGame.prototype[name];
-    if (!orig) return;
-    const patched = function(...args) {
-      const result = orig.apply(game, args);
-      _renderRecordArrowsForCurrentMove();
-      return result;
-    };
-    // prototype 패치 (인스턴스에 직접 바인딩)
-    game[name] = patched;
-  });
-
-  // renderBoard 패치: 뒤집기 등으로 재렌더 시에도 화살표 유지
-  const origRB = game.renderBoard.bind(game);
-  game.renderBoard = function(...args) {
-    const r = origRB.apply(this, args);
-    _renderRecordArrowsForCurrentMove();
-    return r;
-  };
+// 페이지 로드 시 즉시 패치 설치
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _installArrowPatch);
+} else {
+  _installArrowPatch();
 }
 
-// game_records 목록 로드 및 표시
+// ═══════════════════════════════════════════════════════════
+// 대국 기록 목록 로드 (game_records 컬렉션)
+// ═══════════════════════════════════════════════════════════
+
 async function loadGameRecords() {
   const listEl = document.getElementById('game-records-list');
   if (!listEl) return;
@@ -595,16 +612,16 @@ async function loadGameRecords() {
     let snap;
     try {
       snap = await window._fbDb.collection('game_records')
-        .where('uid', '==', window._currentUser.uid)
-        .orderBy('playedAt', 'desc').limit(30).get();
+        .where('uid','==',window._currentUser.uid)
+        .orderBy('playedAt','desc').limit(30).get();
     } catch(e) {
       snap = await window._fbDb.collection('game_records')
-        .where('uid', '==', window._currentUser.uid).limit(30).get();
+        .where('uid','==',window._currentUser.uid).limit(30).get();
     }
 
     const docs = [];
     snap.forEach(d => docs.push({ id: d.id, ...d.data() }));
-    docs.sort((a, b) => (b.playedAt?.seconds || 0) - (a.playedAt?.seconds || 0));
+    docs.sort((a,b) => (b.playedAt?.seconds||0)-(a.playedAt?.seconds||0));
 
     if (!docs.length) {
       listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">대국 기록이 없습니다</div>';
@@ -614,25 +631,25 @@ async function loadGameRecords() {
     listEl.innerHTML = '';
     docs.forEach(doc => {
       const dateStr = doc.playedAt
-        ? new Date(doc.playedAt.seconds * 1000).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
+        ? new Date(doc.playedAt.seconds*1000).toLocaleDateString('ko-KR',{month:'short',day:'numeric'})
         : '—';
       const myColor = doc.myColor || 'w';
       const result  = doc.result  || '*';
       let badge = '🤝', badgeCls = 'draw';
-      if (result === '1-0') { badge = myColor==='w' ? 'W' : 'L'; badgeCls = myColor==='w'?'win':'lose'; }
-      if (result === '0-1') { badge = myColor==='b' ? 'W' : 'L'; badgeCls = myColor==='b'?'win':'lose'; }
+      if (result==='1-0') { badge=myColor==='w'?'W':'L'; badgeCls=myColor==='w'?'win':'lose'; }
+      if (result==='0-1') { badge=myColor==='b'?'W':'L'; badgeCls=myColor==='b'?'win':'lose'; }
 
-      const hasArrows = doc.arrows && Object.keys(doc.arrows).some(k => doc.arrows[k]?.length > 0);
-      const arrowBadge = hasArrows ? '<span title="화살표 포함" style="font-size:10px;opacity:0.7;">🏹</span>' : '';
+      const hasArrows = doc.arrows && Object.keys(doc.arrows).some(k=>doc.arrows[k]?.length>0);
+      const arrowBadge = hasArrows ? ' <span title="화살표 포함" style="font-size:10px;opacity:0.7;">🏹</span>' : '';
 
       const item = document.createElement('div');
       item.className = 'saved-game-item';
-      item.style.cssText = 'cursor:default;';
       item.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <span style="width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:${badgeCls==='win'?'rgba(127,166,80,.2)':badgeCls==='lose'?'rgba(192,64,64,.15)':'rgba(160,160,160,.15)'};color:${badgeCls==='win'?'#a0c060':badgeCls==='lose'?'#e07070':'var(--text-secondary)'};">${badge}</span>
-          <span class="saved-game-title" style="flex:1;">${doc.whiteName||'백'} vs ${doc.blackName||'흑'}</span>
-          ${arrowBadge}
+          <span style="width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;
+            background:${badgeCls==='win'?'rgba(127,166,80,.2)':badgeCls==='lose'?'rgba(192,64,64,.15)':'rgba(160,160,160,.15)'};
+            color:${badgeCls==='win'?'#a0c060':badgeCls==='lose'?'#e07070':'var(--text-secondary)'};">${badge}</span>
+          <span class="saved-game-title" style="flex:1;">${doc.whiteName||'백'} vs ${doc.blackName||'흑'}${arrowBadge}</span>
         </div>
         <div class="saved-game-meta"><span>${result} · ${doc.moveCount||0}수</span><span>${dateStr}</span></div>
         <div class="saved-game-actions">
@@ -645,7 +662,7 @@ async function loadGameRecords() {
   }
 }
 
-// 특정 game_records 문서를 분석 보드에 로드 (PGN + 화살표)
+// 특정 game_records 기록을 분석 보드로 로드
 async function loadGameRecord(docId) {
   if (!window._fbDb) { showToast('Firebase 연결 필요'); return; }
   try {
@@ -654,25 +671,24 @@ async function loadGameRecord(docId) {
     const doc = snap.data();
     if (!doc.pgn) { showToast('PGN 데이터가 없습니다'); return; }
 
-    // 화살표 로드
+    // 1) 화살표 먼저 로드
     _loadRecordArrows(doc.arrows || null);
 
-    // PGN 로드
+    // 2) PGN 로드 (내부에서 switchTab('analysis') + goToEnd 호출됨)
     document.getElementById('pgn-input').value = doc.pgn;
     loadPGN();
 
-    // 내 색상 적용
+    // 3) 내 색상 적용
     const sel = document.getElementById('my-color-select');
     if (sel && doc.myColor) sel.value = doc.myColor;
 
-    // game 패치 (PGN 로드 후 game 인스턴스 참조 확보)
+    // 4) PGN 로드 완료 후 화살표 재렌더 (goToEnd 이후 시점)
     setTimeout(() => {
-      _patchGameNavigationForArrows();
-      _renderRecordArrowsForCurrentMove();
-    }, 300);
+      if (game) _drawRecordArrows(game);
+    }, 400);
 
     const arrowCount = Object.values(_recordArrows).reduce((s,a)=>s+a.length,0);
-    showToast(`✓ 기보 로드 완료${arrowCount > 0 ? ` (화살표 ${arrowCount}개 포함)` : ''}`);
+    showToast(`✓ 기보 로드${arrowCount>0 ? ` (화살표 ${arrowCount}개)` : ''}`);
   } catch(e) {
     showToast('불러오기 실패: ' + e.message);
   }
