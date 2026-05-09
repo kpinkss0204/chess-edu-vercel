@@ -1171,14 +1171,13 @@ const ET = {
     if (this.running) return;
     setEtStatus('warning', '카메라 초기화 중...');
     try {
-      // TFFacemesh는 WebGazer 2.x의 유일한 트래커
-      // setRegression/setTracker는 begin() 이전에 호출해야 함
-      webgazer
-        .setRegression('ridge')
-        .setTracker('TFFacemesh')
-        .showVideoPreview(false)
-        .showFaceOverlay(false)
-        .showFaceFeedbackBox(false);
+      // WebGazer 2.x: 체이닝 미지원, 각각 개별 호출 필요
+      webgazer.setRegression('ridge');
+      webgazer.setTracker('TFFacemesh');
+      webgazer.params.showVideoPreview    = false;
+      webgazer.params.showFaceOverlay     = false;
+      webgazer.params.showFaceFeedbackBox = false;
+      webgazer.params.saveDataAcrossSessions = false;
 
       webgazer.setGazeListener((data, elapsedTime) => {
         if (!data) return;
