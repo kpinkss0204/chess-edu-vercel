@@ -413,11 +413,13 @@ body{font-family:var(--font-main);background:var(--bg-primary);color:var(--text-
       </div>
       <div class="viewer-main">
         <div id="viewer-board-wrap"><div id="viewer-board"></div>
-          <!-- 화살표 SVG 오버레이 -->
           <svg id="viewer-arrow-svg" class="board-arrow-overlay" viewBox="0 0 800 800" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <marker id="viewer-arrow-head" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto">
                 <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(255,165,0,0.92)" stroke="none"/>
+              </marker>
+              <marker id="viewer-arrow-head-seq" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto">
+                <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(80,160,255,0.88)" stroke="none"/>
               </marker>
             </defs>
             <g id="viewer-arrow-layer"></g>
@@ -807,11 +809,25 @@ function renderMoveTokens(){
     // ── 화살표 배지 ──
     const arrows=_moveArrows[i];
     if(arrows&&arrows.length>0){
-      const badge=document.createElement('span');
-      badge.className='move-arrow-badge';
-      badge.title=arrows.map(a=>sqName(a.fromCol,a.fromRow)+'→'+sqName(a.toCol,a.toRow)).join(', ');
-      badge.innerHTML=`<svg width="9" height="9" viewBox="0 0 10 10"><line x1="1" y1="9" x2="9" y2="1" stroke="rgba(255,165,0,.9)" stroke-width="1.8" stroke-linecap="round" marker-end="url(#badge-arrow-head)"/><defs><marker id="badge-arrow-head" markerUnits="strokeWidth" markerWidth="3" markerHeight="3" refX="1.5" refY="1.5" orient="auto"><path d="M0,0 L3,1.5 L0,3 L0.8,1.5 Z" fill="rgba(255,165,0,.9)"/></marker></defs></svg><span style="font-size:9px">${arrows.length}</span>`;
-      ss.appendChild(badge);
+      const candArrows=arrows.filter(a=>!a.seq);
+      const seqArrows=arrows.filter(a=>a.seq);
+      // 후보수 배지 (주황)
+      if(candArrows.length>0){
+        const badge=document.createElement('span');
+        badge.className='move-arrow-badge';
+        badge.title='후보수: '+candArrows.map(a=>sqName(a.fromCol,a.fromRow)+'→'+sqName(a.toCol,a.toRow)).join(', ');
+        badge.innerHTML=`<svg width="9" height="9" viewBox="0 0 10 10"><line x1="1" y1="9" x2="9" y2="1" stroke="rgba(255,165,0,.9)" stroke-width="1.8" stroke-linecap="round" marker-end="url(#badge-arrow-head-o)"/><defs><marker id="badge-arrow-head-o" markerUnits="strokeWidth" markerWidth="3" markerHeight="3" refX="1.5" refY="1.5" orient="auto"><path d="M0,0 L3,1.5 L0,3 L0.8,1.5 Z" fill="rgba(255,165,0,.9)"/></marker></defs></svg><span style="font-size:9px">${candArrows.length}</span>`;
+        ss.appendChild(badge);
+      }
+      // 수순 배지 (파랑)
+      if(seqArrows.length>0){
+        const badge2=document.createElement('span');
+        badge2.className='move-arrow-badge';
+        badge2.style.color='rgba(80,160,255,.9)';
+        badge2.title='수순: '+seqArrows.map(a=>sqName(a.fromCol,a.fromRow)+'→'+sqName(a.toCol,a.toRow)).join(', ');
+        badge2.innerHTML=`<svg width="9" height="9" viewBox="0 0 10 10"><line x1="1" y1="9" x2="9" y2="1" stroke="rgba(80,160,255,.88)" stroke-width="1.8" stroke-linecap="round" marker-end="url(#badge-arrow-head-b)"/><defs><marker id="badge-arrow-head-b" markerUnits="strokeWidth" markerWidth="3" markerHeight="3" refX="1.5" refY="1.5" orient="auto"><path d="M0,0 L3,1.5 L0,3 L0.8,1.5 Z" fill="rgba(80,160,255,.88)"/></marker></defs></svg><span style="font-size:9px">${seqArrows.length}</span>`;
+        ss.appendChild(badge2);
+      }
     }
     if(!currentRow){
       currentRow=document.createElement('div');
@@ -1322,12 +1338,13 @@ let _moveArrows={};
 function loadArrowsFromRecord(doc){
   _moveArrows={};
   if(!doc.arrows)return;
-  // play.html 저장 형식: { "moveIndex": [{fc,fr,tc,tr},...] }
-  // records.html 표시 형식: { moveIndex: [{fromCol,fromRow,toCol,toRow},...] }
+  // play.html 저장 형식: { "moveIndex": [{fc,fr,tc,tr,seq?},...] }
+  // records.html 표시 형식: { moveIndex: [{fromCol,fromRow,toCol,toRow,seq?},...] }
   Object.entries(doc.arrows).forEach(([k,arr])=>{
     if(!arr||!arr.length)return;
     _moveArrows[parseInt(k)]=arr.map(a=>({
-      fromCol:a.fc,fromRow:a.fr,toCol:a.tc,toRow:a.tr
+      fromCol:a.fc,fromRow:a.fr,toCol:a.tc,toRow:a.tr,
+      seq:a.seq?true:undefined
     }));
   });
 }
@@ -1344,8 +1361,11 @@ function viewerSqCenter(col,row){
 }
 
 // SVG line 화살표 요소 생성
-function makeViewerArrowEl(fromCol,fromRow,toCol,toRow){
-  const ARROW_COLOR='rgba(255,165,0,0.92)';
+function makeViewerArrowEl(fromCol,fromRow,toCol,toRow,isSeq){
+  const ARROW_COLOR_CAND='rgba(255,165,0,0.92)';
+  const ARROW_COLOR_SEQ ='rgba(80,160,255,0.88)';
+  const ARROW_COLOR=isSeq?ARROW_COLOR_SEQ:ARROW_COLOR_CAND;
+  const markerId=isSeq?'viewer-arrow-head-seq':'viewer-arrow-head';
   const ARROW_SW=14;
   const SVG_NS='http://www.w3.org/2000/svg';
   const from=viewerSqCenter(fromCol,fromRow);
@@ -1362,7 +1382,7 @@ function makeViewerArrowEl(fromCol,fromRow,toCol,toRow){
   line.setAttribute('stroke',ARROW_COLOR);
   line.setAttribute('stroke-width',ARROW_SW);
   line.setAttribute('stroke-linecap','round');
-  line.setAttribute('marker-end','url(#viewer-arrow-head)');
+  line.setAttribute('marker-end',`url(#${markerId})`);
   return line;
 }
 
@@ -1373,7 +1393,7 @@ function redrawViewerArrows(){
   g.innerHTML='';
   const arrows=_moveArrows[_viewIdx]||[];
   arrows.forEach(a=>{
-    const el=makeViewerArrowEl(a.fromCol,a.fromRow,a.toCol,a.toRow);
+    const el=makeViewerArrowEl(a.fromCol,a.fromRow,a.toCol,a.toRow,!!a.seq);
     if(el)g.appendChild(el);
   });
 }

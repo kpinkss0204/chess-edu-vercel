@@ -184,6 +184,22 @@ function buildChessContext() {
     }
   } catch(e) { /* 무시 */ }
 
+  // 사용자가 그린 화살표 (후보수 / 수순 구분)
+  let candidateMoves = [];
+  let sequenceMoves = [];
+  try {
+    // chess-wasm-fixed.html의 _userArrows 배열 읽기
+    if (typeof window._userArrows !== 'undefined' && window._userArrows.length > 0) {
+      const FILES = 'abcdefgh';
+      window._userArrows.forEach(a => {
+        const fromSq = FILES[a.fc] + (8 - a.fr);
+        const toSq   = FILES[a.tc] + (8 - a.tr);
+        if (a.seq) sequenceMoves.push(fromSq + '-' + toSq);
+        else       candidateMoves.push(fromSq + '-' + toSq);
+      });
+    }
+  } catch(e) { /* 무시 */ }
+
   return {
     turn, fen, bestMove, bestLine, line2, line3, evaluation, depth, cpFromWhite,
     lastMove, lastMoveSan, lastMoveAnnotation,
@@ -193,6 +209,8 @@ function buildChessContext() {
     fullMove: game.fullMove,
     threatData,
     bestExplainData,
+    candidateMoves,
+    sequenceMoves,
   };
 }
 
@@ -445,6 +463,17 @@ function buildCommentaryPrompt(ctx) {
   if (liveLine2)    lines.push(`[엔진 2순위 라인] ${liveLine2}`);
   if (liveLine3)    lines.push(`[엔진 3순위 라인] ${liveLine3}`);
 
+  // 사용자 화살표(후보수/수순) 포함
+  if (ctx.candidateMoves && ctx.candidateMoves.length > 0) {
+    lines.push(``);
+    lines.push(`[사용자가 화살표로 표시한 후보수: ${ctx.candidateMoves.join(', ')}]`);
+    lines.push(`※ 해설에서 이 후보수들이 엔진 추천과 어떻게 다른지 언급해 주세요.`);
+  }
+  if (ctx.sequenceMoves && ctx.sequenceMoves.length > 0) {
+    lines.push(`[사용자가 Alt+화살표로 표시한 수순: ${ctx.sequenceMoves.join(' → ')}]`);
+    lines.push(`※ 이 수순의 장단점을 간략히 언급해 주세요.`);
+  }
+
   if (ctx.threatData) {
     lines.push(``);
     lines.push(`[위협 분석 — 해설에 녹여서 사용할 것]`);
@@ -498,6 +527,17 @@ function buildCoachPrompt(ctx, question) {
   if (ctx.bestLine) lines.push(`[엔진 1순위 라인] ${ctx.bestLine}`);
   if (ctx.line2)    lines.push(`[엔진 2순위 라인] ${ctx.line2}`);
   if (ctx.line3)    lines.push(`[엔진 3순위 라인] ${ctx.line3}`);
+
+  // 사용자 화살표 (후보수 / 수순) 포함
+  if (ctx.candidateMoves && ctx.candidateMoves.length > 0) {
+    lines.push(``);
+    lines.push(`[사용자가 고려한 후보수 (화살표로 표시한 수): ${ctx.candidateMoves.join(', ')}]`);
+    lines.push(`※ 이 후보수들이 왜 좋거나 나쁜지 질문에 연관시켜 설명해 주세요.`);
+  }
+  if (ctx.sequenceMoves && ctx.sequenceMoves.length > 0) {
+    lines.push(`[사용자가 생각한 수순 (Alt+화살표): ${ctx.sequenceMoves.join(' → ')}]`);
+    lines.push(`※ 이 수순이 올바른지 평가해 주세요.`);
+  }
 
   if (ctx.threatData) {
     lines.push(``);

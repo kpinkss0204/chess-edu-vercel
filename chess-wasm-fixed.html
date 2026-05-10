@@ -843,6 +843,20 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 #coach-ask-btn:hover:not(:disabled) { background: var(--accent-green-bright); }
 #coach-ask-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* 미리 정의 질문 버튼 */
+.coach-preset-btn {
+  font-size: 11px; font-weight: 600; font-family: var(--font-main);
+  padding: 4px 9px; border-radius: 6px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-tertiary); color: var(--text-secondary);
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  line-height: 1.4;
+}
+.coach-preset-btn:hover {
+  background: var(--bg-hover); color: var(--text-primary);
+  border-color: var(--accent-green-dark);
+}
+
 
 #coach-response {
   background: var(--bg-card); border: 1px solid var(--border);
@@ -1705,6 +1719,19 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
     <div id="coach-body">
       <div id="coach-context-display" class="coach-context-line" style="display:none;"></div>
 
+      <!-- 미리 정의 질문 버튼 -->
+      <div id="coach-presets" style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
+        <div style="font-size:10px;color:var(--text-muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:2px;">빠른 질문</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <button class="coach-preset-btn" onclick="setCoachQuestion('제가 표시한 후보수가 좋은 수인가요? 이유를 설명해 주세요.')">💡 내 후보수 평가</button>
+          <button class="coach-preset-btn" onclick="setCoachQuestion('현재 포지션에서 가장 중요한 위협과 계획은 무엇인가요?')">⚔️ 위협 & 계획</button>
+          <button class="coach-preset-btn" onclick="setCoachQuestion('방금 둔 수의 의도와 그것이 포지션에 미치는 영향을 설명해 주세요.')">↩️ 방금 수 해설</button>
+          <button class="coach-preset-btn" onclick="setCoachQuestion('제가 생각한 수순이 맞는지 확인해 주세요. 어떤 수순이 더 좋을까요?')">🔢 내 수순 검토</button>
+          <button class="coach-preset-btn" onclick="setCoachQuestion('현재 포지션에서 각 진영의 강점과 약점을 분석해 주세요.')">📊 강·약점 분석</button>
+          <button class="coach-preset-btn" onclick="setCoachQuestion('엔드게임으로 가는 것과 미들게임을 유지하는 것 중 어느 쪽이 유리한가요?')">🏁 전략 방향</button>
+        </div>
+      </div>
+
       <div class="coach-question-row">
         <textarea id="coach-input" placeholder="체스 코치에게 질문하세요..." rows="2"></textarea>
         <button id="coach-ask-btn" onclick="askCoach()">
@@ -1963,6 +1990,15 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
           <span id="coach-key-status-mobile" style="font-size:11px;color:var(--text-muted);width:100%;"></span>
         </div>
         <div id="coach-context-display-mobile" style="font-size:11px;color:var(--text-muted);background:var(--bg-tertiary);border-radius:6px;padding:6px 10px;display:none;"></div>
+        <!-- 모바일 미리 정의 질문 -->
+        <div style="display:flex;flex-wrap:wrap;gap:5px;flex-shrink:0;">
+          <div style="font-size:10px;color:var(--text-muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase;width:100%;margin-bottom:2px;">빠른 질문</div>
+          <button class="coach-preset-btn" onclick="setCoachQuestionMobile('제가 표시한 후보수가 좋은 수인가요? 이유를 설명해 주세요.')">💡 내 후보수 평가</button>
+          <button class="coach-preset-btn" onclick="setCoachQuestionMobile('현재 포지션에서 가장 중요한 위협과 계획은 무엇인가요?')">⚔️ 위협 & 계획</button>
+          <button class="coach-preset-btn" onclick="setCoachQuestionMobile('방금 둔 수의 의도와 그것이 포지션에 미치는 영향을 설명해 주세요.')">↩️ 방금 수 해설</button>
+          <button class="coach-preset-btn" onclick="setCoachQuestionMobile('제가 생각한 수순이 맞는지 확인해 주세요.')">🔢 내 수순 검토</button>
+          <button class="coach-preset-btn" onclick="setCoachQuestionMobile('현재 포지션에서 각 진영의 강점과 약점을 분석해 주세요.')">📊 강·약점 분석</button>
+        </div>
         <div id="coach-response-mobile"
           style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;color:var(--text-primary);min-height:100px;overflow-y:auto;word-break:break-word;display:none;"></div>
         <div style="display:flex;gap:8px;align-items:flex-end;margin-top:auto;">
@@ -2895,6 +2931,25 @@ function saveMobileApiKey() {
   if (typeof saveApiKey === 'function') saveApiKey();
 }
 
+// ── 미리 정의 질문 버튼 핸들러 ──
+function setCoachQuestion(text) {
+  const input = document.getElementById('coach-input');
+  if (input) {
+    input.value = text;
+    input.focus();
+    // 코치 패널이 닫혀있으면 열기
+    if (typeof openCoach === 'function' && !coachOpen) openCoach();
+  }
+}
+
+function setCoachQuestionMobile(text) {
+  const input = document.getElementById('coach-input-mobile');
+  if (input) {
+    input.value = text;
+    input.focus();
+  }
+}
+
 // ── 모바일 코치 질문 ──
 async function askCoachMobile() {
   const inputEl = document.getElementById('coach-input-mobile');
@@ -3259,6 +3314,12 @@ async function askCoachMobile() {
   } else {
     attachEvents();
   }
+
+  // coach.js가 후보수 화살표에 접근할 수 있도록 window에 노출
+  Object.defineProperty(window, '_userArrows', {
+    get: function() { return _userArrows; },
+    configurable: true,
+  });
 })();
 </script>
 </body>

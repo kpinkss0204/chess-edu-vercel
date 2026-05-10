@@ -516,15 +516,30 @@ body {
       <!-- 화살표 SVG 오버레이 -->
       <svg id="play-arrow-svg" class="board-arrow-overlay" viewBox="0 0 800 800" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
+          <!-- 후보수 화살표 머리 (주황) -->
           <marker id="play-arrow-head" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto">
             <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(255,165,0,0.92)" stroke="none"/>
+          </marker>
+          <!-- 수순 화살표 머리 (파랑) -->
+          <marker id="play-arrow-head-seq" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto">
+            <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(80,160,255,0.92)" stroke="none"/>
           </marker>
         </defs>
         <g id="play-arrow-layer"></g>
       </svg>
     </div>
-
-    <!-- 내 바 -->
+    <!-- 화살표 범례 -->
+    <div id="arrow-legend" style="display:flex;gap:12px;align-items:center;padding:4px 2px;font-size:10px;color:var(--text-muted);flex-wrap:wrap;">
+      <span style="display:flex;align-items:center;gap:4px;">
+        <svg width="28" height="10" viewBox="0 0 28 10"><defs><marker id="leg-o" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto"><path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(255,165,0,0.92)"/></marker></defs><line x1="2" y1="5" x2="20" y2="5" stroke="rgba(255,165,0,0.92)" stroke-width="2.5" marker-end="url(#leg-o)"/></svg>
+        우클릭: 후보수
+      </span>
+      <span style="display:flex;align-items:center;gap:4px;">
+        <svg width="28" height="10" viewBox="0 0 28 10"><defs><marker id="leg-b" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto"><path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(80,160,255,0.88)"/></marker></defs><line x1="2" y1="5" x2="20" y2="5" stroke="rgba(80,160,255,0.88)" stroke-width="2.5" marker-end="url(#leg-b)"/></svg>
+        Alt+우클릭: 수순
+      </span>
+      <span style="color:var(--text-muted);font-size:9px;">좌클릭: 모두 지우기</span>
+    </div>
     <div class="player-bar my-bar" style="width:100%;">
       <div class="player-info-wrap">
         <div class="p-avatar me" id="my-avatar-el">?</div>
@@ -1391,16 +1406,19 @@ function showToast(msg, duration=2500) {
 
 // ══════════════════════════════════════════
 // 우클릭 화살표 그리기
+// - 우클릭 드래그: 후보수 화살표 (주황, 기존)
+// - Alt+우클릭 드래그: 수순/변형 화살표 (파랑)
 // ══════════════════════════════════════════
-// 게임 중 후보수 화살표: 수 인덱스 → 화살표 배열
-// { fc, fr, tc, tr }
-let _gameArrows = {}; // moveIndex → [{fc,fr,tc,tr}, ...]
+// 게임 중 화살표: 수 인덱스 → 화살표 배열
+// { fc, fr, tc, tr, seq?: true }
+let _gameArrows = {}; // moveIndex → [{fc,fr,tc,tr,seq?}, ...]
 
 (function(){
-  const ARROW_COLOR='rgba(255,165,0,0.92)';
+  const ARROW_COLOR_CAND='rgba(255,165,0,0.92)';  // 후보수 (주황)
+  const ARROW_COLOR_SEQ ='rgba(80,160,255,0.88)';  // 수순   (파랑)
   const ARROW_SW=14;
   const SVG_NS='http://www.w3.org/2000/svg';
-  let _arrowStart=null,_userArrows=[],_rightDragging=false;
+  let _arrowStart=null,_rightDragging=false,_isSeq=false;
 
   function sqCenter(col,row){
     const flipped=_myColor==='b';
@@ -1418,7 +1436,9 @@ let _gameArrows = {}; // moveIndex → [{fc,fr,tc,tr}, ...]
     return{col:flipped?7-dc:dc,row:flipped?7-dr:dr};
   }
 
-  function makeArrow(fc,fr,tc,tr){
+  function makeArrow(fc,fr,tc,tr,isSeq){
+    const color=isSeq?ARROW_COLOR_SEQ:ARROW_COLOR_CAND;
+    const markerId=isSeq?'play-arrow-head-seq':'play-arrow-head';
     const from=sqCenter(fc,fr),to=sqCenter(tc,tr);
     const dx=to.px-from.px,dy=to.py-from.py;
     const len=Math.sqrt(dx*dx+dy*dy);if(len<1)return null;
@@ -1429,16 +1449,18 @@ let _gameArrows = {}; // moveIndex → [{fc,fr,tc,tr}, ...]
     const line=document.createElementNS(SVG_NS,'line');
     line.setAttribute('x1',sx.toFixed(2));line.setAttribute('y1',sy.toFixed(2));
     line.setAttribute('x2',ex.toFixed(2));line.setAttribute('y2',ey.toFixed(2));
-    line.setAttribute('stroke',ARROW_COLOR);line.setAttribute('stroke-width',sw);
+    line.setAttribute('stroke',color);line.setAttribute('stroke-width',sw);
     line.setAttribute('stroke-linecap','round');
-    line.setAttribute('marker-end','url(#play-arrow-head)');
+    line.setAttribute('marker-end',`url(#${markerId})`);
     return line;
   }
 
   function redraw(){
     const g=document.getElementById('play-arrow-layer');if(!g)return;
     g.innerHTML='';
-    _userArrows.forEach(a=>{const el=makeArrow(a.fc,a.fr,a.tc,a.tr);if(el)g.appendChild(el);});
+    const curIdx=_sanMoves.length;
+    const arrows=_gameArrows[curIdx]||[];
+    arrows.forEach(a=>{const el=makeArrow(a.fc,a.fr,a.tc,a.tr,!!a.seq);if(el)g.appendChild(el);});
   }
 
   function attach(){
@@ -1446,11 +1468,14 @@ let _gameArrows = {}; // moveIndex → [{fc,fr,tc,tr}, ...]
     if(!board){setTimeout(attach,300);return;}
     board.addEventListener('contextmenu',e=>e.preventDefault());
     board.addEventListener('mousedown',e=>{
-      if(e.button===2){_rightDragging=true;_arrowStart=getBoardSq(e);}
-      else if(e.button===0){
-        // 좌클릭: 현재 수의 화살표 초기화
+      if(e.button===2){
+        _rightDragging=true;
+        _isSeq=e.altKey; // Alt 눌리면 수순 화살표
+        _arrowStart=getBoardSq(e);
+      } else if(e.button===0){
+        // 좌클릭: 현재 수의 화살표 전체 초기화
         const curIdx=_sanMoves.length;
-        _userArrows=[];_gameArrows[curIdx]=[];
+        _gameArrows[curIdx]=[];
         redraw();_arrowStart=null;_rightDragging=false;
       }
     });
@@ -1461,19 +1486,26 @@ let _gameArrows = {}; // moveIndex → [{fc,fr,tc,tr}, ...]
       const sq=getBoardSq(e);
       const curIdx=_sanMoves.length;
       if(!_gameArrows[curIdx])_gameArrows[curIdx]=[];
-      _userArrows=_gameArrows[curIdx];
+      const arr=_gameArrows[curIdx];
       if(sq.col===_arrowStart.col&&sq.row===_arrowStart.row){
-        _userArrows=[];_gameArrows[curIdx]=[];
+        // 같은 칸 클릭 시 전체 초기화
+        _gameArrows[curIdx]=[];
       }else{
-        const idx=_userArrows.findIndex(a=>a.fc===_arrowStart.col&&a.fr===_arrowStart.row&&a.tc===sq.col&&a.tr===sq.row);
-        if(idx>=0)_userArrows.splice(idx,1);
-        else _userArrows.push({fc:_arrowStart.col,fr:_arrowStart.row,tc:sq.col,tr:sq.row});
-        _gameArrows[curIdx]=_userArrows.slice();
+        // 같은 경로+같은 종류 화살표가 있으면 제거(토글), 없으면 추가
+        const idx=arr.findIndex(a=>
+          a.fc===_arrowStart.col&&a.fr===_arrowStart.row&&
+          a.tc===sq.col&&a.tr===sq.row&&!!a.seq===_isSeq
+        );
+        if(idx>=0)arr.splice(idx,1);
+        else arr.push({fc:_arrowStart.col,fr:_arrowStart.row,tc:sq.col,tr:sq.row,seq:_isSeq?true:undefined});
       }
       redraw();_arrowStart=null;
     });
   }
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',attach);}else{attach();}
+
+  // 외부에서 redraw 호출 가능하도록 노출
+  window._arrowRedraw = redraw;
 })();
 
 </script>
