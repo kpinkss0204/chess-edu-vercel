@@ -1874,12 +1874,19 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
           <a href="https://lichess.org" target="_blank" style="font-size:10px;color:var(--text-muted);text-decoration:none;" onmouseover="this.style.color='var(--text-secondary)'" onmouseout="this.style.color='var(--text-muted)'">lichess.org ↗</a>
         </div>
         <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;">
-          현재 기보를 Lichess에 업로드합니다. 새 탭에서 열린 Lichess 페이지에서 <strong style="color:var(--text-secondary);">Request a computer analysis</strong>를 클릭하면 수 분류(Blunder/Mistake 등)를 확인할 수 있습니다.
+          현재 기보를 Lichess에 업로드하여 수 분류 결과를 가져옵니다. 분석 완료 후 기보 위 색상 배지로 표시됩니다.
         </div>
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+          <select id="lichess-level-select" style="flex:1;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:12px;padding:5px 8px;outline:none;">
+            <option value="1">레벨 1 (빠름)</option>
+            <option value="3">레벨 3</option>
+            <option value="5" selected>레벨 5 (권장)</option>
+            <option value="7">레벨 7</option>
+            <option value="8">레벨 8 (최고)</option>
+          </select>
           <button onclick="analyzePgnWithLichess()" id="lichess-analyze-btn"
-            style="width:100%;padding:8px 12px;background:rgba(159,133,83,0.15);border:1px solid rgba(159,133,83,0.4);border-radius:8px;color:#c8a060;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:var(--font-main);white-space:nowrap;">
-            ♟ Lichess에서 분석하기 ↗
+            style="flex:1;padding:8px 12px;background:rgba(159,133,83,0.15);border:1px solid rgba(159,133,83,0.4);border-radius:8px;color:#c8a060;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:var(--font-main);white-space:nowrap;">
+            ♟ Lichess로 분석
           </button>
         </div>
         <div id="lichess-analysis-status" style="display:none;font-size:11px;line-height:1.6;padding:8px 10px;border-radius:8px;background:var(--bg-card);border:1px solid var(--border);"></div>
@@ -3340,30 +3347,42 @@ async function askCoachMobile() {
   });
 })();
 </script>
-<!-- ===== Lichess 게임 분석 ===== -->
+<!-- ===== Lichess 게임 분석 (Vercel 프록시 경유) ===== -->
 <script>
-// ── Lichess API로 PGN 분석 후 수 분류를 기보에 적용 ──────────────
-// 흐름: POST /api/import → 게임 ID 취득 → GET /game/export/{id}?evals=true&accuracy=true
-//       → judgments 파싱 → game.history[i].annotation 덮어쓰기 → renderMoveList()
+// ── 흐름 ─────────────────────────────────────────────────────────
+// 1) POST /api/lichess-proxy?path=import          → gameId 취득
+// 2) POST /api/lichess-proxy?path=request-analysis&id={gameId} → 서버 분석 시작
+// 3) GET  /api/lichess-proxy?path=export&id={gameId}          → PGN+evals 폴링
+// 4) parseLichessPgnAnnotations() → judgment 추출
+// 5) game.history[i].annotation 적용 → renderMoveList()
+// ─────────────────────────────────────────────────────────────────
 
 const LICHESS_JUDGMENT_MAP = {
-  'Brilliant': 'brilliant',
+  'Brilliant':  'brilliant',
   'Great find': 'great',
-  'Best move': 'best',
-  'Excellent': 'excellent',
-  'Good': 'good',
-  'Book': 'book',
+  'Best move':  'best',
+  'Excellent':  'excellent',
+  'Good':       'good',
+  'Book':       'book',
   'Inaccuracy': 'inaccuracy',
-  'Mistake': 'mistake',
-  'Blunder': 'blunder',
+  'Mistake':    'mistake',
+  'Blunder':    'blunder',
   'Missed win': 'miss',
 };
 
+const STAT_ORDER = ['brilliant','great','best','excellent','good','book','inaccuracy','mistake','blunder','miss'];
+const STAT_LABEL = { brilliant:'!!', great:'!', best:'⭐', excellent:'✓', good:'·', book:'📖', inaccuracy:'?!', mistake:'?', blunder:'??', miss:'✗' };
+const STAT_COLOR = {
+  brilliant:'#1bada6', great:'#5c8fff', best:'#7fa650', excellent:'#7fa650',
+  good:'#96af8b', book:'#9b7240', inaccuracy:'#f6c94a', mistake:'#e08c3a',
+  blunder:'#cc3333', miss:'#9944cc',
+};
+
+// Vercel 프록시 base — 같은 origin이면 상대경로로도 동작
+const PROXY = '/api/lichess-proxy';
+
 let _lichessAnalysisBusy = false;
 
-// ── Lichess PGN import → 분석 페이지 열기 (CORS 우회) ──────────────────
-// 브라우저에서 lichess.org/api/import를 직접 fetch하면 CORS 차단됨.
-// 대신 hidden <form>을 사용해 POST를 새 탭으로 직접 제출 → 브라우저가 직접 요청.
 async function analyzePgnWithLichess() {
   if (_lichessAnalysisBusy) return;
 
@@ -3377,9 +3396,10 @@ async function analyzePgnWithLichess() {
     return;
   }
 
+  const level = parseInt(document.getElementById('lichess-level-select')?.value || '5');
   const statusEl = document.getElementById('lichess-analysis-status');
   const resultEl = document.getElementById('lichess-analysis-result');
-  const btn = document.getElementById('lichess-analyze-btn');
+  const btn      = document.getElementById('lichess-analyze-btn');
 
   function setStatus(html, color) {
     if (!statusEl) return;
@@ -3393,43 +3413,111 @@ async function analyzePgnWithLichess() {
   if (resultEl) resultEl.style.display = 'none';
 
   try {
-    // ── hidden form POST → 새 탭에서 Lichess가 직접 import+분석 페이지로 이동 ──
-    // fetch는 CORS로 막히지만, form submit은 same-origin 제한 없음.
-    setStatus('⏳ Lichess 분석 페이지로 이동 중…', null);
+    // ── STEP 1: PGN import → gameId ──────────────────────────
+    setStatus('⏳ Lichess에 기보 업로드 중…', null);
 
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = 'https://lichess.org/paste';
-    form.target = '_blank';
-    form.style.display = 'none';
+    const importRes = await fetch(`${PROXY}?path=import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pgn }),
+    });
+    if (!importRes.ok) {
+      const errJson = await importRes.json().catch(() => ({}));
+      throw new Error(errJson.error || `import 실패 (HTTP ${importRes.status})`);
+    }
+    const importJson = await importRes.json();
+    const gameId = importJson.id;
+    if (!gameId) throw new Error('게임 ID를 받지 못했습니다.');
 
-    const pgnInput = document.createElement('input');
-    pgnInput.type = 'hidden';
-    pgnInput.name = 'pgn';
-    pgnInput.value = pgn;
-    form.appendChild(pgnInput);
+    // ── STEP 2: 서버 분석 요청 ───────────────────────────────
+    setStatus(`⏳ Lichess 분석 요청 중… (게임 ID: ${gameId})`, null);
 
-    document.body.appendChild(form);
-    form.submit();
-    document.body.removeChild(form);
+    // Lichess /api/analysis/{id} — 분석을 큐에 올림 (레벨 무관, 서버가 결정)
+    await fetch(`${PROXY}?path=request-analysis&id=${gameId}`, {
+      method: 'POST',
+    }).catch(() => {}); // 실패해도 폴링은 계속
+
+    // ── STEP 3: evals 폴링 (최대 ~90초) ──────────────────────
+    let annotations = null;
+    const maxAttempts = 18; // 2s + 17×5s ≈ 87초
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const elapsed = attempt === 0 ? 0 : (2 + (attempt - 1) * 5);
+      setStatus(
+        `⏳ Lichess 분석 중… (${attempt + 1}/${maxAttempts}, 약 ${elapsed}초 경과)<br>` +
+        `<span style="font-size:10px;color:var(--text-muted);">레벨에 따라 최대 90초 소요될 수 있습니다.</span>`,
+        null
+      );
+
+      await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 5000));
+
+      const expRes = await fetch(`${PROXY}?path=export&id=${gameId}`);
+      if (!expRes.ok) continue;
+
+      const pgnText = await expRes.text();
+
+      // %eval 또는 %judgment 태그가 있으면 분석 완료
+      if (pgnText.includes('%eval') || pgnText.includes('%judgment')) {
+        annotations = parseLichessPgnAnnotations(pgnText);
+        break;
+      }
+    }
+
+    // ── 분석 타임아웃 ─────────────────────────────────────────
+    if (!annotations || annotations.every(a => a === null)) {
+      setStatus(
+        `⚠️ 분석 결과를 가져오지 못했습니다.<br>` +
+        `<span style="font-size:10px;color:var(--text-muted);">Lichess 서버가 바쁠 수 있습니다. 잠시 후 다시 시도하세요.</span><br>` +
+        `<a href="https://lichess.org/${gameId}/analysis" target="_blank" style="color:var(--accent-blue);font-size:11px;">Lichess에서 직접 보기 ↗</a>`,
+        null
+      );
+      _lichessAnalysisBusy = false;
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    // ── STEP 4: game.history에 annotation 적용 ───────────────
+    let applied = 0;
+    for (let i = 0; i < game.history.length && i < annotations.length; i++) {
+      const ann = annotations[i];
+      if (ann && LICHESS_JUDGMENT_MAP[ann]) {
+        game.history[i].annotation = LICHESS_JUDGMENT_MAP[ann];
+        applied++;
+      }
+    }
+    if (typeof game.renderMoveList === 'function') game.renderMoveList();
+
+    // ── STEP 5: 통계 표시 ────────────────────────────────────
+    const counts = {};
+    for (const a of annotations) {
+      if (!a) continue;
+      const mapped = LICHESS_JUDGMENT_MAP[a] || a;
+      counts[mapped] = (counts[mapped] || 0) + 1;
+    }
+
+    let statsHtml = `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:6px;">`;
+    for (const k of STAT_ORDER) {
+      if (!counts[k]) continue;
+      statsHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 4px;text-align:center;">
+        <div style="font-size:11px;font-weight:800;color:${STAT_COLOR[k] || 'var(--text-primary)'};">${STAT_LABEL[k] || k}</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${counts[k]}</div>
+      </div>`;
+    }
+    statsHtml += `</div>`;
 
     setStatus(
-      `✅ Lichess 분석 페이지가 새 탭에서 열렸습니다.<br>` +
-      `<span style="font-size:10px;color:var(--text-muted);">Lichess 페이지에서 <strong>Request a computer analysis</strong> 버튼을 클릭하면 수 분류(Brilliant/Blunder 등)를 볼 수 있습니다.</span>`,
+      `✅ Lichess 분석 완료 — ${applied}개 수 분류 적용<br>` +
+      `<a href="https://lichess.org/${gameId}/analysis" target="_blank" style="color:var(--accent-blue);font-size:11px;">Lichess에서 상세 분석 보기 ↗</a>`,
       '127,166,80'
     );
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = statsHtml;
+    }
 
   } catch (err) {
-    // form submit 실패 시 fallback: PGN을 클립보드에 복사하고 lichess.org/paste 안내
     setStatus(
-      `⚠️ 자동 열기 실패. 아래 방법을 사용하세요:<br>` +
-      `<button onclick="navigator.clipboard.writeText(document.getElementById('_lichess-pgn-hidden')?.value||'').then(()=>showToast('PGN 복사됨!'))" ` +
-      `style="margin:4px 0;padding:4px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:5px;color:var(--text-primary);cursor:pointer;font-size:11px;">` +
-      `📋 PGN 복사</button>` +
-      ` → ` +
-      `<a href="https://lichess.org/paste" target="_blank" style="color:var(--accent-blue);font-weight:600;">lichess.org/paste ↗</a>` +
-      `에 붙여넣기<br>` +
-      `<textarea id="_lichess-pgn-hidden" style="position:absolute;left:-9999px;" readonly>${pgn}</textarea>`,
+      `❌ 오류: ${err.message}<br>` +
+      `<span style="font-size:10px;color:var(--text-muted);">네트워크 오류이거나 Lichess 서버 문제일 수 있습니다.</span>`,
       null
     );
     console.error('[Lichess 분석]', err);
@@ -3439,39 +3527,23 @@ async function analyzePgnWithLichess() {
   if (btn) btn.disabled = false;
 }
 
-// ── Lichess PGN에서 수별 annotation 추출 ─────────────────────────
-// 형식: { [%eval -0.32] } { [%judgment name="Inaccuracy"] } 등
+// ── Lichess PGN에서 수별 judgment 추출 ───────────────────────────
+// 형식 예: 1. e4 { [%eval 0.17] } e5 { [%eval 0.19] [%judgment name="Inaccuracy" comment="..."] }
 function parseLichessPgnAnnotations(pgnText) {
-  // moves 파트만 추출 (헤더 이후)
   const movesSection = pgnText.replace(/\[.*?\]\s*/gs, '').trim();
 
-  // judgment 태그 추출
-  const judgmentRe = /\[%judgment\s+name="([^"]+)"/g;
-  // PGN 토큰화: 수 번호, 수, 주석({...}) 순서대로 파싱
-  const annotations = [];
-  // 간단히 각 주석 블록에서 judgment를 순서대로 추출
-  const commentRe = /\{([^}]*)\}/g;
-  let match;
-  let moveCount = 0;
-  const tokens = [];
-
-  // 수 토큰과 주석을 순서대로 추출
-  const tokenRe = /(\d+\.\s*\.{2,}\.?|\d+\.)|(\{[^}]*\})|([NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQK])?[+#]?|O-O-O[+#]?|O-O[+#]?)/g;
-
-  const anns = [];
-  let lastMoveIdx = -1;
   const fullTokens = [];
-
-  let m2;
   const tr = /(\{[^}]*\})|([NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQK])?[+#]?|O-O-O[+#]?|O-O[+#]?|\d+\.{1,3})/g;
-  while ((m2 = tr.exec(movesSection)) !== null) {
-    fullTokens.push({ comment: !!m2[1], text: m2[0] });
+  let m;
+  while ((m = tr.exec(movesSection)) !== null) {
+    fullTokens.push({ comment: !!m[1], text: m[0] });
   }
 
+  const anns = [];
   for (let i = 0; i < fullTokens.length; i++) {
     const t = fullTokens[i];
     if (!t.comment && !/^\d+/.test(t.text)) {
-      // 수 토큰: 다음 주석을 찾아서 judgment 추출
+      // 수 토큰: 바로 뒤 주석 블록에서 judgment 추출
       let judgment = null;
       for (let j = i + 1; j < fullTokens.length && j <= i + 2; j++) {
         if (fullTokens[j].comment) {
@@ -3484,21 +3556,17 @@ function parseLichessPgnAnnotations(pgnText) {
       anns.push(judgment);
     }
   }
-
   return anns;
 }
 
 // ── exportPGN 래퍼: 문자열 반환 버전 ─────────────────────────────
-// ui.js의 exportPGN()이 텍스트를 반환하지 않는 경우를 대비
 if (typeof exportPGN !== 'undefined') {
   const _origExportPGN = exportPGN;
   window.exportPGN = function(returnStr) {
     if (!returnStr) return _origExportPGN.apply(this, arguments);
-    // 현재 게임 PGN을 문자열로 반환
     try {
       if (typeof buildPGN === 'function') return buildPGN();
       if (typeof game !== 'undefined' && typeof game.toPGN === 'function') return game.toPGN();
-      // textarea에서 직접 읽기 (마지막 수단)
       const ta = document.getElementById('pgn-input');
       return ta ? ta.value : '';
     } catch(e) { return ''; }
