@@ -3441,7 +3441,7 @@ async function analyzePgnWithLichess() {
     const importRes = await fetch(`${PROXY}?path=import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pgn }),
+      body: JSON.stringify({ pgn, analyse: true }),
     });
 
     DBG.log(`[1] import 응답 status: ${importRes.status} ${importRes.statusText}`);
@@ -3464,15 +3464,23 @@ async function analyzePgnWithLichess() {
     if (!gameId) throw new Error('게임 ID를 받지 못했습니다. 응답: ' + importRawText.slice(0, 200));
 
     // ── STEP 1.5: 명시적 분석 요청 (white + black 양쪽) ──────────────
-    // POST /api/analyse/{id}/{color} — 이미 분석된 게임도 재분석 큐에 올림
-    // analyse=true(import 옵션)는 기존 게임에 무시되므로 이 방법이 필요
+    // POST /api/analyse/{id}/{color} — 프록시가 지원하는 경우 재분석 큐에 올림
+    // 404 등 프록시 미지원 시 무시하고 계속 진행 (비필수 단계)
     DBG.log(`[1.5] request-analysis 요청 — gameId: ${gameId}`);
     for (const col of ['white', 'black']) {
-      const raRes = await fetch(`${PROXY}?path=request-analysis&id=${gameId}&color=${col}`, {
-        method: 'POST',
-      });
-      const raText = await raRes.text().catch(() => '');
-      DBG.log(`[1.5] ${col} → status: ${raRes.status}, body: ${raText.slice(0, 150)}`);
+      try {
+        const raRes = await fetch(`${PROXY}?path=request-analysis&id=${gameId}&color=${col}`, {
+          method: 'POST',
+        });
+        const raText = await raRes.text().catch(() => '');
+        if (raRes.ok) {
+          DBG.log(`[1.5] ${col} → status: ${raRes.status} ✅`);
+        } else {
+          DBG.log(`[1.5] ${col} → status: ${raRes.status} (프록시 미지원 — 무시하고 계속)`);
+        }
+      } catch (raErr) {
+        DBG.log(`[1.5] ${col} → 네트워크 오류: ${raErr.message} (무시하고 계속)`);
+      }
     }
 
     // ── STEP 2: %judgment 폴링 ────────────────────────────────────────
@@ -3485,7 +3493,7 @@ async function analyzePgnWithLichess() {
 
       await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 5000));
 
-      const exportUrl = `${PROXY}?path=export&id=${gameId}`;
+      const exportUrl = `${PROXY}?path=export&id=${gameId}&evals=true&literate=true&clocks=false`;
       DBG.log(`[2] export 요청: ${exportUrl}`);
 
       const expRes = await fetch(exportUrl);
