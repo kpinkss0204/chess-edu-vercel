@@ -3525,7 +3525,9 @@ async function analyzePgnWithLichess() {
       if (hasEval) {
         DBG.log(`[2] ✅ 분석 완료(%eval 확인) — 파싱 시작`);
         annotations = parseLichessPgnAnnotations(pgnText);
-        DBG.log(`[2] 파싱 결과 (총 ${annotations.length}개, 비null: ${annotations.filter(Boolean).length}개): ${JSON.stringify(annotations.slice(0,20))}`);
+        const nonNullPositions = annotations.map((v,i) => v ? [i,v] : null).filter(Boolean);
+        DBG.log(`[2] 파싱 결과 — 총 ${annotations.length}개, 비null: ${nonNullPositions.length}개`);
+        DBG.log(`[2] 비null 위치: ${JSON.stringify(nonNullPositions)}`);
         break;
       }
     }
@@ -3611,7 +3613,18 @@ async function analyzePgnWithLichess() {
 // 두 가지를 모두 지원. Import 게임은 literate 텍스트 주석만 붙음.
 function parseLichessPgnAnnotations(pgnText) {
   // PGN 헤더(줄 시작의 [...] 태그)만 제거 — 코멘트 내부의 [%eval ...] 등은 보존
-  const movesSection = pgnText.replace(/^\[.*?\]\s*$/gm, '').trim();
+  const noHeaders = pgnText.replace(/^\[.*?\]\s*$/gm, '').trim();
+
+  // ( ... ) 변형수(variation) 블록 제거 — 중첩 포함
+  // Lichess export는 최선의 수를 ( 40... Nxf5 { [%eval] } ) 형태로 포함하므로
+  // 이를 제거하지 않으면 variation 이동이 메인 라인 수로 카운트됨
+  let movesSection = '';
+  let depth = 0;
+  for (let i = 0; i < noHeaders.length; i++) {
+    if (noHeaders[i] === '(') { depth++; continue; }
+    if (noHeaders[i] === ')') { depth = Math.max(0, depth - 1); continue; }
+    if (depth === 0) movesSection += noHeaders[i];
+  }
 
   const fullTokens = [];
   const tr = /(\{[^}]*\})|([NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQK])?[+#]?|O-O-O[+#]?|O-O[+#]?|\d+\.{1,3})/g;
