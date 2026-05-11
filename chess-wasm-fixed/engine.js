@@ -922,8 +922,10 @@ function analyzeWithWorker(workerObj, fen, depth, movetime, multipv) {
 }
 
 // ── 전체 기보 병렬 분석 시작 ─────────────────────────────────
+// 수 분류는 Lichess API(%judgment)만 사용하므로 로컬 백그라운드 분석 비활성화
 async function startBgAnalysis() {
-  if (!game || game.history.length === 0) return;
+  return; // 로컬 수 분류 비활성화 — 우측 패널 "Lichess로 분석" 버튼 사용
+  if (!game || game.history.length === 0) return; // eslint-disable-line no-unreachable
   if (bgWorkers.length === 0) {
     // SharedWorker 모드: 메인 엔진은 공유하며 백그라운드 전용 Worker는 두지 않음
     return;

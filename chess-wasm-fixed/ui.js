@@ -31,8 +31,8 @@ function loadPGN() {
     // 로그인 유저 이름과 PGN 헤더의 White/Black 이름을 비교
     _autoDetectMyColor();
 
-    // PGN 로드 후 전체 포지션 백그라운드 분석 시작
-    setTimeout(() => startBgAnalysis(), 500);
+    // 로컬 백그라운드 분석 비활성화 — 수 분류는 Lichess API만 사용
+    // (우측 패널 "Lichess로 분석" 버튼으로 수 분류 요청)
   } catch(e) {
     showToast('PGN 파싱 오류: ' + e.message);
     console.error(e);
