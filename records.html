@@ -2045,7 +2045,7 @@
       };
 
       try {
-        // [1] Lichess Import → gameId 획득 (분석 요청 포함)
+        // [1] Lichess Import (분석 요청 포함)
         const importRes = await fetch(`${PROXY}?path=import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2056,7 +2056,7 @@
         const gameId = importJson.id;
         if (!gameId) throw new Error('No game ID received');
 
-        // [2] %judgment 폴링 (최대 18회, chess-wasm-fixed와 동일)
+        // [2] %judgment 폴링
         let annotatedPgn = '';
         const maxAttempts = 18;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -2067,15 +2067,14 @@
             const text = await exportRes.text();
             if (text.includes('%judgment') || text.includes('%eval')) {
               annotatedPgn = text;
-              if (text.includes('%judgment')) break; // judgment 있으면 즉시 종료
+              if (text.includes('%judgment')) break;
             }
           }
         }
 
         if (!annotatedPgn) throw new Error('Lichess analysis not ready after polling');
 
-        // [4] PGN 파싱 (chess-wasm-fixed.html의 parseLichessPgnAnnotations 로직 이식)
-        // 1. 헤더 및 변형수(Variation) 제거
+        // [3] PGN 파싱 + 보드 상태 추적 + 조건부 전술 감지
         const noHeaders = annotatedPgn.replace(/^\[.*?\]\s*$/gm, '').trim();
         let movesSection = '';
         let depth = 0;
@@ -2085,7 +2084,6 @@
           if (depth === 0) movesSection += noHeaders[i];
         }
 
-        // 2. 토큰화 (수, 수번호, 주석 분리)
         const tokens = [];
         const tr = /(\{[^}]*\})|([NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQK])?[+#]?|O-O-O[+#]?|O-O[+#]?|\d+\.{1,3})/g;
         let m;
@@ -2093,72 +2091,83 @@
           tokens.push({ isComment: !!m[1], text: m[0] });
         }
 
-        // 3. 순회하며 판단 추출
+        const INIT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        let currentPos = parseFen(INIT_FEN);
         let prevEvalCp = null;
         let whiteTurn = true;
 
         for (let i = 0; i < tokens.length; i++) {
           const t = tokens[i];
-          // 수(SAN)인 경우만 처리 (수번호 제외)
           if (!t.isComment && !/^\d+/.test(t.text)) {
+            const san = t.text;
             const mover = whiteTurn ? 'w' : 'b';
             const isMe = (mover === myColor);
             
             let judgment = null;
             let currentEval = null;
-
-            // 해당 수 뒤에 오는 모든 연속 주석 검사
             for (let j = i + 1; j < tokens.length; j++) {
               if (tokens[j].isComment) {
                 const comm = tokens[j].text;
-                // [%judgment ...] 태그
                 const jm = comm.match(/\[%judgment\s+name="([^"]+)"/i);
                 if (jm) judgment = jm[1].toLowerCase();
-                // literate 텍스트 (Blunder. 등)
                 if (!judgment) {
                   const lm = comm.match(/\b(Inaccuracy|Mistake|Blunder|Missed win)\b/i);
                   if (lm) judgment = lm[1].toLowerCase();
                 }
-                // [%eval ...] 태그
                 const em = comm.match(/\[%eval\s+(#?-?[\d.]+)\]/i);
-                if (em && !em[1].startsWith('#')) {
-                  currentEval = Math.round(parseFloat(em[1]) * 100);
+                if (em && !em[1].startsWith('#')) currentEval = Math.round(parseFloat(em[1]) * 100);
+              } else if (!/^\d+/.test(tokens[j].text)) break;
+            }
+
+            const allLegal = getAllLegalMoves(currentPos.board, mover, currentPos.castling, currentPos.enPassant);
+            const move = sanToMove(san, currentPos.board, mover, allLegal);
+            
+            if (move) {
+              const prevBoard = currentPos.board.map(r => [...r]);
+              currentPos.board = applyMoveToBoard(currentPos.board.map(r => [...r]), move, mover);
+              
+              if (currentPos.board[move.to[0]][move.to[1]] === mover + 'K') {
+                if (mover === 'w') { currentPos.castling.wK = false; currentPos.castling.wQ = false; }
+                else { currentPos.castling.bK = false; currentPos.castling.bQ = false; }
+              }
+              currentPos.enPassant = move.doublePush ? [move.to[0] - (mover === 'w' ? -1 : 1), move.to[1]] : null;
+
+              // [중요] 나쁜 수인 경우에만 정밀 전술 감지 실행
+              if (judgment && (['inaccuracy', 'mistake', 'blunder', 'missed win'].includes(judgment))) {
+                if (judgment === 'missed win') judgment = 'blunder';
+                if (isMe) {
+                  if (isValidForkR(currentPos.board, mover, move.to, prevBoard)) {
+                    const pt = prevBoard[move.from[0]][move.from[1]][1];
+                    result.forkFound[pt] = (result.forkFound[pt] || 0) + 1;
+                  }
+                  result.tacticEvents.push({ type: 'error', subtype: judgment, san, moveNum: Math.ceil((i+1)/2), plyIdx: i });
                 }
-              } else if (!/^\d+/.test(tokens[j].text)) {
-                break; // 다음 수를 만나면 종료
               }
-            }
 
-            // 카운팅
-            if (judgment) {
-              if (judgment === 'missed win') judgment = 'blunder'; // Missed win은 블런더급으로 취급
-              if (isMe) {
-                if (judgment === 'blunder') result.myBlunders++;
-                else if (judgment === 'mistake') result.myMistakes++;
-                else if (judgment === 'inaccuracy') result.myInaccuracies++;
-              } else {
-                if (judgment === 'blunder') result.oppBlunders++;
-                else if (judgment === 'mistake') result.oppMistakes++;
-                else if (judgment === 'inaccuracy') result.oppInaccuracies++;
+              if (judgment) {
+                if (isMe) {
+                  if (judgment === 'blunder') result.myBlunders++;
+                  else if (judgment === 'mistake') result.myMistakes++;
+                  else if (judgment === 'inaccuracy') result.myInaccuracies++;
+                } else {
+                  if (judgment === 'blunder') result.oppBlunders++;
+                  else if (judgment === 'mistake') result.oppMistakes++;
+                  else if (judgment === 'inaccuracy') result.oppInaccuracies++;
+                }
               }
-            }
 
-            // ACPL (Centipawn Loss)
-            if (currentEval !== null && isMe && prevEvalCp !== null) {
-              const cpMe = myColor === 'w' ? currentEval : -currentEval;
-              const cpMePrev = myColor === 'w' ? prevEvalCp : -prevEvalCp;
-              result.myCpSum += Math.max(0, cpMePrev - cpMe);
-              result.myMoveCount++;
+              if (currentEval !== null && isMe && prevEvalCp !== null) {
+                const cpMe = myColor === 'w' ? currentEval : -currentEval;
+                const cpMePrev = myColor === 'w' ? prevEvalCp : -prevEvalCp;
+                result.myCpSum += Math.max(0, cpMePrev - cpMe);
+                result.myMoveCount++;
+              }
+              if (currentEval !== null) prevEvalCp = currentEval;
+              if (san.includes('#') && isMe) result.checkmates++;
             }
-            if (currentEval !== null) prevEvalCp = currentEval;
-            if (t.text.includes('#') && isMe) result.checkmates++;
-
             whiteTurn = !whiteTurn;
-          } else if (!t.isComment && /^\d+\.\.\./.test(t.text)) {
-            whiteTurn = false; // "1... c5" 형태인 경우 흑의 차례로 보정
-          } else if (!t.isComment && /^\d+\./.test(t.text)) {
-            whiteTurn = true; // "2. Nf3" 형태인 경우 백의 차례
-          }
+          } else if (!t.isComment && /^\d+\.\.\./.test(t.text)) whiteTurn = false;
+          else if (!t.isComment && /^\d+\./.test(t.text)) whiteTurn = true;
         }
 
         result.totalMoves = result.myMoveCount;
