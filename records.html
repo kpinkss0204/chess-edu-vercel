@@ -2033,7 +2033,7 @@
     // ── 핵심 분석 오케스트레이터 ────────────────────────────────────────────────
 
     async function analyzeGame(pgn, myColor, onProgress) {
-      const PROXY = 'https://lichess-proxy.vercel.app/api/analyze';
+      const PROXY = '/api/lichess-proxy';
       const result = {
         totalMoves: 0,
         myBlunders: 0, myMistakes: 0, myInaccuracies: 0,
@@ -2045,84 +2045,119 @@
       };
 
       try {
-        // [1] Lichess Import
+        // [1] Lichess Import → gameId 획득
         const importRes = await fetch(`${PROXY}?path=import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pgn, analyse: true }),
+          body: JSON.stringify({ pgn }),
         });
-        if (!importRes.ok) throw new Error('Lichess import failed');
+        if (!importRes.ok) throw new Error(`Lichess import failed: ${importRes.status}`);
         const importJson = await importRes.json();
         const gameId = importJson.id;
         if (!gameId) throw new Error('No game ID received');
 
-        // [2] Polling for judgment (최대 5회 시도, 통계용이므로 짧게)
+        // [2] 명시적 분석 요청 (chess-wasm-fixed.html과 동일한 방식)
+        const analyzeColor = myColor === 'w' ? 'white' : 'black';
+        await fetch(`${PROXY}?path=request-analysis&id=${gameId}&color=${analyzeColor}`, {
+          method: 'POST',
+        }).catch(() => {}); // 실패해도 폴링 계속
+
+        // [3] %judgment 폴링 (최대 18회, chess-wasm-fixed와 동일)
         let annotatedPgn = '';
-        for (let attempt = 0; attempt < 5; attempt++) {
-          if (onProgress) onProgress(attempt + 1, 5);
-          await new Promise(r => setTimeout(r, attempt === 0 ? 1000 : 3000));
-          const exportRes = await fetch(`${PROXY}?path=export&id=${gameId}&evals=true&literate=true`);
+        const maxAttempts = 18;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          if (onProgress) onProgress(attempt + 1, maxAttempts);
+          await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 5000));
+          const exportRes = await fetch(`${PROXY}?path=export&id=${gameId}`);
           if (exportRes.ok) {
-            annotatedPgn = await exportRes.text();
-            if (annotatedPgn.includes('%judgment')) break;
+            const text = await exportRes.text();
+            if (text.includes('%judgment') || text.includes('%eval')) {
+              annotatedPgn = text;
+              if (text.includes('%judgment')) break; // judgment 있으면 즉시 종료
+            }
           }
         }
 
-        if (!annotatedPgn) throw new Error('Lichess analysis not ready');
+        if (!annotatedPgn) throw new Error('Lichess analysis not ready after polling');
 
-        // [3] PGN 파싱 및 카운팅
-        // 수 분류: [%judgment Blunder], [%judgment Mistake], [%judgment Inaccuracy]
-        // ACPL: [%eval ...] 태그 활용
-        const moves = annotatedPgn.replace(/\[[^\]]*\]/g, '').trim().split(/\d+\./).filter(Boolean);
-        result.totalMoves = moves.length;
+        // [4] PGN 파싱 → judgment 카운팅
+        // 리체스 literate PGN 형식:
+        //   { [%eval 0.20] [%clk 0:05:00] }  ← eval 태그
+        //   { [%judgment name="Blunder" comment="..."] }  ← judgment 태그
+        //   { Blunder. Nf6 was best. }  ← literate 텍스트 주석
+        const judgmentTagRegex = /\[%judgment\s+name="([^"]+)"/gi;
+        const literateRegex = /\{\s*(Blunder|Mistake|Inaccuracy)\b[^}]*\}/gi;
+        const evalTagRegex = /\[%eval\s+(#?-?[\d.]+)\]/g;
 
-        // 실제 수와 주석 분리하여 카운트
-        // Lichess PGN 형식: 1. e4 { [%eval 0.2] } 1... c5 { [%eval 0.15] [%judgment Inaccuracy] }
-        const moveTokens = annotatedPgn.split(/\d+\.(?:\.\.)?/);
-        let moveCount = 0;
-        
-        // 정규식으로 judgment와 eval 추출
-        const judgmentRegex = /\[%judgment\s+([^\]]+)\]/g;
-        const evalRegex = /\[%eval\s+([^-][^\]]+)\]/g; // 메이트 제외 cp만
+        // 수 단위로 분리: "1. e4 {...} 1... c5 {...}" 형태
+        // 각 수 블록에서 색상과 판정 추출
+        const moveBlockRegex = /(\d+)\.\s+(\.\.\.)?([A-Za-z][^\s{]+)\s*(?:\{([^}]*)\})?/g;
+        let mbMatch;
+        let prevEvalCp = null;
+        let prevMover = null;
 
-        for (let i = 1; i < moveTokens.length; i++) {
-          const token = moveTokens[i];
-          const mover = (i % 2 !== 0) ? 'w' : 'b';
+        while ((mbMatch = moveBlockRegex.exec(annotatedPgn)) !== null) {
+          const moveNumStr = mbMatch[1];
+          const isBlackMove = !!mbMatch[2]; // '...' 있으면 흑
+          const san = mbMatch[3];
+          const comment = mbMatch[4] || '';
+          const mover = isBlackMove ? 'b' : 'w';
           const isMe = (mover === myColor);
 
-          // Judgment 카운트
-          let match;
-          while ((match = judgmentRegex.exec(token)) !== null) {
-            const judge = match[1].toLowerCase();
+          // judgment 판정
+          let judgment = null;
+          const jTagMatch = comment.match(/\[%judgment\s+name="([^"]+)"/i);
+          if (jTagMatch) {
+            judgment = jTagMatch[1].toLowerCase();
+          } else {
+            const litMatch = comment.match(/\b(Blunder|Mistake|Inaccuracy)\b/i);
+            if (litMatch) judgment = litMatch[1].toLowerCase();
+          }
+
+          if (judgment) {
             if (isMe) {
-              if (judge.includes('blunder')) result.myBlunders++;
-              else if (judge.includes('mistake')) result.myMistakes++;
-              else if (judge.includes('inaccuracy')) result.myInaccuracies++;
+              if (judgment === 'blunder') result.myBlunders++;
+              else if (judgment === 'mistake') result.myMistakes++;
+              else if (judgment === 'inaccuracy') result.myInaccuracies++;
             } else {
-              if (judge.includes('blunder')) result.oppBlunders++;
-              else if (judge.includes('mistake')) result.oppMistakes++;
-              else if (judge.includes('inaccuracy')) result.oppInaccuracies++;
+              if (judgment === 'blunder') result.oppBlunders++;
+              else if (judgment === 'mistake') result.oppMistakes++;
+              else if (judgment === 'inaccuracy') result.oppInaccuracies++;
             }
           }
 
-          // ACPL 계산용 Eval 추출
-          if (isMe) {
-            const evalMatch = evalRegex.exec(token);
-            if (evalMatch) {
-              // 이전 수와의 차이를 계산해야 하지만 Lichess PGN만으로는 복잡하므로 
-              // 여기서는 Lichess가 이미 계산한 등급 위주로 처리합니다.
-              // ACPL은 추후 필요시 로컬 엔진과 병행하거나 간소화합니다.
+          // ACPL 계산: %eval 태그
+          const evalMatch = comment.match(/\[%eval\s+(#?-?[\d.]+)\]/);
+          if (evalMatch) {
+            const evalStr = evalMatch[1];
+            if (!evalStr.startsWith('#')) {
+              const cp = Math.round(parseFloat(evalStr) * 100);
+              // 직전 수 대비 손실 계산 (내 수만)
+              if (prevEvalCp !== null && prevMover !== mover && isMe) {
+                // 내가 둔 후 cp 변화 (내 관점)
+                const cpMe = myColor === 'w' ? cp : -cp;
+                const cpMePrev = myColor === 'w' ? prevEvalCp : -prevEvalCp;
+                const loss = Math.max(0, cpMePrev - cpMe);
+                result.myCpSum += loss;
+                result.myMoveCount++;
+              }
+              prevEvalCp = cp;
+            } else {
+              prevEvalCp = null;
             }
           }
+          prevMover = mover;
+
+          // 체크메이트
+          if (san.includes('#') && isMe) result.checkmates++;
         }
 
-        // 체크메이트 여부 (SAN에 # 포함 확인)
-        if (annotatedPgn.includes('#')) result.checkmates = 1;
-
+        result.totalMoves = result.myMoveCount;
+        result.avgCpLoss = result.myMoveCount > 0 ? Math.round(result.myCpSum / result.myMoveCount) : 0;
         return result;
+
       } catch (e) {
         console.warn('[Lichess Analysis Failed]', e);
-        // 실패 시 빈 결과 반환 (또는 기존 로컬 엔진 폴백 가능)
         return result;
       }
     }
