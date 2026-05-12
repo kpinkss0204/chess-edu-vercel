@@ -38,13 +38,14 @@ export default async function handler(req, res) {
 
   try {
     // ── 1) PGN import ── 게임 ID 획득
-    // analyse=true 제거: 이미 분석된 게임은 무시되므로 request-analysis로 별도 요청
     if (path === 'import' && req.method === 'POST') {
       const body = req.body;
       const pgn = typeof body === 'object' ? body.pgn : body;
+      const analyse = typeof body === 'object' ? body.analyse : false;
 
       const form = new URLSearchParams();
       form.append('pgn', pgn);
+      if (analyse) form.append('analyse', 'true');
 
       const lichessRes = await fetch('https://lichess.org/api/import', {
         method: 'POST',

@@ -2033,7 +2033,7 @@
     // ── 핵심 분석 오케스트레이터 ────────────────────────────────────────────────
 
     async function analyzeGame(pgn, myColor, onProgress) {
-      const PROXY = '/api/lichess-proxy.js';
+      const PROXY = '/api/lichess-proxy';
       const result = {
         totalMoves: 0,
         myBlunders: 0, myMistakes: 0, myInaccuracies: 0,
@@ -2045,28 +2045,18 @@
       };
 
       try {
-        // [1] Lichess Import → gameId 획득
+        // [1] Lichess Import → gameId 획득 (분석 요청 포함)
         const importRes = await fetch(`${PROXY}?path=import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pgn }),
+          body: JSON.stringify({ pgn, analyse: true }),
         });
         if (!importRes.ok) throw new Error(`Lichess import failed: ${importRes.status}`);
         const importJson = await importRes.json();
         const gameId = importJson.id;
         if (!gameId) throw new Error('No game ID received');
 
-        // [2] 명시적 분석 요청
-        const analyzeColor = myColor === 'w' ? 'white' : 'black';
-        const reqAnalysisRes = await fetch(`${PROXY}?path=request-analysis&id=${gameId}&color=${analyzeColor}`, {
-          method: 'POST',
-        }).catch(() => null); 
-        
-        if (reqAnalysisRes && !reqAnalysisRes.ok) {
-           console.log(`[analyzeGame] request-analysis status: ${reqAnalysisRes.status}`);
-        }
-
-        // [3] %judgment 폴링 (최대 18회, chess-wasm-fixed와 동일)
+        // [2] %judgment 폴링 (최대 18회, chess-wasm-fixed와 동일)
         let annotatedPgn = '';
         const maxAttempts = 18;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
