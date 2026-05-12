@@ -3329,24 +3329,17 @@ async function askCoachMobile() {
 // ─────────────────────────────────────────────────────────────────
 
 const LICHESS_JUDGMENT_MAP = {
-  'Brilliant':  'brilliant',
-  'Great find': 'great',
-  'Best move':  'best',
-  'Excellent':  'excellent',
-  'Good':       'good',
-  'Book':       'book',
   'Inaccuracy': 'inaccuracy',
   'Mistake':    'mistake',
   'Blunder':    'blunder',
-  'Missed win': 'miss',
 };
 
-const STAT_ORDER = ['brilliant','great','best','excellent','good','book','inaccuracy','mistake','blunder','miss'];
-const STAT_LABEL = { brilliant:'!!', great:'!', best:'⭐', excellent:'✓', good:'·', book:'📖', inaccuracy:'?!', mistake:'?', blunder:'??', miss:'✗' };
+const STAT_ORDER = ['inaccuracy', 'mistake', 'blunder'];
+const STAT_LABEL = { inaccuracy: '부정확한 수', mistake: '실수', blunder: '블런더' };
 const STAT_COLOR = {
-  brilliant:'#1bada6', great:'#5c8fff', best:'#7fa650', excellent:'#7fa650',
-  good:'#96af8b', book:'#9b7240', inaccuracy:'#f6c94a', mistake:'#e08c3a',
-  blunder:'#cc3333', miss:'#9944cc',
+  inaccuracy: '#f6c94a',
+  mistake:    '#e08c3a',
+  blunder:    '#cc3333',
 };
 
 // Vercel 프록시 base — 같은 origin이면 상대경로로도 동작
@@ -3476,6 +3469,17 @@ async function analyzePgnWithLichess() {
       if (hasEval) {
         DBG.log(`[2] ✅ 분석 완료(%eval 확인) — 파싱 시작`);
         annotations = parseLichessPgnAnnotations(pgnText);
+
+        // 헤더에서 정확도 및 ACL 추출
+        const getH = (k) => {
+          const m = pgnText.match(new RegExp(`\\[${k} "([^"]+)"\\]`));
+          return m ? m[1] : null;
+        };
+        const myCol = document.getElementById('my-color-select')?.value || 'w';
+        const acl = getH(myCol === 'w' ? 'WhiteAvgLoss' : 'BlackAvgLoss');
+        const acc = getH(myCol === 'w' ? 'WhiteAccuracy' : 'BlackAccuracy');
+        annotations._extra = { acl, acc };
+
         const nonNullPositions = annotations.map((v,i) => v ? [i,v] : null).filter(Boolean);
         DBG.log(`[2] 파싱 결과 — 총 ${annotations.length}개, 비null: ${nonNullPositions.length}개`);
         DBG.log(`[2] 비null 위치: ${JSON.stringify(nonNullPositions)}`);
@@ -3523,13 +3527,26 @@ async function analyzePgnWithLichess() {
     }
 
     let statsHtml = `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:6px;">`;
+    // 1. 수 분류 (부정확, 실수, 블런더)
     for (const k of STAT_ORDER) {
-      if (!counts[k]) continue;
+      const c = counts[k] || 0;
       statsHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 4px;text-align:center;">
-        <div style="font-size:11px;font-weight:800;color:${STAT_COLOR[k] || 'var(--text-primary)'};">${STAT_LABEL[k] || k}</div>
-        <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${counts[k]}</div>
+        <div style="font-size:10px;font-weight:800;color:${STAT_COLOR[k] || 'var(--text-primary)'};">${STAT_LABEL[k] || k}</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${c}</div>
       </div>`;
     }
+    // 2. 평균 CP 손실
+    const acl = annotations._extra?.acl || '-';
+    statsHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 4px;text-align:center;">
+      <div style="font-size:10px;font-weight:800;color:var(--text-secondary);">평균 CP 손실</div>
+      <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${acl}</div>
+    </div>`;
+    // 3. 정확도
+    const acc = annotations._extra?.acc ? annotations._extra.acc + '%' : '-';
+    statsHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 4px;text-align:center;">
+      <div style="font-size:10px;font-weight:800;color:var(--text-secondary);">정확도</div>
+      <div style="font-size:13px;font-weight:700;color:var(--accent-green-bright);">${acc}</div>
+    </div>`;
     statsHtml += `</div>`;
 
     setStatus(
