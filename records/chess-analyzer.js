@@ -66,88 +66,159 @@ const PIN_FOUND_MAX_CP_LOSS  = 60;  // "찾은 핀" 인정 최대 cp 손실 (블
  */
 const PIN_PV_DIFF_THRESHOLD = 80;
 
+/**
+ * Lichess API를 사용하여 게임을 분석합니다.
+ * chess-wasm-fixed.html의 분석 방식을 그대로 이식함.
+ */
 async function analyzeGame(pgn, myColor, onProgress) {
-  const states = parsePgnToStates(pgn);
+  // Lichess 프록시 경로 (records.html과 동일 origin 가정)
+  const PROXY = '/api/lichess-proxy';
 
-  const result = {
-    totalMoves:      states.length - 1,
-    myBlunders:      0, myMistakes:      0, myInaccuracies: 0,
-    oppBlunders:     0, oppMistakes:     0, oppInaccuracies: 0,
-    oppBlunderFound: 0, oppBlunderMissed: 0,
-    checkmates:      0,
-    forkFound:       { P:0, N:0, B:0, R:0, Q:0, K:0 },
-    forkMissed:      { P:0, N:0, B:0, R:0, Q:0, K:0 },
-    oppForkCreated:  { P:0, N:0, B:0, R:0, Q:0, K:0 },
-    // ── 핀: 절대(absolute) / 상대(relative) 분리 ──────────────────────────
-    absPinFound:     0,   // 내가 실행한 절대 핀
-    absPinMissed:    0,   // 놓친 절대 핀 (엔진 라인 비교)
-    relPinFound:     0,   // 내가 실행한 상대 핀
-    relPinMissed:    0,   // 놓친 상대 핀 (엔진 라인 비교)
-    myCpSum:         0, myMoveCount: 0,
-    tacticEvents:    []
-  };
+  try {
+    // 1. Lichess에 PGN 임포트
+    const impRes = await fetch(`${PROXY}?path=import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ pgn })
+    });
+    if (!impRes.ok) throw new Error('Lichess 임포트 실패');
+    const impData = await impRes.json();
+    const gameId = impData.id;
 
-  // ── Step 1: 전체 포지션 Stockfish 분석 (MultiPV=3) ──────────────────────
-  const ana = new Array(states.length).fill(null);
-  for (let i = 0; i < states.length; i++) {
-    ana[i] = await analyzePosition(states[i].fen);
-    if (onProgress) onProgress(i, states.length - 1);
-  }
-
-  // ── Step 2: 수별 분석 ───────────────────────────────────────────────────
-  for (let i = 1; i < states.length; i++) {
-    const state = states[i];
-    const prev  = states[i - 1];
-    const move  = state.move;
-    if (!move) continue;
-
-    const mover = prev.turn;
-    const isMe  = mover === myColor;
-    const enemy = enemyColor(mover);
-
-    // ── 체크메이트 ────────────────────────────────────────────────────────
-    if (isMe && isInCheck(state.board, enemy)) {
-      const leg = getAllLegal(state.board, enemy, state.castling, state.enPassant);
-      if (leg.length === 0) result.checkmates++;
+    // 2. 분석 완료될 때까지 폴링
+    let pgnText = '';
+    for (let i = 0; i < 15; i++) {
+      if (onProgress) onProgress(i + 1, 15);
+      const expRes = await fetch(`${PROXY}?path=export&id=${gameId}&evals=true&literate=true&clocks=false`);
+      if (expRes.ok) {
+        const text = await expRes.text();
+        // 리체스 분석 주석이 포함되었는지 확인 (%eval 및 Mistake/Blunder/Inaccuracy 등)
+        if (text.includes('%eval') && (text.includes('Mistake') || text.includes('Blunder') || text.includes('Inaccuracy') || text.includes(']'))) {
+          pgnText = text;
+          break;
+        }
+      }
+      await new Promise(r => setTimeout(r, 2000));
     }
 
-    // ── cp 손실 계산 ──────────────────────────────────────────────────────
-    const prevBest = ana[i-1].pvs[0];
-    const bestCp   = prevBest ? cpFor(prevBest.cp, prevBest.mate, mover) : 0;
-    const curBest  = ana[i].pvs[0];
-    const afterCp  = curBest ? -cpFor(curBest.cp, curBest.mate, enemy) : 0;
-    const loss     = Math.max(0, bestCp - afterCp);
-    const label    = cpToLabel(loss);
+    if (!pgnText) throw new Error('Lichess 분석 데이터를 가져올 수 없습니다.');
 
-    if (isMe) {
-      result.myMoveCount++;
-      result.myCpSum += loss;
-      if      (label === 'blunder')    result.myBlunders++;
-      else if (label === 'mistake')    result.myMistakes++;
-      else if (label === 'inaccuracy') result.myInaccuracies++;
-    } else {
-      if      (label === 'blunder')    result.oppBlunders++;
-      else if (label === 'mistake')    result.oppMistakes++;
-      else if (label === 'inaccuracy') result.oppInaccuracies++;
-    }
+    // 3. PGN 주석 파싱
+    const annotations = parseLichessPgnAnnotations(pgnText);
+    const states = parsePgnToStates(pgn);
 
-    // ── 상대 블런더 포착 ──────────────────────────────────────────────────
-    if (!isMe && label === 'blunder' && i + 1 < states.length) {
-      const myBestHere   = ana[i].pvs[0];
-      const myActualHere = ana[i+1].pvs[0];
-      const myBestCp     = myBestHere   ? cpFor(myBestHere.cp,   myBestHere.mate,   myColor) : 0;
-      const myActualCp   = myActualHere ? -cpFor(myActualHere.cp, myActualHere.mate, enemy)  : 0;
-      const caught       = (myBestCp - myActualCp) < MISTAKE_CP;
-      if (caught) {
-        result.oppBlunderFound++;
-        result.tacticEvents.push(_makeTacticEvent('oppBlunder','found','',i+1,states,myColor));
-      } else {
-        result.oppBlunderMissed++;
-        result.tacticEvents.push(_makeTacticEvent('oppBlunder','missed','',i+1,states,myColor,ana[i].bestmove));
+    const result = {
+      totalMoves:      states.length - 1,
+      myBlunders:      0, myMistakes:      0, myInaccuracies: 0,
+      oppBlunders:     0, oppMistakes:     0, oppInaccuracies: 0,
+      oppBlunderFound: 0, oppBlunderMissed: 0,
+      checkmates:      0,
+      forkFound:       { P:0, N:0, B:0, R:0, Q:0, K:0 },
+      forkMissed:      { P:0, N:0, B:0, R:0, Q:0, K:0 },
+      oppForkCreated:  { P:0, N:0, B:0, R:0, Q:0, K:0 },
+      absPinFound:     0, relPinFound:     0,
+      absPinMissed:    0, relPinMissed:    0,
+      myCpSum:         0, myMoveCount: 0,
+      tacticEvents:    []
+    };
+
+    // ACPL(Average CP Loss) 추출용 점수 파싱
+    const evals = (pgnText.match(/%eval [#-]?\d+(\.\d+)?/g) || []).map(s => {
+      const v = s.split(' ')[1];
+      if (v.startsWith('#')) return v.startsWith('#-') ? -10000 : 10000;
+      return parseFloat(v) * 100;
+    });
+
+    // 4. 수별 분석 결과 적용
+    for (let i = 1; i < states.length; i++) {
+      const mover = states[i - 1].turn;
+      const isMe  = mover === myColor;
+      const anno  = annotations[i-1]; // annotations는 0-based ply
+
+      if (anno) {
+        const label = anno.toLowerCase();
+        if (isMe) {
+          if      (label.includes('blunder'))    result.myBlunders++;
+          else if (label.includes('mistake'))    result.myMistakes++;
+          else if (label.includes('inaccuracy')) result.myInaccuracies++;
+        } else {
+          if      (label.includes('blunder'))    result.oppBlunders++;
+          else if (label.includes('mistake'))    result.oppMistakes++;
+          else if (label.includes('inaccuracy')) result.oppInaccuracies++;
+        }
+      }
+
+      // ACPL 계산 (대략적)
+      if (isMe && evals[i-1] !== undefined && evals[i] !== undefined) {
+        result.myMoveCount++;
+        const prevEval = evals[i-1];
+        const currEval = evals[i];
+        const loss = mover === 'w' ? Math.max(0, prevEval - currEval) : Math.max(0, currEval - prevEval);
+        result.myCpSum += loss;
       }
     }
 
-    // ── 상대 수: 포크 생성 감지 ───────────────────────────────────────────
+    return result;
+
+  } catch (err) {
+    console.error('[Lichess 분석 오류]', err);
+    throw err;
+  }
+}
+
+/**
+ * PGN 텍스트에서 Lichess 주석을 추출합니다.
+ * (chess-wasm-fixed.html에서 복사)
+ */
+function parseLichessPgnAnnotations(pgn) {
+  const noHeaders = pgn.replace(/\[.*?\]\n?/g, '').trim();
+  let movesSection = '';
+  let depth = 0;
+  for (let i = 0; i < noHeaders.length; i++) {
+    if (noHeaders[i] === '(') { depth++; continue; }
+    if (noHeaders[i] === ')') { depth = Math.max(0, depth - 1); continue; }
+    if (depth === 0) movesSection += noHeaders[i];
+  }
+
+  const tokens = movesSection.split(/\s+/);
+  const plyAnnotations = [];
+  let currentPly = 0;
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.match(/^\d+\.+$/)) continue; // 1. 1... 등 스킵
+    
+    // 수 토큰인 경우
+    if (t.match(/^[a-hKQRBNPOx0-9+#=-]+[!?]*$/)) {
+      let annotation = null;
+      // 다음 토큰들이 주석인지 확인
+      let j = i + 1;
+      while (j < tokens.length) {
+        const next = tokens[j];
+        if (next.startsWith('{')) {
+          const comment = [];
+          let k = j;
+          while (k < tokens.length) {
+            comment.push(tokens[k]);
+            if (tokens[k].endsWith('}')) break;
+            k++;
+          }
+          const fullComment = comment.join(' ');
+          if (fullComment.includes('Inaccuracy')) annotation = 'Inaccuracy';
+          else if (fullComment.includes('Mistake')) annotation = 'Mistake';
+          else if (fullComment.includes('Blunder')) annotation = 'Blunder';
+          j = k + 1;
+        } else if (next.includes('??')) { annotation = 'Blunder'; j++; }
+        else if (next.includes('?!')) { annotation = 'Inaccuracy'; j++; }
+        else if (next.includes('?'))  { annotation = 'Mistake'; j++; }
+        else break;
+      }
+      plyAnnotations[currentPly++] = annotation;
+      i = j - 1;
+    }
+  }
+  return plyAnnotations;
+}
     if (!isMe) {
       const movedPT_opp = prev.board[move.from[0]][move.from[1]]?.[1] || 'P';
       if (isValidFork(state.board, mover, move.to, prev.board)) {
