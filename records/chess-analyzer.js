@@ -26,20 +26,9 @@ const PIN_PV_DIFF_THRESHOLD  = 80;
 // 기물 가치 (isSacrifice 용)
 const PIECE_VALUE_ANALYSER = { P:100, N:320, B:330, R:500, Q:900, K:0 };
 
-// ── 승률 및 분류 유틸리티 (chess-wasm-fixed/chess.js 에서 이식) ───────────────
+// ── 전술 감지 및 분석 유틸리티 (수 분류는 리체스 프록시로 대체됨) ─────────────────
 
-/** cp → 승률 변환 (Chess.com 공식 시그모이드) */
-function winProb(cpMe) {
-  return 1 / (1 + Math.pow(10, -cpMe / 400));
-}
-
-/** 백 기준 cp와 차례를 받아 내 관점 승률(0~1) 반환 */
-function getWinProb(cpFromWhite, turn) {
-  const cpMe = turn === 'w' ? cpFromWhite : -cpFromWhite;
-  return winProb(cpMe);
-}
-
-/** 희생 수 판정 (Brilliant 판정용) */
+/** 희생 수 판정 (전술 분석 보조) */
 function isSacrifice(h) {
   if (!h || !h.move || !h.captured) return false;
   
@@ -50,17 +39,14 @@ function isSacrifice(h) {
   const myVal       = PIECE_VALUE_ANALYSER[movingPiece[1]] || 0;
   const capturedVal = PIECE_VALUE_ANALYSER[h.captured[1]]  || 0;
 
-  if (myVal < 450) return false; // 룩 이상 기물만 희생으로 인정
+  if (myVal < 450) return false; 
   if (myVal <= capturedVal + 150) return false;
 
-  // 상대가 착지 칸을 즉시 되잡을 수 있는지 확인 (기하학적 확인)
-  const enemy = h.turn === 'w' ? 'b' : 'w';
-  const [tr, tc] = h.move.to;
-  
-  // 가상의 보드에서 확인 (이미 이동한 후의 보드여야 함)
-  // 여기서는 단순히 true를 반환하는 대신, chess-tactics.js의 도움을 받을 수 있지만
-  // 간결성을 위해 일단 true로 유지하거나, 간단한 체크 추가
   return true; 
+}
+/** cp → 승률 변환 (Chess.com 공식 시그모이드) */
+function winProb(cpMe) {
+  return 1 / (1 + Math.pow(10, -cpMe / 400));
 }
 
 /** 
@@ -82,7 +68,7 @@ function classifyMove(cpBefore, cpAfter, turn, topAlts) {
   const deltaW = wBest1 - wAfter;
 
   if (topAlts?.legalMoveCount === 1) return 'forced';
-  if (topAlts?.isEngineBest) return 'best';
+  if (topAlts?.isEngineBest) return null;
 
   // 메이트 판정
   const hadMateWin = topAlts?.mateInBefore != null && topAlts.mateInBefore > 0;
@@ -95,63 +81,24 @@ function classifyMove(cpBefore, cpAfter, turn, topAlts) {
 
   if ((hadMateWin || iMateWin) && !gaveMate) {
     if (afterMateMe)       return 'blunder';
-    if (cpMeAfter >= 200)  return 'best';
-    if (cpMeAfter >= -50)  return 'excellent';
     if (cpMeAfter >= -300) return 'mistake';
     return 'blunder';
   }
 
   if (iMateLose) {
     if (afterMateMe) {
-      if (deltaW <= 0)    return 'best';
-      if (deltaW <= 0.02) return 'excellent';
-      if (deltaW <= 0.05) return 'good';
+      if (deltaW <= 0.10) return null;
       return 'inaccuracy';
     }
-    if (cpMeAfter > -200) return (topAlts?.hasSacrifice ?? false) ? 'brilliant' : 'best';
+    if (cpMeAfter > -200) return null;
     return 'inaccuracy';
   }
 
-  // Brilliant !!
-  if ((topAlts?.hasSacrifice ?? false) && deltaW <= 0.02 && wAfter > 0.5) {
-    return 'brilliant';
-  }
+  // Brilliant, Great 등 긍정적 분류 삭제
 
-  // Great !
-  const actualGain = wAfter - wBefore;
-  if (wBest1 != null && wBest2 != null && (wBest1 - wBest2) >= 0.15 && deltaW <= 0.02 && actualGain >= 0.05) {
-    return 'great';
-  }
-  if (wBefore < 0.45 && wAfter > 0.60 && deltaW <= 0.02) {
-    return 'great';
-  }
-
-  if (deltaW <= 0.005) return 'best';
-
-  // 포지션 유형별 ΔW 임계값
-  const balanced = wBefore >= 0.35 && wBefore <= 0.65;
-  const winning  = wBefore > 0.65 && wBefore <= 0.85;
-
-  if (balanced) {
-    if (deltaW <= 0.04) return 'excellent';
-    if (deltaW <= 0.08) return 'good';
-    if (deltaW <= 0.14) return 'inaccuracy';
-    if (deltaW <= 0.24) return 'mistake';
-    return 'blunder';
-  }
-
-  if (winning) {
-    if (deltaW <= 0.03) return 'excellent';
-    if (deltaW <= 0.06) return 'good';
-    if (deltaW <= 0.12) return 'inaccuracy';
-    if (deltaW <= 0.22) return 'mistake';
-    return 'blunder';
-  }
-
-  if (deltaW <= 0.02) return 'excellent';
-  if (deltaW <= 0.05) return 'good';
-  if (deltaW <= 0.10) return 'inaccuracy';
-  if (deltaW <= 0.20) return 'mistake';
+  if (deltaW <= 0.10) return null; // Excellent, Good 등은 무시
+  if (deltaW <= 0.14) return 'inaccuracy';
+  if (deltaW <= 0.24) return 'mistake';
   return 'blunder';
 }
 
@@ -212,11 +159,10 @@ async function analyzeGame(pgn, myColor, onProgress) {
     
     // 내 관점 cp 손실 (ACPL용)
     const loss = mover === 'w' ? Math.max(0, cpBefore - cpAfter) : Math.max(0, cpAfter - cpBefore);
-
-    // (2) 수 분류 (Win Probability 기반)
-    const best1uci = beforeAna.pvs[0]?.moves?.[0] || null;
     const actualUci = moveToUci(move);
-    
+    const best1uci = beforeAna.pvs[0]?.moves?.[0] || null;
+
+    // (2) 수 분류 및 ACPL 계산 (Win Probability 기반 정밀 분류)
     const topAlts = {
       best1cp:        cpFor(beforeAna.pvs[0]?.cp, beforeAna.pvs[0]?.mate, 'w'),
       best2cp:        beforeAna.pvs[1] ? cpFor(beforeAna.pvs[1].cp, beforeAna.pvs[1].mate, 'w') : null,
@@ -224,48 +170,32 @@ async function analyzeGame(pgn, myColor, onProgress) {
       legalMoveCount: null,
       mateInBefore:   beforeAna.pvs[0]?.mate,
       mateInAfter:    afterAna.pvs[0]?.mate,
-      isEngineBest:   best1uci === actualUci
+      isEngineBest:   actualUci === best1uci
     };
 
-    // forced 판정용 legalMoveCount
-    if (topAlts.isEngineBest === false) {
-       topAlts.legalMoveCount = getAllLegalMoves(prev.board, mover, prev.castling, prev.enPassant).length;
+    if (!topAlts.isEngineBest) {
+      topAlts.legalMoveCount = getAllLegalMoves(prev.board, mover, prev.castling, prev.enPassant).length;
     }
 
     let cls = classifyMove(cpBefore, cpAfter, mover, topAlts);
 
-    // Miss 판정
-    const missExempt = new Set(['brilliant','great','best','forced','blunder','mistake']);
-    if (!missExempt.has(cls)) {
-      const wBest1 = winProb(mover === 'w' ? topAlts.best1cp : -topAlts.best1cp);
-      const wMove  = winProb(mover === 'w' ? cpAfter : -cpAfter);
-      if (wBest1 > 0.8 && wMove < 0.5) cls = 'miss';
-    }
-
-    // 결과 카운팅
     if (isMe) {
       if      (cls === 'blunder')    result.myBlunders++;
       else if (cls === 'mistake')    result.myMistakes++;
       else if (cls === 'inaccuracy') result.myInaccuracies++;
-      
+
       result.myMoveCount++;
       result.myCpSum += loss;
 
-      // 상대 블런더 응징 판정 (이전 수가 상대의 블런더였을 때)
       if (prevMoveCls === 'blunder') {
-         // 내 수가 블런더나 실수가 아니면 응징 성공으로 간주
-         if (cls !== 'blunder' && cls !== 'mistake') {
-           result.oppBlunderFound++;
-         } else {
-           result.oppBlunderMissed++;
-         }
+        if (cls !== 'blunder' && cls !== 'mistake') result.oppBlunderFound++;
+        else result.oppBlunderMissed++;
       }
     } else {
       if      (cls === 'blunder')    result.oppBlunders++;
       else if (cls === 'mistake')    result.oppMistakes++;
       else if (cls === 'inaccuracy') result.oppInaccuracies++;
     }
-
     prevMoveCls = cls;
 
     // (3) 전술 감지 (chess-tactics.js 활용)
