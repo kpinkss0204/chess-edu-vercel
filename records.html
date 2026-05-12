@@ -2033,7 +2033,7 @@
     // ── 핵심 분석 오케스트레이터 ────────────────────────────────────────────────
 
     async function analyzeGame(pgn, myColor, onProgress) {
-      const PROXY = '/api/lichess-proxy';
+      const PROXY = '/api/lichess-proxy.js';
       const result = {
         totalMoves: 0,
         myBlunders: 0, myMistakes: 0, myInaccuracies: 0,
@@ -2056,11 +2056,15 @@
         const gameId = importJson.id;
         if (!gameId) throw new Error('No game ID received');
 
-        // [2] 명시적 분석 요청 (chess-wasm-fixed.html과 동일한 방식)
+        // [2] 명시적 분석 요청
         const analyzeColor = myColor === 'w' ? 'white' : 'black';
-        await fetch(`${PROXY}?path=request-analysis&id=${gameId}&color=${analyzeColor}`, {
+        const reqAnalysisRes = await fetch(`${PROXY}?path=request-analysis&id=${gameId}&color=${analyzeColor}`, {
           method: 'POST',
-        }).catch(() => {}); // 실패해도 폴링 계속
+        }).catch(() => null); 
+        
+        if (reqAnalysisRes && !reqAnalysisRes.ok) {
+           console.log(`[analyzeGame] request-analysis status: ${reqAnalysisRes.status}`);
+        }
 
         // [3] %judgment 폴링 (최대 18회, chess-wasm-fixed와 동일)
         let annotatedPgn = '';
