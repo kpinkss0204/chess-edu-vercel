@@ -1958,9 +1958,10 @@
     // classifyMoveEP: EP 손실 기반 분류 (레포 classifyMove 동일 임계값)
     // gameAccuracy: 조화평균 기반 게임 정확도 0–100
 
-    /** cp → WinPercent (0–100%). 공식: 1 / (1 + 10^(-cp/400)) */
+    /** cp → WinPercent (0–100%). 공식: 1 / (1 + 10^(-(cp-10)/400)) */
     function cpToWinPercent(cp) {
-      return (1 / (1 + Math.pow(10, -cp / 400))) * 100;
+      const adjustedCp = cp - 10;
+      return (1 / (1 + Math.pow(10, -adjustedCp / 400))) * 100;
     }
 
     /**
