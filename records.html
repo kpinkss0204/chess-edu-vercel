@@ -2517,6 +2517,7 @@
         const cpBefore = evalRows[i - 1].cpw;
         const cpAfter = evalRows[i].cpw;
         const bestUci = evalRows[i - 1].bestUci;
+        const playedUci = move ? (moveToUci(move) || '').toLowerCase() : '';
 
         // ── 승률 기반 수 분류
         const wpB = isWhiteMove ? cpToWinPercent(cpBefore) : cpToWinPercent(-cpBefore);
