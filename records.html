@@ -3303,7 +3303,7 @@
       const titleEl = document.getElementById('tmodal-title');
       const bodyEl = document.getElementById('tmodal-body');
 
-      const typeLabel = { fork: '포크', oppFork: '상대 포크', absPin: '절대 핀', relPin: '상대 핀', pin: '핀', oppBlunder: '상대 블런더 포착', skewer: '스큐어', discovered: '발견 체크' }[tacticType] || tacticType;
+      const typeLabel = { fork: '포크', oppFork: '상대 포크', absPin: '절대 핀', relPin: '상대 핀', pin: '핀', oppBlunder: '상대 블런더 포착', skewer: '스큐어', discovered: '디스커버 체크' }[tacticType] || tacticType;
       const subtypeLabel = subtypeFilter === 'found' ? '찾음' : subtypeFilter === 'missed' ? '놓침' : '';
       titleEl.innerHTML = `<span>${icon}</span> ${name} — ${typeLabel}${subtypeLabel ? ' (' + subtypeLabel + ')' : ''} 게임 목록`;
 
@@ -3486,7 +3486,7 @@
       })();
       const skewDiscHtml = [
         fvmRow('↗', '스큐어 (직선)', '', s.skewerFound || 0, s.skewerMissed || 0, 'skewer', ''),
-        fvmRow('◎', '발견 체크', '', s.discoveredFound || 0, s.discoveredMissed || 0, 'discovered', '')
+        fvmRow('◎', '디스커버 체크', '', s.discoveredFound || 0, s.discoveredMissed || 0, 'discovered', '')
       ].join('');
       const obHtml = fvmRow('🎯', '상대 실수', '', s.oppBlunderFound, s.oppBlunderMissed, 'oppBlunder', '');
       const cpColor = s.avgCpLoss < 30 ? 'var(--accent-green-bright)' : s.avgCpLoss < 75 ? '#e0b040' : '#e07070';
@@ -3586,10 +3586,9 @@
     <div class="fvm-section">${pinHtml || '<div class="stats-note" style="padding:12px 0">핀 데이터 없음</div>'}</div>
     <div class="stats-note">※ 상대 기물이 움직이면 상대 킹 노출되는 절대 핀. Stockfish 베스트가 핀이었는데 안 뒀으면 "놓침". <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
 
-    <div class="stats-section-title">🔭 스큐어 · 발견 체크</div>
-    <div class="fvm-section">${skewDiscHtml || '<div class="stats-note" style="padding:12px 0">스큐어·발견 체크 데이터 없음</div>'}</div>
-    <div class="stats-note">※ 스큐어: 비숍·룩·퀸이 약한 적 기물 앞에 더 값비싼 적 기물이 있는 직선 패턴입니다. 발견 체크: 말을 도착 칸에서 제거해도 상대에게 체크가 남는 경우입니다. 포크와 겹치면 포크만 집계합니다. <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록</span></div>
-    <div class="stats-note" style="margin-top:4px;color:var(--text-muted)">데스페라도, 기물 과부하, X-ray, 간섭·방해, 추크츠방, 사잇수(Zwischenzug), 오포지션, 정리 희생, 트래핑·트랩, 속임수 등은 포크·핀·스큐어 등과 신호가 겹쳐 자동 통계에서 안정적으로 구별하기 어려워 제외했습니다.</div>
+    <div class="stats-section-title">🔭 스큐어 · 디스커버 체크</div>
+    <div class="fvm-section">${skewDiscHtml || '<div class="stats-note" style="padding:12px 0">스큐어·디스커버 체크 데이터 없음</div>'}</div>
+    <div class="stats-note">※ 스큐어: 비숍·룩·퀸이 약한 적 기물 앞에 더 값비싼 적 기물이 있는 직선 패턴입니다. 디스커버 체크: 기물을 도착 칸에서 제거해도 상대에게 체크가 남는 경우입니다. 포크와 겹치면 포크만 집계합니다. <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록</span></div>
 
     ${renderOpeningStats(s.openingStats || [])}
 

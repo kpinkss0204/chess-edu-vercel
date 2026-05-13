@@ -1528,6 +1528,21 @@ body {
 <script>
 /* ===================== DATA ===================== */
 
+/** 카드·모달·퍼즐 뷰 제목 등 표시용 한글명 (Lichess 테마 id 기준) */
+const THEME_LABEL_MAP = {
+  fork: '포크', pin: '핀', skewer: '스큐어', discovcheck: '디스커버드 어택',
+  sacrifice: '희생', zwischenzug: '추크추방', xray: 'X레이', windmill: '윈드밀',
+  deflection: '편향', mateIn1: '1수 메이트', mateIn2: '2수 메이트', mateIn3: '3수 메이트',
+  backRank: '백랭크 메이트', smothered: '스모더드 메이트',
+  anastasia: '아나스타시아 메이트', opening_trap: '오프닝 함정',
+  opening_dev: '오프닝 개발', endgame_basic: '기본 엔딩',
+  endgame_rook: '룩 엔딩', pawn_ending: '폰 엔딩', outpost: '전초기지',
+  pawn_structure: '폰 구조', king_safety: '킹 안전', bishop_pair: '비숍 쌍',
+  rook_open: '열린 파일', stalemate: '스테일메이트', promotion: '프로모션',
+  zugzwang: '추크츠방', interference: '간섭', daily: '오늘의 퍼즐',
+  middlegame: '미들게임 전환',
+};
+
 const THEMES = {
   mate: [
     { id:'mateIn1',   icon:'⚡', name:'1수 메이트',        desc:'단 한 수로 체크메이트! 가장 기초적이지만 빠른 판단력 훈련',        count:520, diff:'easy',   color:'#c04040' },
@@ -1538,15 +1553,15 @@ const THEMES = {
     { id:'anastasia', icon:'🌊', name:'아나스타시아 메이트',desc:'룩과 나이트의 협력으로 킹을 가두는 아름다운 메이트',            count:72,  diff:'expert', color:'#2aada6' },
   ],
   tactics: [
-    { id:'fork',        icon:'🍴', name:'포크 (Fork)',         desc:'하나의 말로 두 개 이상의 적 말을 동시에 공격하는 전술',           count:342, diff:'medium', color:'#e08030' },
-    { id:'pin',         icon:'📌', name:'핀 (Pin)',            desc:'적 말을 공격하여 뒤에 있는 더 가치 있는 말을 보호',              count:289, diff:'medium', color:'#5090d0' },
-    { id:'skewer',      icon:'🏹', name:'스큐어 (Skewer)',     desc:'가치 있는 말을 강제로 이동시켜 뒤의 말을 포획',                  count:198, diff:'hard',   color:'#c04040' },
-    { id:'discovcheck', icon:'⚡', name:'발견 체크',            desc:'한 말을 이동시켜 뒤의 말이 체크를 가하는 강력한 전술',            count:156, diff:'hard',   color:'#cc3333' },
-    { id:'sacrifice',   icon:'💥', name:'희생 (Sacrifice)',    desc:'장기적 이익을 위해 말을 의도적으로 내어주는 기술',               count:231, diff:'hard',   color:'#8855cc' },
-    { id:'zwischenzug', icon:'🌀', name:'즈비셴주크',          desc:'예상치 못한 중간 수로 상대방의 기대를 깨는 전술',                count:112, diff:'expert', color:'#2aada6' },
-    { id:'xray',        icon:'🔬', name:'X레이 어택',           desc:'말이 다른 말을 통과해 공격하는 특수 전술',                       count:87,  diff:'expert', color:'#2aada6' },
+    { id:'fork',        icon:'🍴', name:'포크',         desc:'하나의 말로 두 개 이상의 적 말을 동시에 공격하는 전술',           count:342, diff:'medium', color:'#e08030' },
+    { id:'pin',         icon:'📌', name:'핀',            desc:'적 말을 공격하여 뒤에 있는 더 가치 있는 말을 보호',              count:289, diff:'medium', color:'#5090d0' },
+    { id:'skewer',      icon:'🏹', name:'스큐어',     desc:'가치 있는 말을 강제로 이동시켜 뒤의 말을 포획',                  count:198, diff:'hard',   color:'#c04040' },
+    { id:'discovcheck', icon:'⚡', name:'디스커버드 어택',            desc:'한 말을 이동시켜 뒤의 말이 체크를 가하는 강력한 전술',            count:156, diff:'hard',   color:'#cc3333' },
+    { id:'sacrifice',   icon:'💥', name:'희생',    desc:'장기적 이익을 위해 말을 의도적으로 내어주는 기술',               count:231, diff:'hard',   color:'#8855cc' },
+    { id:'zwischenzug', icon:'🌀', name:'추크추방',          desc:'예상치 못한 중간 수로 상대방의 기대를 깨는 전술',                count:112, diff:'expert', color:'#2aada6' },
+    { id:'xray',        icon:'🔬', name:'X레이',           desc:'말이 다른 말을 통과해 공격하는 특수 전술',                       count:87,  diff:'expert', color:'#2aada6' },
     { id:'windmill',    icon:'🌪️', name:'윈드밀',              desc:'연속적인 체크로 상대 말을 하나씩 포획하는 전술',                  count:64,  diff:'expert', color:'#8855cc' },
-    { id:'deflection',  icon:'↗️', name:'편향 (Deflection)',   desc:'상대 말의 방어 역할을 제거하여 전술적 기회 창출',                 count:178, diff:'hard',   color:'#c04040' },
+    { id:'deflection',  icon:'↗️', name:'편향',   desc:'상대 말의 방어 역할을 제거하여 전술적 기회 창출',                 count:178, diff:'hard',   color:'#c04040' },
   ],
   phases: [
     { id:'opening_trap', icon:'🪤', name:'오프닝 함정',        desc:'초반부에 상대방을 함정에 빠뜨리는 오프닝 전술',                  count:124, diff:'easy',   color:'#7fa650' },
@@ -1557,17 +1572,17 @@ const THEMES = {
     { id:'pawn_ending',  icon:'⬆️', name:'폰 엔딩',            desc:'폰 구조와 킹 포지셔닝이 핵심인 엔딩 퍼즐',                       count:189, diff:'medium', color:'#5090d0' },
   ],
   positional: [
-    { id:'outpost',      icon:'🗺️', name:'아웃포스트',         desc:'상대방이 공격할 수 없는 강력한 칸에 말 배치하기',                count:134, diff:'medium', color:'#5090d0' },
+    { id:'outpost',      icon:'🗺️', name:'전초기지',         desc:'상대방이 공격할 수 없는 강력한 칸에 말 배치하기',                count:134, diff:'medium', color:'#5090d0' },
     { id:'pawn_structure',icon:'🧱',name:'폰 구조',            desc:'강한 폰 구조 형성과 약점 최소화 훈련',                           count:156, diff:'medium', color:'#e08030' },
     { id:'king_safety',  icon:'🛡️', name:'킹 안전',           desc:'자신의 킹을 보호하고 상대 킹의 약점을 찾는 훈련',               count:178, diff:'hard',   color:'#c04040' },
     { id:'bishop_pair',  icon:'⛪', name:'비숍 쌍',            desc:'두 비숍의 장기적 우위를 활용하는 포지셔널 이해',                 count:89,  diff:'hard',   color:'#8855cc' },
     { id:'rook_open',    icon:'🚪', name:'열린 파일',          desc:'열린 파일과 반열린 파일에서의 룩 활용법',                        count:112, diff:'medium', color:'#5090d0' },
   ],
   special: [
-    { id:'stalemate',    icon:'🤝', name:'스테일메이트 트릭',  desc:'질 것 같은 상황에서 스테일메이트를 유도하는 방어 기술',           count:76,  diff:'hard',   color:'#c04040' },
-    { id:'promotion',    icon:'👑', name:'폰 프로모션',        desc:'폰을 퀸으로 승격시키는 타이밍과 방법',                          count:143, diff:'medium', color:'#e08030' },
+    { id:'stalemate',    icon:'🤝', name:'스테일메이트',  desc:'질 것 같은 상황에서 스테일메이트를 유도하는 방어 기술',           count:76,  diff:'hard',   color:'#c04040' },
+    { id:'promotion',    icon:'👑', name:'프로모션',        desc:'폰을 퀸으로 승격시키는 타이밍과 방법',                          count:143, diff:'medium', color:'#e08030' },
     { id:'zugzwang',     icon:'😰', name:'추크츠방',           desc:'움직이면 불리해지는 상황을 만드는 고급 전략',                    count:58,  diff:'expert', color:'#2aada6' },
-    { id:'interference', icon:'🚧', name:'인터피어런스',       desc:'상대 말의 연결을 끊어 방어를 무너뜨리는 전술',                   count:94,  diff:'expert', color:'#8855cc' },
+    { id:'interference', icon:'🚧', name:'간섭',       desc:'상대 말의 연결을 끊어 방어를 무너뜨리는 전술',                   count:94,  diff:'expert', color:'#8855cc' },
   ]
 };
 
@@ -1578,6 +1593,11 @@ const DAILY = {
   desc: '매일 새로운 퍼즐로 실력 점검',
   color: '#7fa650'
 };
+
+function themeDisplayName(theme) {
+  if (!theme) return '';
+  return THEME_LABEL_MAP[theme.id] || theme.name || theme.id;
+}
 
 /* puzzle sets per theme */
 function generateSets(themeId) {
@@ -1757,19 +1777,6 @@ function parseLichessPuzzle(raw, themeId) {
   };
 }
 
-const THEME_LABEL_MAP = {
-  fork:'포크', pin:'핀', skewer:'스큐어', discovcheck:'디스커버드 어택',
-  sacrifice:'희생', zwischenzug:'추크추방', xray:'X레이', windmill:'윈드밀',
-  deflection:'편향', mateIn1:'1수 메이트', mateIn2:'2수 메이트', mateIn3:'3수 메이트',
-  backRank:'백랭크 메이트', smothered:'스모더드 메이트',
-  anastasia:'아나스타시아 메이트', opening_trap:'오프닝 함정',
-  opening_dev:'오프닝 개발', endgame_basic:'기본 엔딩',
-  endgame_rook:'룩 엔딩', pawn_ending:'폰 엔딩', outpost:'전초기지',
-  pawn_structure:'폰 구조', king_safety:'킹 안전', bishop_pair:'비숍 쌍',
-  rook_open:'열린 파일', stalemate:'스테일메이트', promotion:'프로모션',
-  zugzwang:'추크츠방', interference:'간섭', daily:'오늘의 퍼즐',
-};
-
 // 캐시 (테마+난이도 → 퍼즐 배열)
 const _puzzleCache = {};
 
@@ -1825,7 +1832,7 @@ function renderThemeCard(theme) {
   return `
     <div class="theme-card" style="--card-accent:${theme.color}" onclick="openTheme('${theme.id}')">
       <div class="theme-card-icon">${theme.icon}</div>
-      <div class="theme-card-name">${theme.name}</div>
+      <div class="theme-card-name">${themeDisplayName(theme)}</div>
       <div class="theme-card-desc">${theme.desc}</div>
       <div class="theme-card-meta">
         <span class="theme-card-count">${theme.count.toLocaleString()}개</span>
@@ -1884,7 +1891,7 @@ function openTheme(themeId, presetDiff) {
   state.currentTheme = theme;
 
   document.getElementById('modal-theme-icon').textContent = theme.icon;
-  document.getElementById('modal-theme-name').textContent = theme.name;
+  document.getElementById('modal-theme-name').textContent = themeDisplayName(theme);
   document.getElementById('modal-theme-desc').textContent = theme.desc;
 
   var diff = presetDiff && ['beginner', 'intermediate', 'advanced', 'expert'].includes(presetDiff) ? presetDiff : 'beginner';
@@ -1949,7 +1956,7 @@ async function enterPuzzleView() {
   document.getElementById('puzzle-board-view').classList.add('show');
 
   const theme = state.currentTheme;
-  document.getElementById('psp-theme-tag').textContent = `${theme.icon} ${theme.name}`;
+  document.getElementById('psp-theme-tag').textContent = `${theme.icon} ${themeDisplayName(theme)}`;
   document.getElementById('psp-puzzle-title').textContent = '퍼즐 불러오는 중…';
 
   state.currentPuzzleIdx = 0;
