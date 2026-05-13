@@ -3201,11 +3201,14 @@
         const resCls = myWin ? 'win' : myLose ? 'lose' : 'draw';
         const dateStr = doc.playedAt ? new Date(doc.playedAt.seconds * 1000).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '—';
         
-        const moves = doc.tacticAnalysis.moveJudgments;
+        // 데이터 위치 결정: tacticAnalysis 안 혹은 gd 객체 내부
+        const moves = gd.moveJudgments || (doc.tacticAnalysis && doc.tacticAnalysis.moveJudgments) || [];
         let moveHtml = '';
-        moves.forEach((m, idx) => {
-            if(m === judgment) moveHtml += `<span class="tg-tag" style="background:#cc333333; color:#cc3333">${Math.ceil((idx+1)/2)}수</span> `;
-        });
+        if (Array.isArray(moves)) {
+            moves.forEach((m, idx) => {
+                if(m === judgment) moveHtml += `<span class="tg-tag" style="background:#cc333333; color:#cc3333">${Math.ceil((idx+1)/2)}수</span> `;
+            });
+        }
 
         html += `<div class="tmodal-game-item" onclick="closeTacticModalAndOpen(${JSON.stringify(doc).replace(/"/g, '&quot;')})">
           <div class="tg-header">
