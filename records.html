@@ -2094,29 +2094,6 @@
       return null;
     }
 
-    // ── 새로운 승률 및 판단 로직 ──────────────────────────────────────────
-
-    function calculateWinProb(cp) {
-      // W = 50 + 50 * erf((cp * ln(10)) / (600 * sqrt(2)))
-      const x = (cp * Math.log(10)) / (600 * Math.sqrt(2));
-      const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
-      const sign = x < 0 ? -1 : 1;
-      const t = 1.0 / (1.0 + p * Math.abs(x));
-      const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
-      return 50 + 50 * sign * y;
-    }
-
-    function getJudgment(cpBefore, cpAfter, mover) {
-      const wBefore = calculateWinProb(mover === 'w' ? cpBefore : -cpBefore);
-      const wAfter = calculateWinProb(mover === 'w' ? cpAfter : -cpAfter);
-      const deltaW = (wBefore - wAfter) / 100; // 백분율 차이 (0.05 = 5%)
-
-      if (deltaW >= 0.20) return 'blunder';
-      if (deltaW >= 0.10) return 'mistake';
-      if (deltaW >= 0.05) return 'inaccuracy';
-      return null;
-    }
-
     // ── 핵심 분석 오케스트레이터 (Shared Core) ──────────────────────────────────
 
     /**
@@ -2256,61 +2233,6 @@
       console.timeEnd('processLichessPgn_Total');
       return result;
     }
-
-    // ── 통계 분석 (로컬 엔진 분석기 사용) ──────────────────────────────────
-    async function renderStats() {
-      const contentEl = document.getElementById('stats-content');
-      const subEl = document.getElementById('stats-sub');
-      
-      const pgn = _currentRecord.pgn;
-      const myColor = _currentRecord.myColor || 'w';
-
-      contentEl.innerHTML = '<div class="stats-loading"><div class="stats-spinner"></div><div>로컬 엔진 분석 중...</div></div>';
-      
-      const { states, evaluations } = await analyzeLocal(pgn, (cur, tot) => {
-        subEl.textContent = `분석 중: ${cur} / ${tot}`;
-      });
-
-      // 로컬 분석 결과를 바탕으로 결과 객체 구성
-      const results = {
-        totalMoves: states.length - 1,
-        myBlunders: 0, myMistakes: 0, myInaccuracies: 0,
-        oppBlunders: 0, oppMistakes: 0, oppInaccuracies: 0,
-        checkmates: 0, avgCpLoss: 0, myCpSum: 0, myMoveCount: 0,
-        forkFound: {P:0, N:0, B:0, R:0, Q:0, K:0}, forkMissed: {P:0, N:0, B:0, R:0, Q:0, K:0}, oppForkCreated: {P:0, N:0, B:0, R:0, Q:0, K:0},
-        absPinFound: 0, relPinFound: 0, absPinMissed: 0, relPinMissed: 0,
-        tacticThemeCounts: {}, tacticEvents: [], moveJudgments: [],
-        winRate: 0, wins: 0, losses: 0, draws: 0
-      };
-
-      // 각 수마다 판단 및 전술 감지 수행
-      let prevEval = 0;
-      for (let i = 1; i < states.length; i++) {
-        const mover = states[i-1].turn;
-        const cpAfter = evaluations[i];
-        
-        // Judgment 판단
-        const j = getJudgment(prevEval, cpAfter, mover);
-        results.moveJudgments.push(j);
-        
-        // 통계 업데이트
-        if (j === 'blunder') (mover === myColor ? results.myBlunders : results.oppBlunders)++;
-        else if (j === 'mistake') (mover === myColor ? results.myMistakes : results.oppMistakes)++;
-        else if (j === 'inaccuracy') (mover === myColor ? results.myInaccuracies : results.oppInaccuracies)++;
-        
-        // 전술 감지
-        const prevBoard = states[i-1].board;
-        if (isValidForkR(states[i].board, mover, states[i].move.to, prevBoard)) {
-            const pt = prevBoard[states[i].move.from[0]][states[i].move.from[1]][1];
-            results.forkFound[pt]++;
-        }
-        
-        prevEval = cpAfter;
-      }
-
-      renderStatsHTML(results);
-    }
-
 
     function cpForR(cp, mate, turn) {
       if (mate != null) return (mate > 0 ? 9999 : -9999);
@@ -2551,9 +2473,130 @@
 
     // 오프닝 키 (eco+name 조합)
     function openingKey(op) { return op.eco + '|' + op.name + (op.variation ? '|' + op.variation : ''); }
+
+    // 두 번째 스크립트 블록에서도 동일 값 사용 (전역 const 가시성 이슈 방지)
+    window.__RECORDS_CONSTS__ = { SF_DEPTH, SF_MULTIPV, BLUNDER_CP, MISTAKE_CP, INACCURACY_CP, FORK_CP_GAIN };
+
+    /**
+     * 순수 PGN을 Stockfish로 포지션별 분석해 통계 탭 집계용 객체를 만듭니다.
+     * chess-wasm-fixed/engine.js 의 createStockfishWorker / analyzeWithWorker 를 사용합니다.
+     */
+    async function analyzeGame(pgn, myColor, onProgress) {
+      const report = typeof onProgress === 'function' ? onProgress : () => {};
+      const states = parsePgnToStates(pgn);
+      const emptyFork = () => ({ P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 });
+      const result = {
+        myBlunders: 0, myMistakes: 0, myInaccuracies: 0,
+        oppBlunders: 0, oppMistakes: 0, oppInaccuracies: 0,
+        oppBlunderFound: 0, oppBlunderMissed: 0,
+        checkmates: 0, myCpSum: 0, myMoveCount: 0,
+        totalMoves: Math.max(0, states.length - 1),
+        forkFound: emptyFork(), forkMissed: emptyFork(), oppForkCreated: emptyFork(),
+        absPinFound: 0, absPinMissed: 0, relPinFound: 0, relPinMissed: 0,
+        tacticEvents: [], moveJudgments: []
+      };
+
+      if (typeof createStockfishWorker !== 'function' || typeof analyzeWithWorker !== 'function') {
+        console.warn('[analyzeGame] engine.js API 없음');
+        return result;
+      }
+      if (states.length < 2) return result;
+
+      let workerRaw = null;
+      try {
+        workerRaw = await createStockfishWorker(1, 64);
+      } catch (e) {
+        console.warn('[analyzeGame] Stockfish Worker 실패:', e);
+        return result;
+      }
+
+      const workerObj = { worker: workerRaw, busy: false };
+      const movetime = 500;
+      const multipv = Math.min(3, SF_MULTIPV || 3);
+      const evals = [];
+
+      try {
+        for (let si = 0; si < states.length; si++) {
+          const fen = states[si].fen;
+          let cpw = 0;
+          if (fen) {
+            const aw = await analyzeWithWorker(workerObj, fen, SF_DEPTH, movetime, multipv);
+            if (aw && aw.pvs && aw.pvs[1] && aw.pvs[1].cpFromWhite != null) cpw = aw.pvs[1].cpFromWhite;
+          }
+          evals.push(cpw);
+          report(si + 1, states.length);
+        }
+      } finally {
+        try { workerRaw.terminate(); } catch (e) { /* ignore */ }
+      }
+
+      for (let i = 1; i < states.length; i++) {
+        const mover = states[i - 1].turn;
+        const san = states[i].san || '';
+        const isMe = (mover === myColor);
+        const cpBefore = evals[i - 1];
+        const cpAfter = evals[i];
+        const j = getJudgment(cpBefore, cpAfter, mover);
+        result.moveJudgments.push(j);
+        if (j === 'blunder') { if (isMe) result.myBlunders++; else result.oppBlunders++; }
+        else if (j === 'mistake') { if (isMe) result.myMistakes++; else result.oppMistakes++; }
+        else if (j === 'inaccuracy') { if (isMe) result.myInaccuracies++; else result.oppInaccuracies++; }
+
+        if (isMe) {
+          const cpMeBefore = myColor === 'w' ? cpBefore : -cpBefore;
+          const cpMeAfter = myColor === 'w' ? cpAfter : -cpAfter;
+          result.myCpSum += Math.max(0, cpMeBefore - cpMeAfter);
+          result.myMoveCount++;
+        }
+
+        if (san.includes('#') && isMe) result.checkmates++;
+
+        const move = states[i].move;
+        const prevBoard = states[i - 1].board;
+        if (move && prevBoard) {
+          if (isValidForkR(states[i].board, mover, move.to, prevBoard)) {
+            const pt = prevBoard[move.from[0]][move.from[1]][1];
+            if (isMe) {
+              result.forkFound[pt]++;
+              result.tacticEvents.push({
+                type: 'fork', subtype: 'found', piece: pt,
+                moveNum: Math.ceil(i / 2), san, plyIdx: i - 1, bestMove: null
+              });
+            } else {
+              result.oppForkCreated[pt]++;
+              result.tacticEvents.push({
+                type: 'oppFork', subtype: 'found', piece: pt,
+                moveNum: Math.ceil(i / 2), san, plyIdx: i - 1, bestMove: null
+              });
+            }
+          }
+          if (isMe) {
+            const pt = prevBoard[move.from[0]][move.from[1]][1];
+            if (isAbsolutePin(states[i].board, move.to[0], move.to[1], mover)) {
+              result.absPinFound++;
+              result.tacticEvents.push({
+                type: 'absPin', subtype: 'found', piece: pt,
+                moveNum: Math.ceil(i / 2), san, plyIdx: i - 1, bestMove: null
+              });
+            }
+            if (isRelativePin(states[i].board, move.to[0], move.to[1], mover)) {
+              result.relPinFound++;
+              result.tacticEvents.push({
+                type: 'relPin', subtype: 'found', piece: pt,
+                moveNum: Math.ceil(i / 2), san, plyIdx: i - 1, bestMove: null
+              });
+            }
+          }
+        }
+      }
+
+      return result;
+    }
+    window.analyzeGame = analyzeGame;
   </script>
   <script src="auth-check.js"></script>
   <script>
+    const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, BLUNDER_CP: 150, MISTAKE_CP: 75, INACCURACY_CP: 30, FORK_CP_GAIN: 80 };
     // ════════════════════════════════════════
     // Firebase 연동 후 페이지 초기화
     // ════════════════════════════════════════
@@ -2982,12 +3025,12 @@
       <div style="font-size:13px;color:var(--text-secondary)">Stockfish 분석 중... (신규 ${newlyAnalyzedCount + 1}번째)</div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${gi + 1} / ${total} 게임</div>
       <div class="stats-progress-bar-outer"><div class="stats-progress-bar-fill" style="width:${pct}%"></div></div>
-      <div class="stats-progress-label">깊이 ${SF_DEPTH}으로 포지션 분석 중</div>
+      <div class="stats-progress-label">깊이 ${__RC.SF_DEPTH}으로 포지션 분석 중</div>
     </div></div>`;
 
         if (doc.pgn) {
           try {
-            const a = await analyzeGame(doc.pgn, myColor, (cur, tot) => {
+            const a = await window.analyzeGame(doc.pgn, myColor, (cur, tot) => {
               const ip = Math.round(cur / Math.max(tot, 1) * 100);
               const fill = contentEl.querySelector('.stats-progress-bar-fill');
               if (fill) fill.style.width = Math.round(gi / total * 100 + ip / total) + '%';
@@ -3020,7 +3063,7 @@
                   plyIdx: ev.plyIdx || 0, bestMove: ev.bestMove || null
                 })),
                 analyzedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                sfDepth: SF_DEPTH
+                sfDepth: __RC.SF_DEPTH
               };
               await _fbDb.collection('game_records').doc(doc.id).update({ tacticAnalysis: savePayload });
               console.log('[stats] 분석 저장 완료:', doc.id);
@@ -3047,7 +3090,7 @@
         openingStats: Array.from(openingStatsMap.values())
           .sort((a, b) => (b.w.total + b.b.total) - (a.w.total + a.b.total))
       };
-      const cacheMsg = cachedCount > 0 ? ` · ${cachedCount}개 캐시 재사용, ${newlyAnalyzedCount}개 신규 분석` : ` · Stockfish 깊이 ${SF_DEPTH} 전체 분석`;
+      const cacheMsg = cachedCount > 0 ? ` · ${cachedCount}개 캐시 재사용, ${newlyAnalyzedCount}개 신규 분석` : ` · Stockfish 깊이 ${__RC.SF_DEPTH} 전체 분석`;
       subEl.textContent = `총 ${total}게임${cacheMsg}`;
       renderStatsHTML(_statsCache);
     }
@@ -3271,7 +3314,7 @@
       </div>
     </div>
 
-    <div class="stats-section-title">🎯 수 정확도 (Stockfish 깊이 ${SF_DEPTH})</div>
+    <div class="stats-section-title">🎯 수 정확도 (Stockfish 깊이 ${__RC.SF_DEPTH})</div>
     <div class="key-grid">
       <div class="key-card"><div class="key-card-icon">📉</div><div class="key-card-body">
         <div class="key-card-name">평균 센티폰 손실 (ACPL)</div>
@@ -3290,28 +3333,28 @@
       <!-- 나 -->
       <div class="key-card danger"><div class="key-card-icon">💀</div><div class="key-card-body">
         <div class="key-card-name">내 블런더</div><div class="key-card-num">${s.myBlunders}</div>
-        <div class="key-card-sub">손실 ≥ ${BLUNDER_CP}cp</div>
+        <div class="key-card-sub">손실 ≥ ${__RC.BLUNDER_CP}cp</div>
       </div></div>
       <div class="key-card warn"><div class="key-card-icon">❗</div><div class="key-card-body">
         <div class="key-card-name">내 실수</div><div class="key-card-num">${s.myMistakes}</div>
-        <div class="key-card-sub">손실 ${MISTAKE_CP}~${BLUNDER_CP}cp</div>
+        <div class="key-card-sub">손실 ${__RC.MISTAKE_CP}~${__RC.BLUNDER_CP}cp</div>
       </div></div>
       <div class="key-card"><div class="key-card-icon">🔶</div><div class="key-card-body">
         <div class="key-card-name">내 부정확</div><div class="key-card-num">${s.myInaccuracies}</div>
-        <div class="key-card-sub">손실 ${INACCURACY_CP}~${MISTAKE_CP}cp</div>
+        <div class="key-card-sub">손실 ${__RC.INACCURACY_CP}~${__RC.MISTAKE_CP}cp</div>
       </div></div>
       <!-- 상대 -->
       <div class="key-card danger"><div class="key-card-icon">💀</div><div class="key-card-body">
         <div class="key-card-name">상대 블런더</div><div class="key-card-num">${s.oppBlunders}</div>
-        <div class="key-card-sub">손실 ≥ ${BLUNDER_CP}cp</div>
+        <div class="key-card-sub">손실 ≥ ${__RC.BLUNDER_CP}cp</div>
       </div></div>
       <div class="key-card warn"><div class="key-card-icon">❗</div><div class="key-card-body">
         <div class="key-card-name">상대 실수</div><div class="key-card-num">${s.oppMistakes}</div>
-        <div class="key-card-sub">손실 ${MISTAKE_CP}~${BLUNDER_CP}cp</div>
+        <div class="key-card-sub">손실 ${__RC.MISTAKE_CP}~${__RC.BLUNDER_CP}cp</div>
       </div></div>
       <div class="key-card"><div class="key-card-icon">🔶</div><div class="key-card-body">
         <div class="key-card-name">상대 부정확</div><div class="key-card-num">${s.oppInaccuracies}</div>
-        <div class="key-card-sub">손실 ${INACCURACY_CP}~${MISTAKE_CP}cp</div>
+        <div class="key-card-sub">손실 ${__RC.INACCURACY_CP}~${__RC.MISTAKE_CP}cp</div>
       </div></div>
     </div>
 
@@ -3329,7 +3372,7 @@
 
     <div class="stats-section-title">♞ 내가 찾은 vs 놓친 포크</div>
     <div class="fvm-section">${forkHtml || '<div class="stats-note" style="padding:12px 0">포크 데이터 없음</div>'}</div>
-    <div class="stats-note">※ Stockfish 베스트 무브가 포크였는데 다른 수를 두고 ≥${FORK_CP_GAIN}cp 손실이면 "놓친 포크". <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
+    <div class="stats-note">※ Stockfish 베스트 무브가 포크였는데 다른 수를 두고 ≥${__RC.FORK_CP_GAIN}cp 손실이면 "놓친 포크". <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
 
     <div class="stats-section-title">⚔️ 상대가 사용한 포크</div>
     <div class="fvm-section">${oppForkHtml || '<div class="stats-note" style="padding:12px 0">상대 포크 데이터 없음</div>'}</div>
