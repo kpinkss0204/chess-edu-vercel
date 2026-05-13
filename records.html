@@ -2524,7 +2524,10 @@
         const wpB = isWhiteMove ? cpToWinPercent(cpBefore) : cpToWinPercent(-cpBefore);
         const wpA = isWhiteMove ? cpToWinPercent(cpAfter) : cpToWinPercent(-cpAfter);
         const cls = classifyMoveByDelta(wpB, wpA);
-        result.moveJudgments.push(cls);
+        
+        // ── 수 분류 및 저장 (상대/나 구분)
+        const judgmentTag = (isMe ? 'my' : 'opp') + cls.charAt(0).toUpperCase() + cls.slice(1);
+        result.moveJudgments.push(judgmentTag);
 
         // ── 수 분류 집계
         if (isMe) {
