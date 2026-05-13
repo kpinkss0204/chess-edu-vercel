@@ -3209,17 +3209,19 @@
         
         let moveHtml = '';
         if (Array.isArray(moves)) {
-            // 해당 게임의 기보 상태를 일시적으로 로드하여 SAN을 구함
             const states = parsePgnToStates(doc.pgn);
             const J_LABEL = { blunder: '??', mistake: '?', inaccuracy: '?!' };
             const J_COLOR = { blunder: '#cc3333', mistake: '#e08c3a', inaccuracy: '#f6c94a' };
+
+            // judgment에서 my/opp 접두사 제거 (예: myBlunder -> blunder)
+            const baseJudgment = judgment.replace(/^(my|opp)/, '').toLowerCase();
 
             moves.forEach((m, idx) => {
                 if(m === judgment) {
                     const san = states[idx + 1] ? states[idx + 1].san : '?';
                     const moveNum = Math.ceil((idx + 1) / 2);
-                    moveHtml += `<span class="tg-tag" style="background:${J_COLOR[judgment]}33; color:${J_COLOR[judgment]}">
-                                    ${moveNum}수 ${san} ${J_LABEL[judgment]}
+                    moveHtml += `<span class="tg-tag" style="background:${J_COLOR[baseJudgment]}33; color:${J_COLOR[baseJudgment]}">
+                                    ${moveNum}수 ${san} ${J_LABEL[baseJudgment] || ''}
                                  </span> `;
                 }
             });
