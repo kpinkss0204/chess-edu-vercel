@@ -2192,6 +2192,66 @@
       return null;
     }
 
+    /** Lichess export `[%judgment name="…"]` / literate `{ Inaccuracy. … }` → 내부 키 */
+    function mapLichessPgnJudgmentName(raw) {
+      if (!raw) return null;
+      const s = String(raw).trim();
+      if (s === 'Inaccuracy') return 'inaccuracy';
+      if (s === 'Mistake') return 'mistake';
+      if (s === 'Blunder') return 'blunder';
+      if (s === 'Missed win') return 'mistake';
+      return null;
+    }
+
+    /**
+     * 한 수 직전 포지션의 MultiPV 루트 점수로, 최선 1선 대비 센티폰 손실(리체스 ACPL에 가깝게).
+     * pvs[k]: { cpFromWhite, pv: ['e2e4', …] } — engine.js / analyzeWithWorker 형식.
+     */
+    function centipawnLossVsBestMultipv(pvs, playedUci, mover) {
+      if (!pvs || !pvs[1] || !playedUci) return null;
+      const played = String(playedUci).trim().toLowerCase();
+      let matchedCp = null;
+      for (const k of Object.keys(pvs)) {
+        const pv = pvs[k];
+        if (!pv || !pv.pv || !pv.pv.length) continue;
+        const head = String(pv.pv[0]).trim().split(/\s+/)[0];
+        const um = head.match(/^([a-h][1-8][a-h][1-8][qrbn]?)/i);
+        if (!um) continue;
+        if (um[1].toLowerCase() === played) {
+          matchedCp = pv.cpFromWhite;
+          break;
+        }
+      }
+      if (matchedCp == null) return null;
+      const cpBest = pvs[1].cpFromWhite;
+      if (mover === 'w') return Math.max(0, cpBest - matchedCp);
+      return Math.max(0, matchedCp - cpBest);
+    }
+
+    /** Lichess `api/game` JSON에서 ACPL·정확도만 병합 (수 판정은 PGN %judgment 우선). */
+    function mergeLichessGameApiStats(result, gameJson, myColor) {
+      if (!gameJson || !gameJson.players) return;
+      const pick = (p) => {
+        if (!p || !p.analysis) return null;
+        const a = p.analysis;
+        return {
+          acpl: typeof a.acpl === 'number' ? a.acpl : (typeof a.acPl === 'number' ? a.acPl : null),
+          accuracy: typeof a.accuracy === 'number' ? a.accuracy : null,
+        };
+      };
+      const mine = myColor === 'w' ? gameJson.players.white : gameJson.players.black;
+      const theirs = myColor === 'w' ? gameJson.players.black : gameJson.players.white;
+      const ma = pick(mine);
+      const oa = pick(theirs);
+      if (ma && ma.acpl != null && Number.isFinite(ma.acpl)) {
+        result.avgCpLoss = Math.round(ma.acpl);
+        if (result.myMoveCount > 0) result.myCpSum = Math.round(ma.acpl * result.myMoveCount);
+      }
+      if (ma && ma.accuracy != null && Number.isFinite(ma.accuracy)) result.myAccuracy = Math.round(ma.accuracy);
+      if (oa && oa.acpl != null && Number.isFinite(oa.acpl)) result.oppAcpl = Math.round(oa.acpl);
+      if (oa && oa.accuracy != null && Number.isFinite(oa.accuracy)) result.oppAccuracy = Math.round(oa.accuracy);
+    }
+
     // ── 핵심 분석 오케스트레이터 (Shared Core) ──────────────────────────────────
 
     /**
@@ -2245,14 +2305,31 @@
           const san = t.text;
           const mover = whiteTurn ? 'w' : 'b';
           const isMe = (mover === myColor);
-          
-          // 로컬 평가치 파싱 (eval만 추출)
+
+          // 이 수 직후 연속 코멘트에서 %eval · %judgment · literate 판정 추출 (변형수 제거된 메인라인만)
           let currentEval = null;
+          let serverJudgmentRaw = null;
           for (let j = i + 1; j < tokens.length; j++) {
             if (tokens[j].isComment) {
-              const em = tokens[j].text.match(/\[%eval\s+(#?-?[\d.]+)\]/i);
-              if (em && !em[1].startsWith('#')) currentEval = Math.round(parseFloat(em[1]) * 100);
-            } else if (!/^\d+/.test(tokens[j].text)) break;
+              const ct = tokens[j].text;
+              const em = ct.match(/\[%eval\s+(#?-?[\d.]+)\]/i);
+              if (em && !em[1].startsWith('#')) {
+                currentEval = Math.round(parseFloat(em[1]) * 100);
+              }
+              const jm = ct.match(/\[%judgment\s+name="([^"]+)"/i);
+              if (jm) serverJudgmentRaw = jm[1];
+            } else if (!/^\d+/.test(tokens[j].text)) {
+              break;
+            }
+          }
+          if (!serverJudgmentRaw) {
+            for (let j = i + 1; j < tokens.length; j++) {
+              if (tokens[j].isComment) {
+                const ct = tokens[j].text;
+                const lm = ct.match(/\b(Inaccuracy|Mistake|Blunder|Missed win)\b/);
+                if (lm) { serverJudgmentRaw = lm[1]; break; }
+              } else if (!/^\d+/.test(tokens[j].text)) break;
+            }
           }
 
           const allLegal = getAllLegalMoves(currentPos.board, mover, currentPos.castling, currentPos.enPassant);
@@ -2260,7 +2337,6 @@
           
           if (move) {
             const prevBoard = currentPos.board.map(r => [...r]);
-            const prevEval = prevEvalCp !== null ? prevEvalCp : 0;
             currentPos.board = applyMoveToBoard(currentPos.board.map(r => [...r]), move, mover);
             
             // ── [전술 감지] 모든 수에 대해 수행 ──────────────────────────
@@ -2294,10 +2370,10 @@
               result.tacticEvents.push({ moveIdx: moveCounter, san, themes, piece: ptMove });
             }
 
-            // ── 로컬 판단 (Judgment) 처리 ──────────────────────────
-            let judgment = null;
-            if (currentEval !== null) {
-              judgment = getJudgment(prevEval, currentEval, mover);
+            // ── 판정: Lichess PGN의 %judgment / literate 주석 우선, 없을 때만 getJudgment
+            let judgment = mapLichessPgnJudgmentName(serverJudgmentRaw);
+            if (!judgment && currentEval !== null) {
+              judgment = getJudgment(prevEvalCp !== null ? prevEvalCp : 0, currentEval, mover);
             }
             
             // 킹 업데이트 및 EP 처리
@@ -2649,8 +2725,8 @@
       }
 
       const workerObj = { worker: workerRaw, busy: false };
-      const movetime = 500;
-      const multipv = Math.min(3, SF_MULTIPV || 3);
+      const movetime = 900;
+      const multipv = Math.min(6, Math.max(3, SF_MULTIPV || 3));
       const evalRows = [];
 
       try {
@@ -2658,9 +2734,11 @@
           const fen = states[si].fen;
           let cpw = 0;
           let bestUci = null;
+          let pvsSnap = null;
           if (fen) {
             const aw = await analyzeWithWorker(workerObj, fen, SF_DEPTH, movetime, multipv);
             if (aw && aw.pvs && aw.pvs[1]) {
+              pvsSnap = aw.pvs;
               if (aw.pvs[1].cpFromWhite != null) cpw = aw.pvs[1].cpFromWhite;
               const pvArr = aw.pvs[1].pv;
               if (pvArr && pvArr.length && typeof pvArr[0] === 'string') {
@@ -2672,7 +2750,7 @@
               }
             }
           }
-          evalRows.push({ cpw, bestUci });
+          evalRows.push({ cpw, bestUci, pvs: pvsSnap });
           report(si + 1, states.length);
         }
       } finally {
@@ -2685,6 +2763,7 @@
       for (let i = 1; i < states.length; i++) {
         const mover = states[i - 1].turn;
         const san = states[i].san || '';
+        const move = states[i].move;
         const isMe = (mover === myColor);
         const cpBefore = evalRows[i - 1].cpw;
         const cpAfter = evalRows[i].cpw;
@@ -2694,7 +2773,17 @@
         else if (j === 'mistake') { if (isMe) result.myMistakes++; else result.oppMistakes++; }
         else if (j === 'inaccuracy') { if (isMe) result.myInaccuracies++; else result.oppInaccuracies++; }
 
-        if (isMe) {
+        if (isMe && move) {
+          const playedUci = (moveToUci(move) || '').toLowerCase();
+          let loss = centipawnLossVsBestMultipv(evalRows[i - 1].pvs, playedUci, mover);
+          if (loss == null) {
+            const cpMeBefore = myColor === 'w' ? cpBefore : -cpBefore;
+            const cpMeAfter = myColor === 'w' ? cpAfter : -cpAfter;
+            loss = Math.max(0, cpMeBefore - cpMeAfter);
+          }
+          result.myCpSum += loss;
+          result.myMoveCount++;
+        } else if (isMe) {
           const cpMeBefore = myColor === 'w' ? cpBefore : -cpBefore;
           const cpMeAfter = myColor === 'w' ? cpAfter : -cpAfter;
           result.myCpSum += Math.max(0, cpMeBefore - cpMeAfter);
@@ -2703,7 +2792,6 @@
 
         if (san.includes('#') && isMe) result.checkmates++;
 
-        const move = states[i].move;
         const prevBoard = states[i - 1].board;
         const stBefore = states[i - 1];
 
@@ -3782,8 +3870,20 @@
 
         if (!annotatedPgn) throw new Error('Lichess 분석 결과 대기 시간 초과');
 
-        // [3] 공통 로직으로 분석
+        // [3] 공통 로직으로 분석 (PGN %judgment 우선)
         const analysisResult = processLichessPgn(annotatedPgn, _viewMyColor);
+
+        try {
+          const gjRes = await fetch(`${PROXY_R}?path=api-game&id=${encodeURIComponent(gameId)}`);
+          if (gjRes.ok) {
+            const gj = await gjRes.json();
+            mergeLichessGameApiStats(analysisResult, gj, _viewMyColor);
+          } else {
+            DBG.log(`[2.5] api-game HTTP ${gjRes.status} (ACPL·정확도 생략)`);
+          }
+        } catch (e) {
+          DBG.log(`[2.5] api-game 오류: ${e.message}`);
+        }
 
         const _lichessThemeToType = { Fork: 'fork', AbsPin: 'absPin', RelPin: 'relPin', Skewer: 'skewer', Discovered: 'discovered' };
         const tacticEventsNormalized = (analysisResult.tacticEvents || []).map(function (ev) {
@@ -3863,6 +3963,16 @@
         statsHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px;text-align:center;margin-bottom:6px;">
           <div style="font-size:10px;color:var(--text-muted)">평균 센티폰 손실 (ACPL)</div>
           <div style="font-size:13px;font-weight:700;color:var(--text-primary)">${result.avgCpLoss}</div>
+        </div>`;
+      }
+
+      if (result.myAccuracy != null && Number.isFinite(result.myAccuracy)) {
+        const oa = (result.oppAccuracy != null && Number.isFinite(result.oppAccuracy))
+          ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px">상대 정확도 ${result.oppAccuracy}%</div>` : '';
+        statsHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px;text-align:center;margin-bottom:6px;">
+          <div style="font-size:10px;color:var(--text-muted)">정확도 (리체스)</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text-primary)">${result.myAccuracy}%</div>
+          ${oa}
         </div>`;
       }
 

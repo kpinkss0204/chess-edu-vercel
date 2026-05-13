@@ -9,6 +9,8 @@
 //        → lichess.org/api/analyse/{id}/{color}  (명시적 분석 요청)
 //   GET  /api/lichess-proxy?path=export&id={id}
 //        → lichess.org/game/export/{id}?evals=true&literate=true  (%judgment 포함)
+//   GET  /api/lichess-proxy?path=api-game&id={id}
+//        → lichess.org/api/game/{id}?accuracy=true  (ACPL·정확도 등, JSON)
 
 export default async function handler(req, res) {
   const origin = req.headers.origin || '';
@@ -112,6 +114,36 @@ export default async function handler(req, res) {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'application/x-chess-pgn');
       return res.status(200).send(pgnText);
+    }
+
+    // ── 4) 단일 게임 JSON (분석된 대국의 ACPL·accuracy 등)
+    if (path === 'api-game' && req.method === 'GET') {
+      if (!id) return res.status(400).json({ error: 'id 파라미터 필요' });
+
+      const url = `https://lichess.org/api/game/${encodeURIComponent(id)}?accuracy=true&clocks=false`;
+      const lichessRes = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const bodyText = await lichessRes.text();
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+
+      if (!lichessRes.ok) {
+        try {
+          return res.status(lichessRes.status).json(JSON.parse(bodyText));
+        } catch {
+          return res.status(lichessRes.status).json({ error: bodyText.slice(0, 500) });
+        }
+      }
+      try {
+        return res.status(200).json(JSON.parse(bodyText));
+      } catch {
+        return res.status(502).json({ error: 'Lichess JSON 파싱 실패' });
+      }
     }
 
     return res.status(400).json({ error: `알 수 없는 path: ${path}` });
