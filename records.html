@@ -3616,9 +3616,34 @@
 
         // [3] 공통 로직으로 분석
         const analysisResult = processLichessPgn(annotatedPgn, _viewMyColor);
-        
+
+        const _lichessThemeToType = { Fork: 'fork', AbsPin: 'absPin', RelPin: 'relPin' };
+        const tacticEventsNormalized = (analysisResult.tacticEvents || []).map(function (ev) {
+          if (ev.themes && Array.isArray(ev.themes) && ev.moveIdx != null) {
+            let t = 'fork';
+            for (let ti = 0; ti < ev.themes.length; ti++) {
+              if (_lichessThemeToType[ev.themes[ti]]) { t = _lichessThemeToType[ev.themes[ti]]; break; }
+            }
+            return {
+              type: t,
+              subtype: 'found',
+              piece: ev.piece || '',
+              moveNum: Math.ceil(ev.moveIdx / 2),
+              san: ev.san || '',
+              plyIdx: Math.max(0, ev.moveIdx - 1),
+              bestMove: null,
+              themes: ev.themes,
+              moveIdx: ev.moveIdx
+            };
+          }
+          return ev;
+        });
+
         // [4] Firestore 캐시 저장
-        const savePayload = { ...analysisResult, analyzedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        const savePayload = Object.assign({}, analysisResult, {
+          tacticEvents: tacticEventsNormalized,
+          analyzedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
         await firebase.firestore().collection('game_records').doc(recordId).update({ tacticAnalysis: savePayload });
         if (_currentRecord && _currentRecord.id === recordId) _currentRecord.tacticAnalysis = savePayload;
 

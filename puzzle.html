@@ -1156,113 +1156,6 @@ body {
 }
 .gp-empty-icon { font-size: 36px; margin-bottom: 10px; opacity: 0.5; }
 
-/* ===== 사용자 피드백 모달 ===== */
-#feedback-modal-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.65);
-  z-index: 600;
-  display: none; align-items: center; justify-content: center;
-  padding: 20px; backdrop-filter: blur(4px);
-}
-#feedback-modal-backdrop.show { display: flex; animation: fadeIn 0.2s ease; }
-#feedback-modal {
-  background: var(--bg-secondary); border: 1px solid var(--border);
-  border-radius: 18px; width: 100%; max-width: 420px;
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  animation: slideUp 0.25s cubic-bezier(0.4,0,0.2,1);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-}
-#fbm-header {
-  padding: 18px 20px 12px; border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 10px;
-}
-#fbm-header-title { font-size: 16px; font-weight: 700; color: var(--text-primary); flex: 1; }
-#fbm-close {
-  width: 30px; height: 30px; background: var(--bg-tertiary);
-  border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text-secondary); cursor: pointer;
-  display: flex; align-items: center; justify-content: center; font-size: 15px;
-  transition: all 0.15s;
-}
-#fbm-close:hover { background: var(--bg-hover); }
-#fbm-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
-
-/* 별점 */
-.fbm-section-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
-.star-row { display: flex; gap: 6px; }
-.star-btn {
-  font-size: 24px; cursor: pointer; transition: transform 0.12s, filter 0.12s;
-  filter: grayscale(1) opacity(0.4); line-height: 1;
-  background: none; border: none; padding: 2px;
-}
-.star-btn.active { filter: none; transform: scale(1.12); }
-.star-btn:hover { filter: none; }
-
-/* 태그 버튼 */
-.feedback-tag-row { display: flex; gap: 6px; flex-wrap: wrap; }
-.feedback-tag {
-  padding: 6px 12px; border-radius: 20px;
-  border: 1px solid var(--border); background: var(--bg-tertiary);
-  color: var(--text-secondary); font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s; font-family: var(--font-main);
-}
-.feedback-tag:hover { background: var(--bg-hover); color: var(--text-primary); }
-.feedback-tag.selected { background: rgba(127,166,80,0.15); border-color: var(--accent-green); color: var(--accent-green-bright); }
-.feedback-tag.selected.neg { background: rgba(192,64,64,0.12); border-color: #c04040; color: #e07070; }
-
-/* 텍스트 입력 */
-#fbm-comment {
-  width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border);
-  border-radius: 10px; padding: 10px 12px;
-  color: var(--text-primary); font-family: var(--font-main); font-size: 12px;
-  resize: none; min-height: 72px; transition: border-color 0.15s;
-  outline: none;
-}
-#fbm-comment:focus { border-color: var(--accent-green-dark); }
-#fbm-comment::placeholder { color: var(--text-muted); }
-
-/* 제출 버튼 */
-#fbm-footer { padding: 12px 20px 16px; display: flex; gap: 8px; }
-#fbm-submit {
-  flex: 1; padding: 11px; background: var(--accent-green);
-  border: none; border-radius: 10px; color: #fff;
-  font-size: 14px; font-weight: 700; cursor: pointer;
-  transition: all 0.15s; font-family: var(--font-main);
-  display: flex; align-items: center; justify-content: center; gap: 7px;
-}
-#fbm-submit:hover { background: var(--accent-green-bright); }
-#fbm-skip {
-  padding: 11px 16px; background: var(--bg-tertiary);
-  border: 1px solid var(--border); border-radius: 10px;
-  color: var(--text-secondary); font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s; font-family: var(--font-main);
-}
-#fbm-skip:hover { background: var(--bg-hover); }
-
-/* 피드백 성공 메시지 */
-.fbm-success {
-  text-align: center; padding: 24px 20px 20px;
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-}
-.fbm-success-icon { font-size: 40px; }
-.fbm-success-title { font-size: 16px; font-weight: 700; color: var(--text-primary); }
-.fbm-success-sub { font-size: 12px; color: var(--text-secondary); }
-
-/* 퍼즐 사이드패널 - 피드백 버튼 */
-.pz-feedback-btn {
-  width: 100%; padding: 9px;
-  background: rgba(127,166,80,0.1);
-  border: 1px solid rgba(127,166,80,0.25);
-  border-radius: 9px;
-  color: var(--accent-green-bright);
-  font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s;
-  font-family: var(--font-main);
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-}
-.pz-feedback-btn:hover { background: rgba(127,166,80,0.18); border-color: var(--accent-green); }
-
 /* 기보 기반 퍼즐 태그 (퍼즐 뷰 사이드패널) */
 .psp-game-source {
   background: rgba(224,128,48,0.08);
@@ -1561,10 +1454,6 @@ body {
           <button class="pz-btn" onclick="prevPuzzle()">← 이전</button>
           <button class="pz-btn primary" id="next-puzzle-btn" onclick="nextPuzzle()">다음 퍼즐 →</button>
         </div>
-        <!-- 피드백 버튼 (퍼즐 완료 후 표시) -->
-        <button class="pz-feedback-btn" id="puzzle-feedback-btn" style="display:none;" onclick="openFeedbackModal()">
-          💬 이 퍼즐 피드백 남기기
-        </button>
         <div id="psp-game-source" class="psp-game-source" style="display:none;">
           <span class="src-icon">🎮</span>
           <div class="src-text" id="psp-game-source-text">내 대국에서 생성된 퍼즐</div>
@@ -1599,56 +1488,6 @@ body {
       <button class="pz-btn primary" id="gpm-start-btn" onclick="startGamePuzzle()" style="flex:1;" disabled>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
         선택한 퍼즐 시작
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- 사용자 피드백 모달 -->
-<div id="feedback-modal-backdrop">
-  <div id="feedback-modal">
-    <div id="fbm-header">
-      <span style="font-size:20px;">💬</span>
-      <div id="fbm-header-title">이 퍼즐은 어떠셨나요?</div>
-      <button id="fbm-close" onclick="closeFeedbackModal()">✕</button>
-    </div>
-    <div id="fbm-body">
-      <!-- 별점 -->
-      <div>
-        <div class="fbm-section-label">난이도 평가</div>
-        <div class="star-row" id="star-row">
-          <button class="star-btn" data-val="1" onclick="setStarRating(1)" title="너무 쉬움">⭐</button>
-          <button class="star-btn" data-val="2" onclick="setStarRating(2)" title="쉬움">⭐</button>
-          <button class="star-btn" data-val="3" onclick="setStarRating(3)" title="보통">⭐</button>
-          <button class="star-btn" data-val="4" onclick="setStarRating(4)" title="어려움">⭐</button>
-          <button class="star-btn" data-val="5" onclick="setStarRating(5)" title="매우 어려움">⭐</button>
-        </div>
-        <div id="star-label" style="font-size:11px;color:var(--text-muted);margin-top:5px;">★ 클릭해서 난이도를 평가하세요</div>
-      </div>
-      <!-- 태그 -->
-      <div>
-        <div class="fbm-section-label">퍼즐 평가</div>
-        <div class="feedback-tag-row" id="feedback-tags">
-          <button class="feedback-tag" data-tag="perfect" onclick="toggleFeedbackTag(this)">👍 좋은 퍼즐</button>
-          <button class="feedback-tag" data-tag="tooEasy" onclick="toggleFeedbackTag(this)">😌 너무 쉬움</button>
-          <button class="feedback-tag neg" data-tag="tooHard" onclick="toggleFeedbackTag(this)">😅 너무 어려움</button>
-          <button class="feedback-tag neg" data-tag="wrongSolution" onclick="toggleFeedbackTag(this)">⚠️ 정답 오류</button>
-          <button class="feedback-tag neg" data-tag="badPosition" onclick="toggleFeedbackTag(this)">❓ 포지션 이상</button>
-          <button class="feedback-tag" data-tag="learned" onclick="toggleFeedbackTag(this)">💡 배움이 있었음</button>
-          <button class="feedback-tag" data-tag="interesting" onclick="toggleFeedbackTag(this)">✨ 흥미로운 전술</button>
-        </div>
-      </div>
-      <!-- 코멘트 -->
-      <div>
-        <div class="fbm-section-label">추가 의견 (선택)</div>
-        <textarea id="fbm-comment" placeholder="이 퍼즐에 대해 자유롭게 남겨주세요…" maxlength="300"></textarea>
-      </div>
-    </div>
-    <div id="fbm-footer">
-      <button id="fbm-skip" onclick="closeFeedbackModal()">건너뛰기</button>
-      <button id="fbm-submit" onclick="submitFeedback()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-        피드백 제출
       </button>
     </div>
   </div>
@@ -1947,6 +1786,8 @@ async function getPuzzles(themeId, diff) {
 }
 
 /* ============ STATE ============ */
+const PUZZLE_STATS_STORAGE_KEY = 'chess_education_puzzle_stats_v1';
+
 let state = {
   currentTheme: null,
   selectedDiff: 'beginner',
@@ -1954,10 +1795,12 @@ let state = {
   currentPuzzleIdx: 0,
   totalPuzzles: 10,
   correctCount: 0,
+  wrongAttempts: 0,
   streak: 0,
   bestStreak: 0,
   totalSolved: 0,
   todaySolved: 0,
+  lastStatsDay: '',
   rating: 1200,
   board: null,
   selectedSq: null,
@@ -2211,6 +2054,21 @@ function loadPuzzle(idx) {
   if (linkEl) {
     linkEl.href = puzzle.gameUrl || `https://lichess.org/training/${puzzle.lichessId}`;
     linkEl.style.display = puzzle.lichessId ? '' : 'none';
+  }
+
+  const srcEl = document.getElementById('psp-game-source');
+  const srcText = document.getElementById('psp-game-source-text');
+  if (puzzle.isGameBased && srcEl && srcText) {
+    srcEl.style.display = 'flex';
+    const resultLabel = puzzle.gameResult === '1-0'
+      ? (puzzle.myColor === 'w' ? '승리' : '패배')
+      : puzzle.gameResult === '0-1'
+        ? (puzzle.myColor === 'b' ? '승리' : '패배') : '무승부';
+    const tactName = (typeof TACTIC_META !== 'undefined' && TACTIC_META[puzzle.tacticType])
+      ? TACTIC_META[puzzle.tacticType].name : '전술';
+    srcText.innerHTML = '<b>내 대국 기반</b> — ' + puzzle.gameDateStr + ' ' + puzzle.gameVs + ' (' + resultLabel + ')<br>' + puzzle.moveNum + '수에서의 ' + tactName + ' 기회';
+  } else if (srcEl) {
+    srcEl.style.display = 'none';
   }
 }
 
@@ -2563,13 +2421,19 @@ function tryMove(fr, fc, tr, tc, moveStr) {
       state.puzzleSolved = true;
       state.streak++;
       state.totalSolved++;
+      state.correctCount++;
+      const today = new Date().toISOString().slice(0, 10);
+      if (state.lastStatsDay !== today) {
+        state.todaySolved = 0;
+        state.lastStatsDay = today;
+      }
       state.todaySolved++;
       if (state.streak > state.bestStreak) state.bestStreak = state.streak;
       updateStats();
+      persistPuzzleStats();
       setTimeout(() => {
         showFeedback('correct', '✅ 정답입니다! 훌륭한 수입니다!');
         document.getElementById('retry-btn').style.display = '';
-        state.correctCount++;
         const pct = ((state.currentPuzzleIdx+1) / state.totalPuzzles * 100).toFixed(0);
         document.getElementById('progress-fill').style.width = pct + '%';
         document.getElementById('progress-label').textContent = `${state.currentPuzzleIdx+1} / ${state.totalPuzzles}`;
@@ -2598,7 +2462,9 @@ function tryMove(fr, fc, tr, tc, moveStr) {
 
     state.wrongMove = true;
     state.streak = 0;
+    state.wrongAttempts++;
     updateStats();
+    persistPuzzleStats();
     showFeedback('wrong', '❌ 틀렸습니다. 보드를 클릭하면 되돌아갑니다.');
   }
 }
@@ -2672,34 +2538,64 @@ function updateStats() {
   document.getElementById('stat-total').textContent = state.totalSolved;
   document.getElementById('stat-streak').textContent = state.bestStreak;
   document.getElementById('stat-today').textContent = state.todaySolved;
-  const acc = state.totalSolved > 0 ? Math.round(state.correctCount / state.totalSolved * 100) : 0;
-  document.getElementById('stat-acc').textContent = state.totalSolved > 0 ? acc : '—';
+  const denom = state.totalSolved + state.wrongAttempts;
+  const acc = denom > 0 ? Math.round((state.totalSolved / denom) * 100) : null;
+  document.getElementById('stat-acc').textContent = acc != null ? acc : '—';
+}
+
+function persistPuzzleStats() {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    localStorage.setItem(PUZZLE_STATS_STORAGE_KEY, JSON.stringify({
+      totalSolved: state.totalSolved,
+      correctCount: state.correctCount,
+      wrongAttempts: state.wrongAttempts,
+      bestStreak: state.bestStreak,
+      streak: state.streak,
+      todaySolved: state.todaySolved,
+      lastStatsDay: state.lastStatsDay || today,
+      rating: state.rating
+    }));
+  } catch (e) { /* ignore */ }
+}
+
+function hydratePuzzleStats() {
+  try {
+    const raw = localStorage.getItem(PUZZLE_STATS_STORAGE_KEY);
+    if (!raw) {
+      state.lastStatsDay = new Date().toISOString().slice(0, 10);
+      return;
+    }
+    const s = JSON.parse(raw);
+    const today = new Date().toISOString().slice(0, 10);
+    if (typeof s.totalSolved === 'number') state.totalSolved = s.totalSolved;
+    if (typeof s.bestStreak === 'number') state.bestStreak = s.bestStreak;
+    if (typeof s.streak === 'number') state.streak = s.streak;
+    if (typeof s.wrongAttempts === 'number') state.wrongAttempts = s.wrongAttempts;
+    if (typeof s.correctCount === 'number') state.correctCount = s.correctCount;
+    if (typeof s.rating === 'number') state.rating = s.rating;
+    if (s.lastStatsDay === today && typeof s.todaySolved === 'number') {
+      state.todaySolved = s.todaySolved;
+    } else {
+      state.todaySolved = 0;
+    }
+    state.lastStatsDay = today;
+  } catch (e) {
+    state.lastStatsDay = new Date().toISOString().slice(0, 10);
+  }
 }
 
 /* ============ INIT ============ */
 initThemeGrids();
+hydratePuzzleStats();
 updateStats();
 applyQueryFromUrl();
 
-/* ============================================================
-   FIREBASE / 기보 기반 퍼즐
-   ============================================================ */
 let _fbUser = null;
-
-_auth.onAuthStateChanged(u => {
-  _fbUser = u;
-  if (u) {
-    loadGamePuzzleCount();
-    if (!_gamePuzzleLoaded) initGamePuzzleGrid();
-  }
-});
-
-// ── 기보 기반 퍼즐 데이터 ────────────────────────────────────────
-let _gamePuzzles = [];         // 생성된 퍼즐 배열
-let _selectedGamePuzzleIdx = -1; // 모달에서 선택된 퍼즐
+let _gamePuzzles = [];
+let _selectedGamePuzzleIdx = -1;
 let _gamePuzzleLoaded = false;
 
-// 전술 이벤트 타입 → 이름/아이콘 매핑
 const TACTIC_META = {
   fork:      { icon:'🍴', name:'포크',      tagCls:'fork',     desc:'두 개 이상의 적 말을 동시에 위협' },
   oppFork:   { icon:'⚔️', name:'상대 포크', tagCls:'fork',     desc:'상대 포크 장면 (기보에서)' },
@@ -2712,145 +2608,195 @@ const TACTIC_META = {
   discoveredAttack:{ icon:'⚡', name:'발견 공격', tagCls:'fork', desc:'말 이동으로 뒤의 말이 공격' },
 };
 
+_auth.onAuthStateChanged(function (u) {
+  _fbUser = u;
+  if (u) {
+    loadGamePuzzleCount();
+    if (!_gamePuzzleLoaded) initGamePuzzleGrid();
+  }
+});
+
+function firebaseDbReady() {
+  return typeof window._fbDb !== 'undefined' && window._fbDb;
+}
+
+function _puzzlePlayedAtMs(doc) {
+  const pa = doc && doc.playedAt;
+  if (!pa) return 0;
+  if (typeof pa.seconds === 'number') return pa.seconds * 1000;
+  if (typeof pa.toMillis === 'function') return pa.toMillis();
+  return 0;
+}
+
+function _puzzleGameDateStr(doc) {
+  const ms = _puzzlePlayedAtMs(doc);
+  return ms ? new Date(ms).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '';
+}
+
+/** Firestore 기보 문서 배열 (orderBy 실패 시 폴백) */
+async function fetchUserGameRecordDocs(limit) {
+  if (!firebaseDbReady() || !_fbUser) return [];
+  const uid = _fbUser.uid;
+  let snap = null;
+  try {
+    snap = await _fbDb.collection('game_records').where('uid', '==', uid).orderBy('playedAt', 'desc').limit(limit).get();
+  } catch (e) {
+    console.warn('[gamePuzzle] orderBy(playedAt) 쿼리 실패, 폴백:', e.message);
+    try {
+      snap = await _fbDb.collection('game_records').where('uid', '==', uid).limit(Math.max(limit, 60)).get();
+    } catch (e2) {
+      console.warn('[gamePuzzle] Firestore 조회 실패:', e2.message);
+      return [];
+    }
+  }
+  const docs = [];
+  snap.forEach(function (d) { docs.push({ id: d.id, ...d.data() }); });
+  docs.sort(function (a, b) { return _puzzlePlayedAtMs(b) - _puzzlePlayedAtMs(a); });
+  return docs.slice(0, limit);
+}
+
+/** Lichess 주석 분석 이벤트: { moveIdx, themes } → ply 인덱스 */
+function inferTacticPlyIndex(ev) {
+  if (ev.plyIdx !== undefined && ev.plyIdx !== null && !Number.isNaN(Number(ev.plyIdx))) {
+    const n = Number(ev.plyIdx);
+    if (n >= 0) return n;
+  }
+  if (ev.moveIdx != null && ev.moveIdx >= 1) return ev.moveIdx - 1;
+  return null;
+}
+
+function lichessThemeToTacticType(themes) {
+  if (!themes || !themes.length) return 'fork';
+  const map = { Fork: 'fork', AbsPin: 'absPin', RelPin: 'relPin' };
+  for (let i = 0; i < themes.length; i++) {
+    if (map[themes[i]]) return map[themes[i]];
+  }
+  return 'fork';
+}
+
+function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteName, blackName, dateStr) {
+  if (!positions || positions.length < 2) return;
+  const lichessStyle = !!(ev.themes && Array.isArray(ev.themes) && ev.moveIdx != null && !ev.subtype);
+  const missed = ev.subtype === 'missed';
+  const found = ev.subtype === 'found';
+  if (!missed && !found && !lichessStyle) return;
+
+  let tacticType = ev.type || null;
+  if (lichessStyle) tacticType = lichessThemeToTacticType(ev.themes);
+  if (!tacticType) return;
+
+  const plyIdx = inferTacticPlyIndex(ev);
+  if (plyIdx == null || plyIdx < 0 || plyIdx >= positions.length) return;
+  const pos = positions[plyIdx];
+  if (!pos || !pos.fen) return;
+
+  let solutionUci = null;
+  if (missed) {
+    solutionUci = (ev.bestMove && String(ev.bestMove)) || null;
+    if (!solutionUci || solutionUci.length < 4) return;
+  } else {
+    if (!positions[plyIdx + 1] || !positions[plyIdx + 1].lastMove) return;
+    solutionUci = positions[plyIdx + 1].lastMove;
+  }
+  if (!solutionUci || solutionUci.length < 4) return;
+
+  const meta = TACTIC_META[tacticType] || TACTIC_META.fork;
+  const missedLabel = missed ? ' 놓침' : '';
+  const titleBase = missed ? (meta.name + ' 놓침') : (meta.name + ' (기보)');
+
+  puzzles.push({
+    isGameBased: true,
+    gameId: doc.id,
+    gameDateStr: dateStr,
+    gameVs: myColor === 'w' ? ('vs ' + blackName) : ('vs ' + whiteName),
+    gameResult: doc.result,
+    myColor: myColor,
+    tacticType: tacticType,
+    tacticPiece: ev.piece || '',
+    moveNum: ev.moveNum || Math.ceil((plyIdx + 1) / 2),
+    title: titleBase + ' — ' + dateStr + ' ' + (myColor === 'w' ? ('vs ' + blackName) : ('vs ' + whiteName)),
+    icon: meta.icon,
+    desc: meta.desc,
+    tagCls: meta.tagCls,
+    rating: 1200 + Math.floor(Math.random() * 400),
+    fen: pos.fen,
+    opponentMove: pos.lastMove || null,
+    solution: [solutionUci],
+    fullSolution: [solutionUci],
+    hint: meta.name + missedLabel + ': ' + meta.desc,
+    moves: 1,
+    themes: [tacticType],
+    turn: pos.turn,
+    lichessId: null,
+    gameUrl: null,
+    fromCache: !!(doc.tacticAnalysis && !lichessStyle),
+  });
+}
+
 // Firestore에서 기보 불러와 전술 포지션 추출
 async function loadGamePuzzles() {
-  if (!_firebaseReady || !_fbUser) return [];
+  if (!firebaseDbReady() || !_fbUser) return [];
 
-  const snap = await _fbDb.collection('game_records')
-    .where('uid', '==', _fbUser.uid)
-    .orderBy('playedAt', 'desc')
-    .limit(30)
-    .get().catch(() => null);
-  if (!snap || snap.empty) return [];
-
-  const docs = [];
-  snap.forEach(d => docs.push({ id: d.id, ...d.data() }));
+  const docs = await fetchUserGameRecordDocs(40);
+  if (!docs.length) return [];
 
   const puzzles = [];
 
-  for (const doc of docs) {
+  for (let di = 0; di < docs.length; di++) {
+    const doc = docs[di];
     if (!doc.pgn || !doc.myColor) continue;
 
     const myColor = doc.myColor;
     const whiteName = doc.whiteName || '백';
     const blackName = doc.blackName || '흑';
-    const dateStr = doc.playedAt
-      ? new Date(doc.playedAt.seconds * 1000).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
-      : '';
+    const dateStr = _puzzleGameDateStr(doc);
 
-    // ── 이미 records.html에서 분석된 경우: tacticAnalysis.tacticEvents 활용
     if (doc.tacticAnalysis && doc.tacticAnalysis.tacticEvents && doc.tacticAnalysis.tacticEvents.length > 0) {
       try {
         const pgnClean = (doc.pgn || '').replace(/\[[^\]]*\]/g, '').trim();
         const positions = parsePgnToPositions(pgnClean);
-        for (const ev of doc.tacticAnalysis.tacticEvents) {
-          if (ev.subtype !== 'missed') continue;
-          const meta = TACTIC_META[ev.type] || TACTIC_META['fork'];
-          // plyIdx=0은 잘못 저장된 경우 moveNum으로 보정
-          let plyIdx = (ev.plyIdx != null && ev.plyIdx >= 0) ? ev.plyIdx : (ev.moveNum ? ev.moveNum * 2 - 1 : null);
-          if (plyIdx == null || plyIdx >= positions.length - 1) continue;
-          const pos = positions[plyIdx];
-          if (!pos || !pos.fen) continue;
-          // bestMove가 null이면 positions의 다음 수를 해답으로 활용
-          let bestMove = ev.bestMove;
-          if (!bestMove && positions[plyIdx + 1] && positions[plyIdx + 1].lastMove) {
-            bestMove = positions[plyIdx + 1].lastMove;
-          }
-          const solution = bestMove ? [bestMove] : null;
-          if (!solution) continue;
-          puzzles.push({
-            isGameBased: true,
-            gameId: doc.id,
-            gameDateStr: dateStr,
-            gameVs: myColor === 'w' ? `vs ${blackName}` : `vs ${whiteName}`,
-            gameResult: doc.result,
-            myColor,
-            tacticType: ev.type,
-            tacticPiece: ev.piece || '',
-            moveNum: ev.moveNum || Math.ceil(plyIdx / 2),
-            title: `${meta.name} 놓침 — ${dateStr} ${myColor === 'w' ? `vs ${blackName}` : `vs ${whiteName}`}`,
-            icon: meta.icon,
-            desc: meta.desc,
-            tagCls: meta.tagCls,
-            rating: 1200 + Math.floor(Math.random() * 400),
-            fen: pos.fen,
-            opponentMove: pos.lastMove || null,
-            solution,
-            fullSolution: solution,
-            hint: `${meta.name}: ${meta.desc}`,
-            moves: solution.length,
-            themes: [ev.type],
-            turn: pos.turn,
-            lichessId: null,
-            gameUrl: null,
-            fromCache: true,
-          });
+        for (let ei = 0; ei < doc.tacticAnalysis.tacticEvents.length; ei++) {
+          pushPuzzleFromTacticEvent(puzzles, doc, doc.tacticAnalysis.tacticEvents[ei], positions, myColor, whiteName, blackName, dateStr);
         }
-        if (puzzles.filter(p => p.gameId === doc.id).length > 0) continue; // 이미 추출됨
-      } catch(e) { console.warn('[gamePuzzle] 캐시 추출 실패:', e); }
+        if (puzzles.some(function (p) { return p.gameId === doc.id; })) continue;
+      } catch (e) {
+        console.warn('[gamePuzzle] 캐시 추출 실패:', e);
+      }
     }
   }
 
-  // ── tacticAnalysis 캐시가 없는 기보만 경량 패턴 탐지로 보완
-  for (const doc of docs) {
+  for (let di = 0; di < docs.length; di++) {
+    const doc = docs[di];
     if (!doc.pgn || !doc.myColor) continue;
-    // 이미 캐시(tacticAnalysis)에서 추출된 경우 건너뜀
-    if (puzzles.some(p => p.gameId === doc.id)) continue;
+    if (puzzles.some(function (p) { return p.gameId === doc.id; })) continue;
 
     const myColor = doc.myColor;
     const whiteName = doc.whiteName || '백';
     const blackName = doc.blackName || '흑';
-    const dateStr = doc.playedAt
-      ? new Date(doc.playedAt.seconds * 1000).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
-      : '';
+    const dateStr = _puzzleGameDateStr(doc);
 
     try {
       const pgnClean = (doc.pgn || '').replace(/\[[^\]]*\]/g, '').trim();
       const positions = parsePgnToPositions(pgnClean);
       if (!positions || positions.length < 4) continue;
 
-      // 구버전 tacticEvents 필드 활용 (레거시 지원)
       if (doc.tacticEvents && doc.tacticEvents.length > 0) {
-        for (const ev of doc.tacticEvents) {
-          if (ev.subtype !== 'missed') continue;
-          const meta = TACTIC_META[ev.type] || TACTIC_META['fork'];
-          let plyIdx = (ev.plyIdx != null && ev.plyIdx >= 0) ? ev.plyIdx : (ev.moveNum ? ev.moveNum * 2 - 1 : null);
-          if (plyIdx == null || plyIdx >= positions.length - 1) continue;
-          const pos = positions[plyIdx];
-          if (!pos || !pos.fen) continue;
-          let bestMove2 = ev.bestMove;
-          if (!bestMove2 && positions[plyIdx + 1] && positions[plyIdx + 1].lastMove) {
-            bestMove2 = positions[plyIdx + 1].lastMove;
-          }
-          const solution = bestMove2 ? [bestMove2] : null;
-          if (!solution) continue;
-          puzzles.push({
-            isGameBased: true, gameId: doc.id, gameDateStr: dateStr,
-            gameVs: myColor === 'w' ? `vs ${blackName}` : `vs ${whiteName}`,
-            gameResult: doc.result, myColor,
-            tacticType: ev.type, tacticPiece: ev.piece || '',
-            moveNum: ev.moveNum || Math.ceil(plyIdx / 2),
-            title: `${meta.name} 놓침 — ${dateStr} ${myColor === 'w' ? `vs ${blackName}` : `vs ${whiteName}`}`,
-            icon: meta.icon, desc: meta.desc, tagCls: meta.tagCls,
-            rating: 1200 + Math.floor(Math.random() * 400),
-            fen: pos.fen, opponentMove: pos.lastMove || null,
-            solution, fullSolution: solution, hint: `${meta.name}: ${meta.desc}`,
-            moves: solution.length, themes: [ev.type], turn: pos.turn,
-            lichessId: null, gameUrl: null,
-          });
+        for (let ei = 0; ei < doc.tacticEvents.length; ei++) {
+          pushPuzzleFromTacticEvent(puzzles, doc, doc.tacticEvents[ei], positions, myColor, whiteName, blackName, dateStr);
         }
       }
 
-      // 분석 데이터가 전혀 없는 경우: 경량 패턴 탐지
-      if (!puzzles.some(p => p.gameId === doc.id)) {
+      if (!puzzles.some(function (p) { return p.gameId === doc.id; })) {
         const detected = detectTacticsInPgn(positions, myColor, doc);
-        puzzles.push(...detected.map(d => ({
-          ...d, gameDateStr: dateStr,
-          gameVs: myColor === 'w' ? `vs ${blackName}` : `vs ${whiteName}`,
-          gameResult: doc.result,
-        })));
+        for (let j = 0; j < detected.length; j++) {
+          puzzles.push(Object.assign({}, detected[j], {
+            gameDateStr: dateStr,
+            gameVs: myColor === 'w' ? ('vs ' + blackName) : ('vs ' + whiteName),
+            gameResult: doc.result,
+          }));
+        }
       }
-    } catch(e) {
+    } catch (e) {
       console.warn('[gamePuzzle] PGN 파싱 실패:', e);
     }
   }
@@ -3013,19 +2959,23 @@ function parsePgnToPositions(pgn) {
 // ── 기보 기반 퍼즐 개수 뱃지 업데이트 ──────────────────────────
 async function loadGamePuzzleCount() {
   try {
+    if (!firebaseDbReady() || !_fbUser) return;
     const snap = await _fbDb.collection('game_records')
       .where('uid', '==', _fbUser.uid)
       .limit(30).get();
-    let missed = 0;
-    snap.forEach(d => {
+    let tacticCount = 0;
+    snap.forEach(function (d) {
       const ta = d.data().tacticAnalysis;
-      if (ta && Array.isArray(ta.tacticEvents)) {
-        missed += ta.tacticEvents.filter(e => e && e.subtype === 'missed').length;
-      }
+      if (!ta || !Array.isArray(ta.tacticEvents)) return;
+      ta.tacticEvents.forEach(function (e) {
+        if (!e) return;
+        if (e.subtype === 'missed' || e.subtype === 'found') tacticCount++;
+        else if (e.themes && e.moveIdx != null) tacticCount++;
+      });
     });
     const badge = document.getElementById('game-puzzle-count-badge');
     if (badge) {
-      if (missed > 0) badge.textContent = `놓친 전술 ${missed}개`;
+      if (tacticCount > 0) badge.textContent = `전술 ${tacticCount}개`;
       else badge.textContent = snap.size > 0 ? '기보에서 생성' : '기보 분석';
     }
   } catch(e) {
@@ -3043,7 +2993,7 @@ async function openGamePuzzleModal() {
     const body = document.getElementById('gpm-body');
     body.innerHTML = `<div class="gp-loading"><div class="lichess-spinner"></div><div>기보에서 퍼즐 추출 중… (기록 페이지 통계 분석 후 놓친 전술이 저장됩니다)</div></div>`;
 
-    if (!_firebaseReady || !_fbUser) {
+    if (!firebaseDbReady() || !_fbUser) {
       // 로그인 안 된 경우: 빈 배열 + 로그인 유도 메시지
       _gamePuzzles = [];
     } else {
@@ -3160,140 +3110,6 @@ function startGamePuzzle() {
   loadPuzzle(0);
 }
 
-/* ============================================================
-   사용자 피드백 시스템
-   ============================================================ */
-
-let _feedbackState = {
-  rating: 0,
-  tags: new Set(),
-  puzzleId: null,
-  puzzleTheme: null,
-  isGameBased: false,
-};
-
-function openFeedbackModal() {
-  const puzzle = state.currentPuzzle;
-  if (!puzzle) return;
-  _feedbackState.rating = 0;
-  _feedbackState.tags = new Set();
-  _feedbackState.puzzleId = puzzle.lichessId || puzzle.gameId || null;
-  _feedbackState.puzzleTheme = puzzle.themes?.[0] || state.currentTheme?.id || '';
-  _feedbackState.isGameBased = !!puzzle.isGameBased;
-
-  // UI 초기화
-  setStarRating(0);
-  document.querySelectorAll('.feedback-tag').forEach(t => t.classList.remove('selected'));
-  document.getElementById('fbm-comment').value = '';
-  document.getElementById('feedback-modal-backdrop').classList.add('show');
-}
-
-function closeFeedbackModal() {
-  document.getElementById('feedback-modal-backdrop').classList.remove('show');
-}
-
-const STAR_LABELS = ['', '너무 쉬움 ★', '쉬움 ★★', '보통 ★★★', '어려움 ★★★★', '매우 어려움 ★★★★★'];
-function setStarRating(val) {
-  _feedbackState.rating = val;
-  document.querySelectorAll('.star-btn').forEach(btn => {
-    btn.classList.toggle('active', parseInt(btn.dataset.val) <= val);
-  });
-  document.getElementById('star-label').textContent = val > 0 ? STAR_LABELS[val] : '★ 클릭해서 난이도를 평가하세요';
-}
-
-function toggleFeedbackTag(btn) {
-  const tag = btn.dataset.tag;
-  btn.classList.toggle('selected');
-  if (_feedbackState.tags.has(tag)) _feedbackState.tags.delete(tag);
-  else _feedbackState.tags.add(tag);
-}
-
-async function submitFeedback() {
-  const comment = document.getElementById('fbm-comment').value.trim();
-  const payload = {
-    puzzleId: _feedbackState.puzzleId,
-    puzzleTheme: _feedbackState.puzzleTheme,
-    isGameBased: _feedbackState.isGameBased,
-    difficultyRating: _feedbackState.rating,
-    tags: Array.from(_feedbackState.tags),
-    comment,
-    submittedAt: new Date().toISOString(),
-    uid: _fbUser?.uid || null,
-  };
-
-  // Firestore에 저장 (가능할 경우)
-  if (_firebaseReady && _fbDb && _fbUser) {
-    try {
-      await _fbDb.collection('puzzle_feedback').add(payload);
-    } catch(e) {
-      console.warn('[feedback] Firestore 저장 실패:', e);
-    }
-  }
-
-  // localStorage에 로컬 백업 저장
-  try {
-    const localFb = JSON.parse(localStorage.getItem('puzzle_feedback_local') || '[]');
-    localFb.push(payload);
-    if (localFb.length > 50) localFb.splice(0, localFb.length - 50);
-    localStorage.setItem('puzzle_feedback_local', JSON.stringify(localFb));
-  } catch(e) {}
-
-  // 성공 UI
-  const modal = document.getElementById('feedback-modal');
-  const body = document.getElementById('fbm-body');
-  const footer = document.getElementById('fbm-footer');
-  body.innerHTML = `<div class="fbm-success">
-    <div class="fbm-success-icon">🎉</div>
-    <div class="fbm-success-title">피드백 감사합니다!</div>
-    <div class="fbm-success-sub">퍼즐 품질 개선에 도움이 됩니다.</div>
-  </div>`;
-  footer.innerHTML = `<button class="pz-btn primary" style="flex:1;padding:11px;" onclick="closeFeedbackModal()">닫기</button>`;
-}
-
-/* ============================================================
-   퍼즐 완료 시 피드백 버튼 표시 패치
-   ============================================================ */
-
-// 기존 tryMove 함수에 퍼즐 완료 시 피드백 버튼 표시 추가
-const _origShowFeedback = showFeedback;
-const _origTryMove = window.tryMove;
-
-// 퍼즐 완료 감지 → 피드백 버튼 표시
-const _origLoadPuzzle = loadPuzzle;
-window.loadPuzzle = function(idx) {
-  _origLoadPuzzle(idx);
-  // 기보 기반 퍼즐이면 출처 표시
-  const puzzle = state.puzzles[idx];
-  const srcEl = document.getElementById('psp-game-source');
-  const srcText = document.getElementById('psp-game-source-text');
-  if (puzzle && puzzle.isGameBased && srcEl && srcText) {
-    srcEl.style.display = 'flex';
-    const resultLabel = puzzle.gameResult === '1-0'
-      ? (puzzle.myColor === 'w' ? '승리' : '패배')
-      : puzzle.gameResult === '0-1'
-        ? (puzzle.myColor === 'b' ? '승리' : '패배') : '무승부';
-    srcText.innerHTML = `<b>내 대국 기반</b> — ${puzzle.gameDateStr} ${puzzle.gameVs} (${resultLabel})<br>${puzzle.moveNum}수에서의 ${TACTIC_META[puzzle.tacticType]?.name || '전술'} 기회`;
-  } else if (srcEl) {
-    srcEl.style.display = 'none';
-  }
-  // 피드백 버튼 숨기기
-  const fbBtn = document.getElementById('puzzle-feedback-btn');
-  if (fbBtn) fbBtn.style.display = 'none';
-};
-
-// 기존 tryMove 내 퍼즐 완료 로직 패치
-const _patchedTryMove = tryMove;
-window.tryMove = function(fr, fc, tr, tc, moveStr) {
-  _patchedTryMove(fr, fc, tr, tc, moveStr);
-  // 퍼즐 완료 후 잠시 후 피드백 버튼 표시
-  setTimeout(() => {
-    if (state.puzzleSolved) {
-      const fbBtn = document.getElementById('puzzle-feedback-btn');
-      if (fbBtn) fbBtn.style.display = 'flex';
-    }
-  }, 500);
-};
-
 // ── 기보 기반 퍼즐 그리드 렌더링 ─────────────────────────
 const GAME_PUZZLE_THEME_DEFS = [
   { type: 'checkmate', icon: '👑', name: '체크메이트 기회',  desc: '실제 대국에서 내가 놓쳤던 체크메이트 기회를 다시 훈련하세요', tagCls: 'checkmate', color: '#c04040' },
@@ -3404,7 +3220,7 @@ function startGamePuzzleByType(tacticType) {
 // 기보 퍼즐 로드 후 그리드 자동 업데이트 (Firebase 인증 후)
 async function initGamePuzzleGrid() {
   try {
-    if (!_firebaseReady || !_fbUser) {
+    if (!firebaseDbReady() || !_fbUser) {
       _gamePuzzles = [];
     } else {
       _gamePuzzles = await loadGamePuzzles();
