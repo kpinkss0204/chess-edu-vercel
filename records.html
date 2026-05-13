@@ -1948,9 +1948,6 @@
     // ════════════════════════════════════════
     const SF_DEPTH = 18;
     const SF_MULTIPV = 3;
-    const BLUNDER_CP = 150;
-    const MISTAKE_CP = 75;
-    const INACCURACY_CP = 30;
 
     const FORK_CP_GAIN = 80;
     const FORK_FOUND_MAX_CP_LOSS = 60;
@@ -2164,26 +2161,34 @@
       return isInCheck(b2, opp);
     }
 
-    // ── 새로운 승률 및 판단 로직 ──────────────────────────────────────────
+    // ── 리체스와 동일한 승률·수 판정 (scalachess eval + lila.tree.Advice.CpAdvice) ──
+    // winningChances: https://github.com/lichess-org/scalachess/blob/master/core/src/main/scala/eval.scala
+    // 임계값 0.1 / 0.2 / 0.3: https://github.com/lichess-org/lila/blob/master/modules/tree/src/main/Advice.scala
 
-    function calculateWinProb(cp) {
-      // W = 50 + 50 * erf((cp * ln(10)) / (600 * sqrt(2)))
-      const x = (cp * Math.log(10)) / (600 * Math.sqrt(2));
-      const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
-      const sign = x < 0 ? -1 : 1;
-      const t = 1.0 / (1.0 + p * Math.abs(x));
-      const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
-      return 50 + 50 * sign * y;
+    const LICHESS_CP_CEILING = 1000;
+    const LICHESS_WC_MULT = -0.00368208; // lila PR #11148
+
+    /** 백 관점 cp → winning chances [-1, 1] (cp는 ±1000으로 클램프) */
+    function lichessWinningChancesFromWhiteCp(cp) {
+      const v = Number(cp) || 0;
+      const x = Math.max(-LICHESS_CP_CEILING, Math.min(LICHESS_CP_CEILING, v));
+      const raw = 2 / (1 + Math.exp(LICHESS_WC_MULT * x)) - 1;
+      return Math.max(-1, Math.min(1, raw));
     }
 
+    /**
+     * cpBefore / cpAfter: 항상 백 기준(white POV) 센티폰. mover: 방금 둔 쪽.
+     * 리체스 CpAdvice와 동일: delta = (wcAfter - wcBefore), 백이면 부호 반전.
+     */
     function getJudgment(cpBefore, cpAfter, mover) {
-      const wBefore = calculateWinProb(mover === 'w' ? cpBefore : -cpBefore);
-      const wAfter = calculateWinProb(mover === 'w' ? cpAfter : -cpAfter);
-      const deltaW = (wBefore - wAfter) / 100; // 백분율 차이 (0.05 = 5%)
+      const wcPrev = lichessWinningChancesFromWhiteCp(cpBefore);
+      const wcCur = lichessWinningChancesFromWhiteCp(cpAfter);
+      const dRaw = wcCur - wcPrev;
+      const delta = mover === 'w' ? -dRaw : dRaw;
 
-      if (deltaW >= 0.20) return 'blunder';
-      if (deltaW >= 0.10) return 'mistake';
-      if (deltaW >= 0.05) return 'inaccuracy';
+      if (delta >= 0.3) return 'blunder';
+      if (delta >= 0.2) return 'mistake';
+      if (delta >= 0.1) return 'inaccuracy';
       return null;
     }
 
@@ -2607,7 +2612,7 @@
     function openingKey(op) { return op.eco + '|' + op.name + (op.variation ? '|' + op.variation : ''); }
 
     // 두 번째 스크립트 블록에서도 동일 값 사용 (전역 const 가시성 이슈 방지)
-    window.__RECORDS_CONSTS__ = { SF_DEPTH, SF_MULTIPV, BLUNDER_CP, MISTAKE_CP, INACCURACY_CP, FORK_CP_GAIN };
+    window.__RECORDS_CONSTS__ = { SF_DEPTH, SF_MULTIPV, FORK_CP_GAIN };
 
     /**
      * 순수 PGN을 Stockfish로 포지션별 분석해 통계 탭 집계용 객체를 만듭니다.
@@ -2836,7 +2841,7 @@
   </script>
   <script src="auth-check.js"></script>
   <script>
-    const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, BLUNDER_CP: 150, MISTAKE_CP: 75, INACCURACY_CP: 30, FORK_CP_GAIN: 80 };
+    const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP_GAIN: 80 };
     // ════════════════════════════════════════
     // Firebase 연동 후 페이지 초기화
     // ════════════════════════════════════════
@@ -3586,28 +3591,28 @@
       <!-- 나 -->
       <div class="key-card danger"><div class="key-card-icon">💀</div><div class="key-card-body">
         <div class="key-card-name">내 블런더</div><div class="key-card-num">${s.myBlunders}</div>
-        <div class="key-card-sub">손실 ≥ ${__RC.BLUNDER_CP}cp</div>
+        <div class="key-card-sub">리체스 동일 · WC 하락 ≥0.30</div>
       </div></div>
       <div class="key-card warn"><div class="key-card-icon">❗</div><div class="key-card-body">
         <div class="key-card-name">내 실수</div><div class="key-card-num">${s.myMistakes}</div>
-        <div class="key-card-sub">손실 ${__RC.MISTAKE_CP}~${__RC.BLUNDER_CP}cp</div>
+        <div class="key-card-sub">리체스 동일 · WC 0.20~0.30</div>
       </div></div>
       <div class="key-card"><div class="key-card-icon">🔶</div><div class="key-card-body">
         <div class="key-card-name">내 부정확</div><div class="key-card-num">${s.myInaccuracies}</div>
-        <div class="key-card-sub">손실 ${__RC.INACCURACY_CP}~${__RC.MISTAKE_CP}cp</div>
+        <div class="key-card-sub">리체스 동일 · WC 0.10~0.20</div>
       </div></div>
       <!-- 상대 -->
       <div class="key-card danger"><div class="key-card-icon">💀</div><div class="key-card-body">
         <div class="key-card-name">상대 블런더</div><div class="key-card-num">${s.oppBlunders}</div>
-        <div class="key-card-sub">손실 ≥ ${__RC.BLUNDER_CP}cp</div>
+        <div class="key-card-sub">리체스 동일 · WC 하락 ≥0.30</div>
       </div></div>
       <div class="key-card warn"><div class="key-card-icon">❗</div><div class="key-card-body">
         <div class="key-card-name">상대 실수</div><div class="key-card-num">${s.oppMistakes}</div>
-        <div class="key-card-sub">손실 ${__RC.MISTAKE_CP}~${__RC.BLUNDER_CP}cp</div>
+        <div class="key-card-sub">리체스 동일 · WC 0.20~0.30</div>
       </div></div>
       <div class="key-card"><div class="key-card-icon">🔶</div><div class="key-card-body">
         <div class="key-card-name">상대 부정확</div><div class="key-card-num">${s.oppInaccuracies}</div>
-        <div class="key-card-sub">손실 ${__RC.INACCURACY_CP}~${__RC.MISTAKE_CP}cp</div>
+        <div class="key-card-sub">리체스 동일 · WC 0.10~0.20</div>
       </div></div>
     </div>
 
