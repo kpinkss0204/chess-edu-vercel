@@ -1960,7 +1960,7 @@
 
     /** cp → WinPercent (0–100%). 공식: 1 / (1 + 10^(-(cp-10)/400)) */
     function cpToWinPercent(cp) {
-      const adjustedCp = cp - 10;
+      const adjustedCp = cp;
       return (1 / (1 + Math.pow(10, -adjustedCp / 400))) * 100;
     }
 
