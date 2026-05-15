@@ -3279,11 +3279,21 @@ function openInAnalysis() {
       return;
     }
 
+    // localStorage에 FEN 저장 후 새 탭 열기
+    try { localStorage.setItem('chess_puzzle_analyze_fen', fen); } catch(e) {}
+
+    // URL에도 fen 파라미터 포함 (이중 안전장치)
     var url = 'chess-wasm-fixed.html?fen=' + encodeURIComponent(fen);
-    window.open(url, '_blank');
+    var a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   } catch(e) {
     console.error('[openInAnalysis] 오류:', e);
-    alert('분석 탭 이동 중 오류가 발생했습니다.');
+    alert('오류: ' + e.message);
   }
 }
 

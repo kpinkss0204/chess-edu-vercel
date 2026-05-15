@@ -5233,6 +5233,62 @@
       if (btn) btn.disabled = false;
     }
   </script>
+
+<script>
+// ── 퍼즐에서 "분석으로 보기" 기능: URL ?fen= 또는 localStorage 에서 FEN 읽어 로드
+(function () {
+  var STORAGE_KEY = 'chess_puzzle_analyze_fen';
+
+  function tryLoadPuzzleFen() {
+    if (!window.game || typeof game.loadFromFen !== 'function') return false;
+
+    var fen = null;
+
+    // 1순위: URL ?fen= 파라미터
+    try {
+      var params = new URLSearchParams(location.search);
+      var paramFen = params.get('fen');
+      if (paramFen && paramFen.trim().length > 0) fen = paramFen.trim();
+    } catch (e) { /* ignore */ }
+
+    // 2순위: localStorage
+    if (!fen) {
+      try {
+        var stored = localStorage.getItem(STORAGE_KEY);
+        if (stored && stored.trim().length > 0) {
+          fen = stored.trim();
+          localStorage.removeItem(STORAGE_KEY); // 1회 사용 후 삭제
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    if (!fen) return false;
+
+    try {
+      game.loadFromFen(fen);
+      if (typeof analyzePosition === 'function') analyzePosition(true);
+      if (typeof showToast === 'function') showToast('퍼즐 포지션을 불러왔습니다');
+      console.log('[puzzle→analysis] FEN 로드:', fen);
+      return true;
+    } catch (err) {
+      console.warn('[puzzle→analysis] loadFromFen 실패:', err);
+      return false;
+    }
+  }
+
+  // engine.js 초기화 완료 후 호출되는 훅에 연결
+  var _origTryInitEndgame = window.tryInitEndgamePractice;
+  window.tryInitEndgamePractice = function () {
+    if (typeof _origTryInitEndgame === 'function') _origTryInitEndgame();
+    // 엔드게임 연습 모드가 아닐 때만 퍼즐 FEN 로드
+    try {
+      var params = new URLSearchParams(location.search);
+      if (params.get('practice') === 'endgame') return;
+    } catch (e) { /* ignore */ }
+    tryLoadPuzzleFen();
+  };
+})();
+</script>
 </body>
 
 </html>
