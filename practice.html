@@ -1221,7 +1221,10 @@ function loadPositionFromInput() {
     }
   };
 
-  document.addEventListener('DOMContentLoaded', attachEditorBoardEvents);
+  document.addEventListener('DOMContentLoaded', function() {
+    attachEditorBoardEvents();
+    buildPalette();
+  });
 })();
 </script>
 </body>
