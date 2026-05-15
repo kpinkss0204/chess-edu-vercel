@@ -4983,50 +4983,96 @@
   <!-- ===== Stockfish 수 평가 (로컬 분석) ===== -->
   <script>
     // ────────────────────────────────────────────────────────────────
-    // records.html 동일 방식: WinPercent 기반 Delta 분류
-    // cpToWinPercent → classifyMoveByDelta → annotation 적용
+    // records.html 동일 방식: 리체스 scalachess / lila 공식 그대로 이식
+    // lichessWinningChancesWhitePov → lichessCpAdviceJudgment → annotation
     // ────────────────────────────────────────────────────────────────
 
     const SF_ANA_DEPTH = 18;
 
-    /** cp → WinPercent (0–100%). 공식: 1 / (1 + 10^(-(cp-10)/400)) */
-    function cpToWinPercent(cp) {
-      const adjustedCp = cp - 10;
-      return (1 / (1 + Math.pow(10, -adjustedCp / 400))) * 100;
+    // ── 리체스 공식 상수 (records.html 과 동일) ──────────────────────
+    const _LICHESS_WC_MULT = -0.00368208;
+    const _LICHESS_CP_CEIL = 1000;
+
+    /** cp(백 기준) → ±1000 클램프 (메이트 ±9900 → ±1000) */
+    function _lichessCeiledWhiteCp(cp) {
+      let v = Number(cp) || 0;
+      if (Math.abs(v) >= 9000) v = Math.sign(v) * _LICHESS_CP_CEIL;
+      return Math.max(-_LICHESS_CP_CEIL, Math.min(_LICHESS_CP_CEIL, v));
+    }
+
+    /** cp(백 기준) → winning chances [-1, 1] */
+    function _lichessWinningChancesWhitePov(cpWhite) {
+      const x = _lichessCeiledWhiteCp(cpWhite);
+      const raw = 2 / (1 + Math.exp(_LICHESS_WC_MULT * x)) - 1;
+      return Math.max(-1, Math.min(1, raw));
+    }
+
+    /** cp(백 기준) → Win% [0, 100] */
+    function _lichessWinPercentFromWhitePov(cpWhite) {
+      return 50 + 50 * _lichessWinningChancesWhitePov(cpWhite);
+    }
+
+    /** 둔 쪽 관점 Win% */
+    function _lichessWinPercentForMover(cpWhite, mover) {
+      const w = _lichessWinPercentFromWhitePov(cpWhite);
+      return mover === 'w' ? w : (100 - w);
     }
 
     /**
-     * 수 정확도 (Lichess 공식, 0–100).
-     * winPctBefore/After: 0–100 스케일.
+     * 리체스 lila.tree.CpAdvice 와 동일한 수 판정.
+     * 임계값: winningChances Δ 기준 0.1/0.2/0.3
+     * 반환: 'inaccuracy' | 'mistake' | 'blunder' | null
      */
-    function sfMoveAccuracy(winPctBefore, winPctAfter) {
-      const drop = winPctBefore - winPctAfter;
-      const acc = 103.1668 * Math.exp(-0.04354 * Math.max(0, drop)) - 3.1669;
-      return Math.max(0, Math.min(100, acc));
+    function _lichessCpAdviceJudgment(cpBeforeWhite, cpAfterWhite, mover) {
+      const wcPrev = _lichessWinningChancesWhitePov(cpBeforeWhite);
+      const wcCur  = _lichessWinningChancesWhitePov(cpAfterWhite);
+      const dRaw   = wcCur - wcPrev;
+      const delta  = mover === 'w' ? -dRaw : dRaw;
+      const tiers  = [[0.3, 'blunder'], [0.2, 'mistake'], [0.1, 'inaccuracy']];
+      for (let ti = 0; ti < tiers.length; ti++) {
+        if (tiers[ti][0] <= delta) return tiers[ti][1];
+      }
+      return null;
     }
 
     /**
-     * 승률 하락폭(Delta) 기반 수 분류.
-     * winPctBefore, winPctAfter: 0–100 스케일.
-     * 반환: 'blunder' | 'mistake' | 'inaccuracy' | 'good'
+     * 한 수의 Accuracy% (리체스 AccuracyPercent.fromWinPercents, 둔 쪽 기준 Win%).
+     * records.html 의 lichessMoveAccuracyPercent 와 동일.
      */
-    function classifyMoveByDelta(winPctBefore, winPctAfter) {
-      const delta = winPctBefore - winPctAfter;
-      if (delta >= 30) return 'blunder';
-      if (delta >= 20) return 'mistake';
-      if (delta >= 10) return 'inaccuracy';
-      return 'good';
+    function _lichessMoveAccuracyPercent(wpBefore, wpAfter) {
+      if (wpAfter >= wpBefore) return 100;
+      const winDiff = wpBefore - wpAfter;
+      const raw = 103.1668100711649 * Math.exp(-0.04354415386753951 * winDiff) + -3.166924740191411;
+      return Math.max(0, Math.min(100, raw + 1));
     }
 
     /**
-     * game.history에서 FEN 배열 추출.
+     * 게임 정확도: 내 수만 조화평균.
+     * evalRows: [{cpw}, …] (fens[0] 포함, fens 배열과 같은 길이)
+     */
+    function _gameAccuracyFromEvals(evalRows, myColor) {
+      let sumReciprocal = 0, count = 0;
+      for (let ply = 1; ply < evalRows.length; ply++) {
+        const isWhiteMove = ply % 2 === 1;
+        const mover = isWhiteMove ? 'w' : 'b';
+        const isMe = (isWhiteMove && myColor === 'w') || (!isWhiteMove && myColor === 'b');
+        if (!isMe) continue;
+        const cpB = evalRows[ply - 1].cpw, cpA = evalRows[ply].cpw;
+        const wpB = _lichessWinPercentForMover(cpB, mover);
+        const wpA = _lichessWinPercentForMover(cpA, mover);
+        const acc = _lichessMoveAccuracyPercent(wpB, wpA);
+        if (acc > 0) { sumReciprocal += 1 / acc; count++; }
+      }
+      return count === 0 ? 0 : Math.round(count / sumReciprocal);
+    }
+
+    /**
+     * game.history 에서 FEN 배열 추출.
      * fens[0] = 초기국면, fens[i+1] = i번째 수 이후 국면.
-     * history[i].fenBefore / fenAfter 활용.
      */
     function getFenArrayFromHistory() {
       if (!game || !game.history || !game.history.length) return [];
       const fens = [];
-      // 초기 FEN
       const firstFen = game.history[0] && game.history[0].fenBefore
         ? game.history[0].fenBefore
         : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -5090,13 +5136,13 @@
           setStatus(
             `<span style="color:var(--text-secondary)">⏳ 분석 중… (${si + 1} / ${total})</span>` +
             `<div style="margin-top:6px;height:4px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden;">` +
-            `<div style="height:100%;width:${Math.round(si/total*100)}%;background:var(--accent-green-bright);border-radius:2px;transition:width .3s;"></div></div>`
+            `<div style="height:100%;width:${Math.round(si / total * 100)}%;background:var(--accent-green-bright);border-radius:2px;transition:width .3s;"></div></div>`
           );
           const fen = fens[si];
           let cpw = 0;
           if (fen) {
             try {
-              const aw = await analyzeWithWorker(workerObj, fen, SF_ANA_DEPTH, 800, 1);
+              const aw = await analyzeWithWorker(workerObj, fen, SF_ANA_DEPTH, 900, 1);
               if (aw && aw.pvs && aw.pvs[1]) {
                 if (aw.pvs[1].cpFromWhite != null) cpw = aw.pvs[1].cpFromWhite;
               }
@@ -5108,29 +5154,26 @@
         try { workerRaw.terminate(); } catch (e) { /* ignore */ }
       }
 
-      // ── 수별 분류 적용 ──
-      const JUDGMENT_MAP = { blunder: 'blunder', mistake: 'mistake', inaccuracy: 'inaccuracy', good: null };
+      // ── 게임 정확도 (records.html 의 gameAccuracyFromEvals 와 동일 방식) ──
+      const myAccuracy = _gameAccuracyFromEvals(evalRows, myColor);
+
+      // ── 수별 분류 및 annotation 적용 ──
       let myBlunders = 0, myMistakes = 0, myInaccuracies = 0;
       let oppBlunders = 0, oppMistakes = 0, oppInaccuracies = 0;
-      let accuracyRecipSum = 0, accuracyCount = 0;
 
       for (let i = 0; i < game.history.length; i++) {
         if (i + 1 >= evalRows.length) break;
         const mover = game.history[i].turn; // 'w' or 'b'
-        const isWhiteMove = mover === 'w';
         const isMe = mover === myColor;
 
         const cpB = evalRows[i].cpw;
         const cpA = evalRows[i + 1].cpw;
-        const wpB = isWhiteMove ? cpToWinPercent(cpB) : cpToWinPercent(-cpB);
-        const wpA = isWhiteMove ? cpToWinPercent(cpA) : cpToWinPercent(-cpA);
 
-        const cls = classifyMoveByDelta(wpB, wpA);
-        const acc = sfMoveAccuracy(wpB, wpA);
-        if (isMe && acc > 0) { accuracyRecipSum += 1 / acc; accuracyCount++; }
+        // records.html 의 lichessCpAdviceJudgment 와 동일
+        const cls = _lichessCpAdviceJudgment(cpB, cpA, mover);
 
         // annotation 적용 (blunder/mistake/inaccuracy 만)
-        game.history[i].annotation = JUDGMENT_MAP[cls] || null;
+        game.history[i].annotation = cls || null;
 
         if (isMe) {
           if (cls === 'blunder') myBlunders++;
@@ -5142,8 +5185,6 @@
           else if (cls === 'inaccuracy') oppInaccuracies++;
         }
       }
-
-      const myAccuracy = accuracyCount > 0 ? Math.round(accuracyCount / accuracyRecipSum) : 0;
 
       // 렌더링 업데이트
       if (typeof game.renderMoveList === 'function') game.renderMoveList();
