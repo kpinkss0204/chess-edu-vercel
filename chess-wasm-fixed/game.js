@@ -28,6 +28,39 @@ class ChessGame {
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
+
+    // ── 퍼즐 "분석으로 보기": ?fen= 파라미터가 있으면 생성자 안에서 바로 로드 ──
+    // 생성자 내부에서 처리해야 이후 어떤 코드도 덮어씌울 수 없음
+    (function (self) {
+      try {
+        if (new URLSearchParams(location.search).get('practice') === 'endgame') return;
+        var paramFen = new URLSearchParams(location.search).get('fen');
+        if (!paramFen || !paramFen.trim()) {
+          var stored = localStorage.getItem('chess_puzzle_analyze_fen');
+          if (stored && stored.trim()) {
+            paramFen = stored.trim();
+            localStorage.removeItem('chess_puzzle_analyze_fen');
+          }
+        }
+        if (!paramFen || !paramFen.trim()) return;
+        var fen = paramFen.trim();
+        var fp = fen.split(/\s+/);
+        if (!fp[0]) return;
+        self.board = parseFenBoard(fp[0]) || self.board;
+        self.turn = fp[1] || 'w';
+        self.castling = parseFenCastling(fp[2] || '-');
+        self.enPassant = parseFenEP(fp[3] || '-');
+        self.halfMove = parseInt(fp[4] || '0', 10);
+        self.fullMove = parseInt(fp[5] || '1', 10);
+        self.renderBoard();
+        self.renderMoveList();
+        self.updateStatus();
+        console.log('[puzzle\u2192analysis] 생성자에서 FEN 로드:', fen);
+        // 엔진은 아직 준비 안 됐으므로 analyzePosition은 엔진 완료 후 autoAnalyze로 실행됨
+      } catch (e) {
+        console.warn('[puzzle\u2192analysis] 생성자 FEN 로드 실패:', e);
+      }
+    })(this);
   }
 
   reset() {
@@ -2146,56 +2179,3 @@ function updateEvalBarFromCp(cpFromWhite, evalStr) {
     whiteLabel.style.opacity = '0';
   }
 }
-
-// ── 퍼즐 "분석으로 보기": ?fen= 파라미터를 game 생성 직후 자동 로드
-// game.js가 로드되는 시점에 game 인스턴스는 아직 없으므로
-// DOMContentLoaded + 짧은 폴링으로 game 준비를 기다림
-(function () {
-  var STORAGE_KEY = 'chess_puzzle_analyze_fen';
-  var _applied = false;
-
-  function getFen() {
-    try {
-      var p = new URLSearchParams(location.search).get('fen');
-      if (p && p.trim()) return p.trim();
-    } catch (e) {}
-    try {
-      var s = localStorage.getItem(STORAGE_KEY);
-      if (s && s.trim()) {
-        localStorage.removeItem(STORAGE_KEY);
-        return s.trim();
-      }
-    } catch (e) {}
-    return null;
-  }
-
-  // ?practice=endgame 이면 스킵
-  function isPracticeMode() {
-    try { return new URLSearchParams(location.search).get('practice') === 'endgame'; } catch (e) { return false; }
-  }
-
-  function applyFen() {
-    if (_applied) return true;
-    if (isPracticeMode()) { _applied = true; return true; }
-    var fen = getFen();
-    if (!fen) { _applied = true; return true; } // FEN 없음
-    if (!window.game || typeof game.loadFromFen !== 'function') return false; // 아직 미준비
-    try {
-      game.loadFromFen(fen);
-      _applied = true;
-      console.log('[puzzle→analysis] game.js 자동 FEN 로드:', fen);
-      if (typeof showToast === 'function') showToast('퍼즐 포지션을 불러왔습니다');
-      return true;
-    } catch (e) {
-      console.warn('[puzzle→analysis] loadFromFen 실패:', e);
-      return false;
-    }
-  }
-
-  // game 인스턴스가 언제 만들어지는지 모르므로 폴링
-  var _count = 0;
-  var _tid = setInterval(function () {
-    _count++;
-    if (applyFen() || _count > 80) clearInterval(_tid); // 최대 20초
-  }, 250);
-})();
