@@ -328,9 +328,11 @@ async function initEngine() {
       sessionStorage.setItem(STOCKFISH_OVERLAY_SESSION_KEY, '1');
     } catch (e) { /* ignore */ }
 
-    if (autoAnalyze) analyzePosition();
+    // 퍼즐 FEN / 엔드게임 연습 / 연습 페이지 초기화를 autoAnalyze보다 먼저 실행해야
+    // 올바른 포지션이 로드된 뒤 분석이 시작됨 (순서 중요)
     if (typeof tryInitEndgamePractice === 'function') tryInitEndgamePractice();
     if (typeof tryInitPracticePage === 'function') tryInitPracticePage();
+    if (autoAnalyze) analyzePosition();
 
   } catch (err) {
     console.error('[Engine] 초기화 실패:', err);

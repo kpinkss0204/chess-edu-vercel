@@ -2146,3 +2146,56 @@ function updateEvalBarFromCp(cpFromWhite, evalStr) {
     whiteLabel.style.opacity = '0';
   }
 }
+
+// ── 퍼즐 "분석으로 보기": ?fen= 파라미터를 game 생성 직후 자동 로드
+// game.js가 로드되는 시점에 game 인스턴스는 아직 없으므로
+// DOMContentLoaded + 짧은 폴링으로 game 준비를 기다림
+(function () {
+  var STORAGE_KEY = 'chess_puzzle_analyze_fen';
+  var _applied = false;
+
+  function getFen() {
+    try {
+      var p = new URLSearchParams(location.search).get('fen');
+      if (p && p.trim()) return p.trim();
+    } catch (e) {}
+    try {
+      var s = localStorage.getItem(STORAGE_KEY);
+      if (s && s.trim()) {
+        localStorage.removeItem(STORAGE_KEY);
+        return s.trim();
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // ?practice=endgame 이면 스킵
+  function isPracticeMode() {
+    try { return new URLSearchParams(location.search).get('practice') === 'endgame'; } catch (e) { return false; }
+  }
+
+  function applyFen() {
+    if (_applied) return true;
+    if (isPracticeMode()) { _applied = true; return true; }
+    var fen = getFen();
+    if (!fen) { _applied = true; return true; } // FEN 없음
+    if (!window.game || typeof game.loadFromFen !== 'function') return false; // 아직 미준비
+    try {
+      game.loadFromFen(fen);
+      _applied = true;
+      console.log('[puzzle→analysis] game.js 자동 FEN 로드:', fen);
+      if (typeof showToast === 'function') showToast('퍼즐 포지션을 불러왔습니다');
+      return true;
+    } catch (e) {
+      console.warn('[puzzle→analysis] loadFromFen 실패:', e);
+      return false;
+    }
+  }
+
+  // game 인스턴스가 언제 만들어지는지 모르므로 폴링
+  var _count = 0;
+  var _tid = setInterval(function () {
+    _count++;
+    if (applyFen() || _count > 80) clearInterval(_tid); // 최대 20초
+  }, 250);
+})();
