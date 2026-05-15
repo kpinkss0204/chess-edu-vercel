@@ -28,39 +28,44 @@ class ChessGame {
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
+  }
 
-    // ── 퍼즐 "분석으로 보기": ?fen= 파라미터가 있으면 생성자 안에서 바로 로드 ──
-    // 생성자 내부에서 처리해야 이후 어떤 코드도 덮어씌울 수 없음
-    (function (self) {
-      try {
-        if (new URLSearchParams(location.search).get('practice') === 'endgame') return;
-        var paramFen = new URLSearchParams(location.search).get('fen');
-        if (!paramFen || !paramFen.trim()) {
-          var stored = localStorage.getItem('chess_puzzle_analyze_fen');
-          if (stored && stored.trim()) {
-            paramFen = stored.trim();
-            localStorage.removeItem('chess_puzzle_analyze_fen');
-          }
+  /**
+   * 퍼즐 "분석으로 보기": URL ?fen= 또는 localStorage에서 FEN을 로드
+   */
+  loadFromUrl() {
+    try {
+      if (new URLSearchParams(location.search).get('practice') === 'endgame') return;
+
+      var paramFen = new URLSearchParams(location.search).get('fen');
+      if (!paramFen || !paramFen.trim()) {
+        var stored = localStorage.getItem('chess_puzzle_analyze_fen');
+        if (stored && stored.trim()) {
+          paramFen = stored.trim();
+          localStorage.removeItem('chess_puzzle_analyze_fen');
         }
-        if (!paramFen || !paramFen.trim()) return;
-        var fen = paramFen.trim();
-        var fp = fen.split(/\s+/);
-        if (!fp[0]) return;
-        self.board = parseFenBoard(fp[0]) || self.board;
-        self.turn = fp[1] || 'w';
-        self.castling = parseFenCastling(fp[2] || '-');
-        self.enPassant = parseFenEP(fp[3] || '-');
-        self.halfMove = parseInt(fp[4] || '0', 10);
-        self.fullMove = parseInt(fp[5] || '1', 10);
-        self.renderBoard();
-        self.renderMoveList();
-        self.updateStatus();
-        console.log('[puzzle\u2192analysis] 생성자에서 FEN 로드:', fen);
-        // 엔진은 아직 준비 안 됐으므로 analyzePosition은 엔진 완료 후 autoAnalyze로 실행됨
-      } catch (e) {
-        console.warn('[puzzle\u2192analysis] 생성자 FEN 로드 실패:', e);
       }
-    })(this);
+
+      if (!paramFen || !paramFen.trim()) {
+        console.log('[analysis] URL 또는 localStorage에 FEN이 없습니다.');
+        return;
+      }
+
+      var fen = paramFen.trim();
+      console.log('[analysis] FEN 로드 시도:', fen);
+      
+      const success = this.loadFromFen(fen);
+      if (success) {
+        this.renderBoard();
+        this.renderMoveList();
+        this.updateStatus();
+        console.log('[analysis] FEN 로드 성공');
+      } else {
+        console.warn('[analysis] FEN 로드 실패 (파싱 오류)');
+      }
+    } catch (e) {
+      console.error('[analysis] FEN 로드 중 예외 발생:', e);
+    }
   }
 
   reset() {

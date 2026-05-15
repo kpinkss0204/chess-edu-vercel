@@ -3,6 +3,7 @@ let game;
 
 function init() {
   game = new ChessGame();
+  game.loadFromUrl();
   setupKeyboard();
   initEngine();
   loadApiKey();
