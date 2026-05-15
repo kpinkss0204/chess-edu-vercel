@@ -117,118 +117,14 @@
     if (rb) rb.textContent = humanColor === 'b' ? '연습' : 'SF18';
   }
 
-  function syncModeButtons(phase) {
-    document.querySelectorAll('[data-practice-mode]').forEach(function (btn) {
-      btn.classList.toggle('active', btn.getAttribute('data-practice-mode') === phase);
-    });
-  }
-
-  function syncColorButtons(hc) {
-    document.querySelectorAll('[data-human-color]').forEach(function (btn) {
-      btn.classList.toggle('active', btn.getAttribute('data-human-color') === hc);
-    });
-  }
-
-  function currentPhaseFromUI() {
-    var el = document.querySelector('[data-practice-mode].active');
-    if (el) return el.getAttribute('data-practice-mode');
-    return readPhaseFromUrl();
-  }
-
-  function currentHumanColorFromUI() {
-    var el = document.querySelector('[data-human-color].active');
-    if (el) return el.getAttribute('data-human-color');
-    return readStoredColor();
-  }
-
-  function resetHintPanel() {
-    var panel = document.getElementById('hint-panel');
-    var btn = document.getElementById('hint-toggle-btn');
-    if (panel) panel.style.display = 'none';
-    if (btn) { btn.classList.remove('active'); btn.title = '힌트 보기'; }
-  }
-
-  function activateEndgameTopic(topicKey, humanColor) {
-    var t = ENDGAME_TOPICS[topicKey];
-    if (!t || typeof game === 'undefined' || !game) return;
-
-    window._enginePracticeThinking = false;
-    window._enginePracticeMode = {
-      myColor: humanColor,
-      title: t.title,
-      phase: 'endgame',
-      topicKey: topicKey,
-    };
-
-    game.loadFromFen(t.fen);
-    applyHumanFlip(humanColor);
-    setPlayerLabels(humanColor);
-    resetHintPanel();
-
-    document.title = '연습 · ' + t.title + ' — Stockfish';
-
-    var el = document.getElementById('practice-phase-label');
-    if (el) el.textContent = t.title;
-
-    replacePracticeUrl('endgame', topicKey);
-
-    if (typeof analyzePosition === 'function') analyzePosition(true);
-    scheduleEngineTurn();
-  }
-
-  function activatePractice(phaseKey, humanColor) {
-    var cfg = PHASE[phaseKey];
-    if (!cfg || typeof game === 'undefined' || !game) return;
-
-    window._enginePracticeThinking = false;
-    window._enginePracticeMode = {
-      myColor: humanColor,
-      title: cfg.title,
-      phase: phaseKey,
-      topicKey: null,
-    };
-
-    if (cfg.useReset) {
-      game.reset();
-    } else if (cfg.fen) {
-      game.loadFromFen(cfg.fen);
-    }
-
-    applyHumanFlip(humanColor);
-    setPlayerLabels(humanColor);
-    resetHintPanel();
-
-    document.title = '연습 · ' + cfg.title + ' — Stockfish';
-
-    var el = document.getElementById('practice-phase-label');
-    if (el) el.textContent = cfg.title;
-
-    if (typeof analyzePosition === 'function') analyzePosition(true);
-    scheduleEngineTurn();
-  }
-
   window.tryInitPracticePage = function () {
     if (!document.body || !document.body.classList.contains('practice-page')) return;
-
-    var topic = readTopicFromUrl();
-    if (topic) {
-      var t = ENDGAME_TOPICS[topic];
-      var hc = t.myColor;
-      try {
-        localStorage.setItem('chess_practice_human_color', hc);
-      } catch (e) { /* ignore */ }
-      syncModeButtons('endgame');
-      syncColorButtons(hc);
-      activateEndgameTopic(topic, hc);
-      return;
+    
+    // 기본 초기화
+    if (typeof game !== 'undefined' && game) {
+        game.reset();
+        if (typeof analyzePosition === 'function') analyzePosition(true);
     }
-
-    var phase = currentPhaseFromUI();
-    if (!PHASE[phase]) phase = 'opening';
-    var hc = currentHumanColorFromUI();
-    syncModeButtons(phase);
-    syncColorButtons(hc);
-    activatePractice(phase, hc);
   };
 
   window.practiceNewGame = function () {
@@ -238,41 +134,10 @@
   document.addEventListener('DOMContentLoaded', function () {
     if (!document.body.classList.contains('practice-page')) return;
 
-    document.querySelectorAll('[data-practice-mode]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var phase = btn.getAttribute('data-practice-mode');
-        if (!PHASE[phase]) return;
-        syncModeButtons(phase);
-        replacePracticeUrl(phase, null);
-        var hc = currentHumanColorFromUI();
-        activatePractice(phase, hc);
-      });
-    });
-
-    document.querySelectorAll('[data-human-color]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var hc = btn.getAttribute('data-human-color');
-        try {
-          localStorage.setItem('chess_practice_human_color', hc);
-        } catch (e) { /* ignore */ }
-        syncColorButtons(hc);
-        var topic = readTopicFromUrl();
-        if (!topic && window._enginePracticeMode && window._enginePracticeMode.topicKey) {
-          topic = window._enginePracticeMode.topicKey;
-        }
-        if (topic && ENDGAME_TOPICS[topic]) {
-          activateEndgameTopic(topic, hc);
-        } else {
-          var phase = currentPhaseFromUI();
-          if (!PHASE[phase]) phase = 'opening';
-          activatePractice(phase, hc);
-        }
-      });
-    });
-
     var newGame = document.getElementById('practice-new-game');
     if (newGame) newGame.addEventListener('click', function () { window.practiceNewGame(); });
   });
+
   /** ── 힌트 패널 토글 ── */
   window.toggleHintPanel = function () {
     var panel = document.getElementById('hint-panel');

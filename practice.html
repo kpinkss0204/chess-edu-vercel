@@ -732,37 +732,43 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 
   <div id="right-panel">
     <div class="practice-panel-header">
-      <h2>엔진 대전 연습</h2>
-      <p>오프닝·미들·엔드게임 구간을 고르고, 백/흑을 선택하세요. 상대는 매 수 <strong>Stockfish 최선수</strong>입니다.</p>
-      <div id="practice-phase-label">오프닝</div>
+      <h2>포지션 편집</h2>
+      <p>FEN/PGN을 입력하거나 기물을 배치하여 원하는 포지션을 만드세요.</p>
 
-      <div class="practice-seg" id="practice-mode-seg">
-        <button type="button" class="practice-mode-opening" data-practice-mode="opening">오프닝</button>
-        <button type="button" class="practice-mode-middlegame" data-practice-mode="middlegame">미들게임</button>
-        <button type="button" class="practice-mode-endgame" data-practice-mode="endgame">엔드게임</button>
+      <div style="margin-top: 10px;">
+        <input type="text" id="fen-input" placeholder="FEN 또는 PGN 입력" style="width:100%; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-primary); font-size: 12px; margin-bottom: 6px;">
+        <button type="button" class="btn-newgame" id="load-pos-btn" onclick="loadPositionFromInput()">포지션 불러오기</button>
       </div>
-      <div class="practice-seg">
-        <button type="button" data-human-color="w">나 · 백</button>
-        <button type="button" data-human-color="b">나 · 흑</button>
-      </div>
-      <button type="button" class="btn-newgame" id="practice-new-game">이 단계로 새 게임</button>
+
+<script>
+function loadPositionFromInput() {
+  const input = document.getElementById('fen-input').value.trim();
+  if (!input) return;
+  // 간단하게 FEN 로드 시도
+  if (typeof game !== 'undefined' && game && typeof game.loadFromFen === 'function') {
+    const success = game.loadFromFen(input);
+    if (!success) {
+      alert('유효하지 않은 FEN입니다.');
+    }
+  }
+}
+</script>
 
       <!-- 기물 편집 패널 -->
-      <div id="piece-editor-bar">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <span class="editor-label">✏️ 편집 모드</span>
+      <div id="piece-editor-bar" style="display:block; margin-top: 15px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap; margin-bottom: 8px;">
+          <span class="editor-label" style="margin-bottom:0;">✏️ 기물 편집</span>
           <span style="font-size:10px;color:var(--text-muted);">클릭: 배치 | 우클릭: 삭제</span>
-          <button class="editor-done-btn" onclick="togglePieceEditor()">✓ 완료</button>
         </div>
         <div>
-          <div class="editor-label" style="margin-bottom:4px;">백 기물</div>
+          <div class="editor-label" style="margin-bottom:4px; font-size: 9px;">백 기물</div>
           <div class="editor-piece-palette" id="palette-white"></div>
         </div>
-        <div>
-          <div class="editor-label" style="margin-bottom:4px;">흑 기물</div>
+        <div style="margin-top: 8px;">
+          <div class="editor-label" style="margin-bottom:4px; font-size: 9px;">흑 기물</div>
           <div class="editor-piece-palette" id="palette-black"></div>
         </div>
-        <div class="editor-turn-row">
+        <div class="editor-turn-row" style="margin-top: 10px;">
           <span>차례:</span>
           <button class="editor-turn-btn" id="turn-btn-w" onclick="setEditorTurn('w')">⬜ 백</button>
           <button class="editor-turn-btn" id="turn-btn-b" onclick="setEditorTurn('b')">⬛ 흑</button>
