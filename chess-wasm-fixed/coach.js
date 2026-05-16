@@ -654,10 +654,6 @@ async function callCommentaryAPI(ctx) {
   return callGroqAPIWithSystem(SYSTEM, prompt, 900);
 }
 
-  const prompt = buildCommentaryPrompt(ctx);
-  return callGroqAPIWithSystem(SYSTEM, prompt, 900);
-}
-
 // 공통 Groq 호출 (system 없이 — 수동 질문용)
 async function callGroqAPI(userContent) {
   const SYSTEM = `You are a Korean-language chess coach in the style of "ChessInside" YouTube channel.
