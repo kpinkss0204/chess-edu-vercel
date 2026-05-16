@@ -552,7 +552,6 @@ function handleMainWorkerMessage(e) {
       window._enginePlayAfterStop = null;
       engineSearching = false;
       next();
-      return;
     }
     if (typeof window._enginePlayResolve === 'function') {
       clearTimeout(renderTimer);
@@ -566,78 +565,71 @@ function handleMainWorkerMessage(e) {
       if (document.getElementById('engine-dot')) {
         document.getElementById('engine-dot').className = 'engine-dot ready';
       }
-      return;
     }
 
     clearTimeout(renderTimer);
     engineSearching = false;
     // 이 bestmove가 현재 분석에 속하지 않으면 무시
-    if (cycleId !== currentAnalysisId) return;
+    if (cycleId === currentAnalysisId) {
+      document.getElementById('engine-dot').className = 'engine-dot ready';
 
-    document.getElementById('engine-dot').className = 'engine-dot ready';
-
-    // 미처 flush 안 된 마지막 사이클
-    if (Object.keys(cycleStore).length && cycleSnap) {
-      flushCycleToDisplay();
-    }
-
-    const b = pvData[1];
-    if (!b) return;
-
-    document.getElementById('depth-info').textContent =
-      `✓ d${b.depth}` +
-      (b.nps    ? ` · ${(b.nps/1e6).toFixed(1)}Mnps` : '') +
-      (b.time_ms? ` · ${(b.time_ms/1000).toFixed(1)}s` : '');
-    document.getElementById('eval-score').textContent = b.eval;
-    updateEvalBarFromCp(b.cpFromWhite, b.eval);
-    renderTopMoves();
-
-    // evalCache 저장
-    const savedFen = lastSentFen || pendingFen;
-    if (savedFen && b) {
-      // 메이트 수순 정보 추출 (양수: 현재 플레이어가 메이트 가능, 음수: 상대가 메이트 가능)
-      // b는 현재 플레이어 기준 1순위 PV
-      let mateIn = null;
-      if (b.score_type === 'mate') {
-        // score_val 양수 = 현재 플레이어가 N수 내 메이트
-        // score_val 음수 = 현재 플레이어가 N수 내 메이트당함
-        mateIn = b.score_val; // 그대로 저장 (부호 포함)
-      } else if (Math.abs(b.cpFromWhite) >= 9000) {
-        // cp가 ±9000 이상이면 메이트로 간주 (score_type 누락 방어)
-        const turn = savedFen.split(' ')[1] || 'w';
-        mateIn = b.cpFromWhite > 0
-          ? (turn === 'w' ? 99 : -99)
-          : (turn === 'w' ? -99 : 99);
+      // 미처 flush 안 된 마지막 사이클
+      if (Object.keys(cycleStore).length && cycleSnap) {
+        flushCycleToDisplay();
       }
-      const topAlts = {
-        best1cp: pvData[1] ? pvData[1].cpFromWhite : null,
-        best2cp: pvData[2] ? pvData[2].cpFromWhite : null,
-      };
-      let legalMoveCount = null;
-      try {
-        const fp = savedFen.split(' ');
-        if (fp.length >= 2) {
-          const tb = parseFenBoard(fp[0]);
-          const tt = fp[1];
-          const tc = parseFenCastling(fp[2] || '-');
-          const te = parseFenEP(fp[3] || '-');
-          if (tb) legalMoveCount = getAllLegalMoves(tb, tt, tc, te).length;
+
+      const b = pvData[1];
+      if (b) {
+        document.getElementById('depth-info').textContent =
+          `✓ d${b.depth}` +
+          (b.nps    ? ` · ${(b.nps/1e6).toFixed(1)}Mnps` : '') +
+          (b.time_ms? ` · ${(b.time_ms/1000).toFixed(1)}s` : '');
+        document.getElementById('eval-score').textContent = b.eval;
+        updateEvalBarFromCp(b.cpFromWhite, b.eval);
+        renderTopMoves();
+
+        // evalCache 저장
+        const savedFen = lastSentFen || pendingFen;
+        if (savedFen && b) {
+          // 메이트 수순 정보 추출
+          let mateIn = null;
+          if (b.score_type === 'mate') {
+            mateIn = b.score_val;
+          } else if (Math.abs(b.cpFromWhite) >= 9000) {
+            const turn = savedFen.split(' ')[1] || 'w';
+            mateIn = b.cpFromWhite > 0 ? (turn === 'w' ? 99 : -99) : (turn === 'w' ? -99 : 99);
+          }
+          const topAlts = {
+            best1cp: pvData[1] ? pvData[1].cpFromWhite : null,
+            best2cp: pvData[2] ? pvData[2].cpFromWhite : null,
+          };
+          let legalMoveCount = null;
+          try {
+            const fp = savedFen.split(' ');
+            if (fp.length >= 2) {
+              const tb = parseFenBoard(fp[0]);
+              const tt = fp[1];
+              const tc = parseFenCastling(fp[2] || '-');
+              const te = parseFenEP(fp[3] || '-');
+              if (tb) legalMoveCount = getAllLegalMoves(tb, tt, tc, te).length;
+            }
+          } catch(e) {}
+          const slimPvs = {};
+          for (const [k, v] of Object.entries(rawPvStore)) {
+            slimPvs[k] = {
+              depth: v.depth, score_type: v.score_type, score_val: v.score_val,
+              pv: (v.pv || []).slice(0, 6), multipv: v.multipv,
+            };
+          }
+          evalCache[normFen(savedFen)] = {
+            cp: b.cpFromWhite, depth: b.depth, topAlts, legalMoveCount,
+            mateIn, pvs: slimPvs, turn: pendingTurn,
+          };
+          updateMoveAnnotations();
         }
-      } catch(e) {}
-      // pvs 슬림화: nps/time_ms 제거, pv 수열 6수로 제한 (메모리 절감)
-      const slimPvs = {};
-      for (const [k, v] of Object.entries(rawPvStore)) {
-        slimPvs[k] = {
-          depth: v.depth, score_type: v.score_type, score_val: v.score_val,
-          pv: (v.pv || []).slice(0, 6), multipv: v.multipv,
-        };
       }
-      evalCache[normFen(savedFen)] = {
-        cp: b.cpFromWhite, depth: b.depth, topAlts, legalMoveCount,
-        mateIn, pvs: slimPvs, turn: pendingTurn,
-      };
-      updateMoveAnnotations();
     }
+
     // 사이클 완전 초기화
     rawPvStore = {};
     cycleStore = {};
@@ -649,6 +641,10 @@ function handleMainWorkerMessage(e) {
     if (pendingNextFen) {
       const p = pendingNextFen;
       pendingNextFen = null;
+      if (p.force) {
+        mainWorker.postMessage('ucinewgame');
+        mainWorker.postMessage('isready');
+      }
       _sendGoCommand(p.fen, p.myId, p.multiPV, p.movetime);
     }
   }
@@ -742,6 +738,19 @@ function analyzePosition(force) {
     game.halfMove, game.fullMove
   );
 
+  // 기물 수 체크 (Lite 엔진 한계 경고용)
+  if (force) {
+    let wCount=0, bCount=0;
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      let p = game.board[r][c];
+      if(p){ if(p[0]==='w') wCount++; else bCount++; }
+    }
+    console.log(`[analyzePosition] 기물 수 - 백: ${wCount}, 흑: ${bCount}`);
+    if (wCount > 16 || bCount > 16) {
+      console.warn('[analyzePosition] 주의: 한 사이드의 기물이 16개를 초과했습니다. Lite 버전 엔진에서는 평가치가 0.0으로 나올 수 있습니다.');
+    }
+  }
+
   console.log('[analyzePosition] FEN:', fen, 'force:', !!force);
 
   // 같은 FEN + 설정 변경 없음 + force 아님 → 스킵
@@ -803,11 +812,15 @@ function analyzePosition(force) {
 
     if (engineSearching) {
       console.log('[CMD] → stop (searching, queuing)');
-      pendingNextFen = { fen, myId, multiPV, movetime: analysisTime };
+      pendingNextFen = { fen, myId, multiPV, movetime: analysisTime, force };
       mainWorker.postMessage('stop');
     } else {
       // 대기 중 → 즉시 go 전송
       pendingNextFen = null;
+      if (force) {
+        mainWorker.postMessage('ucinewgame');
+        mainWorker.postMessage('isready');
+      }
       _sendGoCommand(fen, myId, multiPV, analysisTime);
     }
   }, 150);
