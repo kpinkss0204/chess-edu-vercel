@@ -712,19 +712,22 @@ async function callGroqAPIWithSystem(systemPrompt, userContent, maxTokens = 800)
 // ══════════════════════════════════════════════════════
 
 function sanitizeAnswer(text, ctx) {
-  if (!text) return text;
+  if (!text) return '';
   let out = String(text);
   out = out.replace(/<<\s*_?\d+\s*>>/g, '');
   out = out.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
-  if (out.length < 20) {
-    out = `**포지션 상황:** 현재 포지션을 분석 중입니다.\n**약점 분석:** 스톡피시 라인을 바탕으로 분석이 필요합니다.\n**최선수 분석:** 엔진 추천수를 확인해주세요.\n**이후 수순:** 다음 수순을 살펴보세요.`;
+  // 20자 미만인 경우에만 플레이스홀더 표시 (정말로 응답이 비어있거나 너무 짧을 때)
+  if (out.length < 5) {
+    return `**포지션 상황:** 현재 분석 결과가 비어 있습니다. 잠시 후 다시 시도해 주세요.\n**약점 분석:** 스톡피시 라인을 확인해 주세요.\n**최선수 분석:** 엔진 추천수를 참고하세요.\n**이후 수순:** 다음 진행을 살펴보세요.`;
   }
 
   return cleanKorean(out);
 }
 
 function formatCommentary(text) {
+  if (!text) return '<div class="threat-loading">해설을 생성할 수 없습니다.</div>';
+  
   const escaped = text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -733,6 +736,9 @@ function formatCommentary(text) {
     { key: '약점 분석',      icon: '⚠️', cls: 'section-weak'   },
     { key: '강점 분석',      icon: '💪', cls: 'section-strong' },
     { key: '위협 & 아이디어', icon: '⚡', cls: 'section-threat' },
+    { key: '아이디어',      icon: '💡', cls: 'section-threat' },
+    { key: '문제점',        icon: '⚠️', cls: 'section-weak'   },
+    { key: '해결책',        icon: '✅', cls: 'section-best'   },
     { key: '최선수 분석',    icon: '♟️', cls: 'section-best'   },
     { key: '이후 수순',      icon: '🔮', cls: 'section-plan'   },
   ];
@@ -740,15 +746,13 @@ function formatCommentary(text) {
   const SECTION_KEYS = SECTION_DEFS.map(s => s.key);
 
   // ── 개선된 섹션 파싱 ──────────────────────────────────────────────────────
-  // 전략: 모든 **헤더** 위치를 먼저 찾아 정렬한 뒤, 각 헤더 사이 본문만 추출.
-
-  // 1) 모든 알려진 헤더 위치 탐색
+  // ** 없이도 섹션 헤더를 인식하도록 정규식 강화
   const allHeaderPat = new RegExp(
-    '\\*\\*(' + SECTION_KEYS.map(k => k.replace(/&/g,'&amp;').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')[:\\s：]*\\*\\*',
+    '(?:\\*\\*|#|\\n|^)(' + SECTION_KEYS.map(k => k.replace(/&/g,'&amp;').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')[:\\s：]*(?:\\*\\*|)?',
     'g'
   );
 
-  const found = []; // { key, start, bodyStart }
+  const found = []; 
   let m;
   while ((m = allHeaderPat.exec(escaped)) !== null) {
     found.push({ key: m[1], start: m.index, bodyStart: m.index + m[0].length });
@@ -760,39 +764,33 @@ function formatCommentary(text) {
     const bodyEnd = fi + 1 < found.length ? found[fi + 1].start : escaped.length;
     let body = escaped.slice(bodyStart, bodyEnd).trim().replace(/^[:：\s]+/, '').trim();
 
-    // 본문 안에 평문으로 다른 섹션 이름이 붙어있으면 그 앞까지만 사용
-    const inlineHeaderPat = new RegExp(
-      '(?:^|\n)(' + SECTION_KEYS.map(k => k.replace(/&/g,'&amp;').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')(?:\s|$)',
-      'i'
-    );
-    const inlineMatch = body.match(inlineHeaderPat);
-    if (inlineMatch && inlineMatch.index > 0) {
-      body = body.slice(0, inlineMatch.index).trim();
-    }
-
+    // 중복 제거 및 클리닝
     if (body) parsed[key] = body;
   }
 
   if (Object.keys(parsed).length === 0) {
-    // 섹션 감지 실패 — 일반 텍스트로 표시
     return formatPlain(escaped);
   }
 
   let html = '<div class="commentary-wrapper">';
+  // 유니크한 섹션만 렌더링 (동의어 처리)
+  const renderedKeys = new Set();
   for (const def of SECTION_DEFS) {
     const body = parsed[def.key];
-    if (!body) continue;
+    if (!body || renderedKeys.has(def.key)) continue;
+    
     const formatted = body
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      // 체스 수 표기 강조
       .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?|[a-h][1-8])\b/g,
                m => m.length >= 2 ? `<span class="chess-move">${m}</span>` : m)
       .replace(/\n/g, '<br>');
+    
     html += `
       <div class="commentary-section ${def.cls}">
         <div class="commentary-label">${def.icon} ${def.key}</div>
         <div class="commentary-body">${formatted}</div>
       </div>`;
+    renderedKeys.add(def.key);
   }
   html += '</div>';
   return html;
@@ -979,51 +977,58 @@ function renderThreatPanel(text) {
     { key: '아이디어', cls: 'idea', icon: '💡', labelCls: 'threat-label-idea' },
     { key: '문제점',   cls: 'prob', icon: '⚠️', labelCls: 'threat-label-prob' },
     { key: '해결책',   cls: 'sol',  icon: '✅', labelCls: 'threat-label-sol'  },
+    // 동의어 처리
+    { key: '핵심 계획', cls: 'idea', icon: '💡', labelCls: 'threat-label-idea' },
+    { key: '최선책',   cls: 'sol',  icon: '✅', labelCls: 'threat-label-sol'  },
   ];
 
-  const parsed  = {};
-  const allKeys = ['아이디어', '문제점', '해결책'];
-  let remaining = text;
+  const SECTION_KEYS = SECTIONS.map(s => s.key);
+  const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  for (let ki = 0; ki < allKeys.length; ki++) {
-    const key     = allKeys[ki];
-    const nextKey = allKeys[ki + 1];
-    const keyPat  = new RegExp('\\*\\*' + key + '[:\\s：]*\\*\\*|\\*\\*' + key + '\\*\\*');
-    const startIdx = remaining.search(keyPat);
-    if (startIdx < 0) continue;
+  // 강화된 섹션 파싱 (포맷 유연성 확보)
+  const allHeaderPat = new RegExp(
+    '(?:\\*\\*|#|\\n|^)(' + SECTION_KEYS.map(k => k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')[:\\s：]*(?:\\*\\*|)?',
+    'g'
+  );
 
-    const headerMatch = remaining.slice(startIdx).match(keyPat);
-    const bodyFrom    = startIdx + headerMatch[0].length;
+  const found = []; 
+  let m;
+  while ((m = allHeaderPat.exec(escaped)) !== null) {
+    found.push({ key: m[1], start: m.index, bodyStart: m.index + m[0].length });
+  }
 
-    let bodyEnd = remaining.length;
-    if (nextKey) {
-      const nextPat = new RegExp('\\*\\*' + nextKey);
-      const nextIdx = remaining.slice(bodyFrom).search(nextPat);
-      if (nextIdx >= 0) bodyEnd = bodyFrom + nextIdx;
-    }
-    parsed[key] = remaining.slice(bodyFrom, bodyEnd).trim().replace(/^[:：\s]+/, '').trim();
+  const parsed = {};
+  for (let fi = 0; fi < found.length; fi++) {
+    const { key, bodyStart } = found[fi];
+    const bodyEnd = fi + 1 < found.length ? found[fi + 1].start : escaped.length;
+    let body = escaped.slice(bodyStart, bodyEnd).trim().replace(/^[:：\s]+/, '').trim();
+    if (body) parsed[key] = body;
   }
 
   if (Object.keys(parsed).length === 0) {
     el.innerHTML = `<div class="threat-section"><div class="threat-section-body">${
-      text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')
+      escaped.replace(/\n/g,'<br>')
     }</div></div>`;
     return;
   }
 
   let html = '';
+  const renderedBaseKeys = new Set();
   for (const s of SECTIONS) {
-    if (!parsed[s.key]) continue;
-    const body = parsed[s.key]
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const body = parsed[s.key];
+    if (!body || renderedBaseKeys.has(s.cls)) continue;
+
+    const formattedBody = body
       .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?|[a-h][1-8][+#]?)\b/g,
                (m) => m.length >= 2 ? '<span class="t-move">' + m + '</span>' : m)
       .replace(/\n/g,'<br>');
+    
     html += `
       <div class="threat-section">
         <div class="threat-section-label ${s.labelCls}">${s.icon} ${s.key}</div>
-        <div class="threat-section-body">${body}</div>
+        <div class="threat-section-body">${formattedBody}</div>
       </div>`;
+    renderedBaseKeys.add(s.cls);
   }
   el.innerHTML = html;
 }
