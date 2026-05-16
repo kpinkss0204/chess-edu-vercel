@@ -29,7 +29,10 @@ function loadApiKey() {
 function openCoach() {
   coachOpen = true;
   const panel = document.getElementById('coach-inline');
-  if (panel) panel.classList.add('visible');
+  if (panel) {
+    panel.style.display = 'flex';
+    setTimeout(() => panel.classList.add('visible'), 10);
+  }
   const btn = document.getElementById('coach-open-btn');
   if (btn) btn.classList.add('active');
   // 보드 왼쪽 정렬로 전환
@@ -42,7 +45,10 @@ function openCoach() {
 function closeCoach() {
   coachOpen = false;
   const panel = document.getElementById('coach-inline');
-  if (panel) panel.classList.remove('visible');
+  if (panel) {
+    panel.classList.remove('visible');
+    setTimeout(() => { if (!coachOpen) panel.style.display = 'none'; }, 300);
+  }
   const btn = document.getElementById('coach-open-btn');
   if (btn) btn.classList.remove('active');
   // 보드 중앙 정렬 복원
@@ -266,7 +272,10 @@ async function runPositionCommentary() {
 async function _executePositionCommentary() {
   // 인라인 패널 열기
   const inlinePanel = document.getElementById('coach-inline');
-  if (inlinePanel) inlinePanel.classList.add('visible');
+  if (inlinePanel) {
+    inlinePanel.style.display = 'flex';
+    setTimeout(() => inlinePanel.classList.add('visible'), 10);
+  }
   const coachBtn = document.getElementById('coach-open-btn');
   if (coachBtn) coachBtn.classList.add('active');
   const boardAreaRpc = document.getElementById('board-area');
@@ -407,7 +416,10 @@ async function askCoach() {
 
   // 인라인 패널 열기
   const inlinePanel = document.getElementById('coach-inline');
-  if (inlinePanel) inlinePanel.classList.add('visible');
+  if (inlinePanel) {
+    inlinePanel.style.display = 'flex';
+    setTimeout(() => inlinePanel.classList.add('visible'), 10);
+  }
   const coachBtn2 = document.getElementById('coach-open-btn');
   if (coachBtn2) coachBtn2.classList.add('active');
   const boardAreaAsk = document.getElementById('board-area');
@@ -459,33 +471,6 @@ function buildCommentaryPrompt(ctx) {
   const liveLine3    = livePv3 && livePv3.moves ? livePv3.moves.slice(0, 6).join(' ') : ctx.line3;
   const liveBestMove = livePv1 && livePv1.moves && livePv1.moves[0] ? livePv1.moves[0] : ctx.bestMove;
 
-  // FEN에서 주요 기물 위치를 파싱해서 모델에게 명시 (환각 방지용 내부 데이터)
-  function parseFenToSquares(fen) {
-    const pieceMap = {
-      'K':'백 킹','Q':'백 퀸','R':'백 룩','B':'백 비숍','N':'백 나이트','P':'백 폰',
-      'k':'흑 킹','q':'흑 퀸','r':'흑 룩','b':'흑 비숍','n':'흑 나이트','p':'흑 폰'
-    };
-    const board = fen.split(' ')[0];
-    const rows = board.split('/');
-    const result = [];
-    for (let r = 0; r < 8; r++) {
-      let col = 0;
-      for (const ch of rows[r]) {
-        if ('12345678'.includes(ch)) { col += parseInt(ch); }
-        else {
-          const file = 'abcdefgh'[col];
-          const rank = 8 - r;
-          const name = pieceMap[ch];
-          if (name) result.push(`${name}(${file}${rank})`);
-          col++;
-        }
-      }
-    }
-    return result.join(', ');
-  }
-
-  const piecePositions = parseFenToSquares(ctx.fen);
-
   lines.push(`아래 체스 포지션을 보고, 체스인사이드 채널처럼 해설하세요.`);
   lines.push(``);
   lines.push(`[포지션 데이터]`);
@@ -498,9 +483,6 @@ function buildCommentaryPrompt(ctx) {
     const ann = ctx.lastMoveAnnotation ? ` (${ctx.lastMoveAnnotation})` : '';
     lines.push(`방금 둔 수: ${ctx.lastMoveSan}${ann} (이미 보드에 반영됨)`);
   }
-
-  lines.push(`★ 현재 보드 위 기물 위치 (내부 참고용):`);
-  lines.push(piecePositions);
 
   // 엔진 라인을 "수 번호 + 차례" 형태로 전개해서 백/흑 혼동 방지
   function expandLine(movesStr, startTurn, startFullMove) {
@@ -556,15 +538,9 @@ function buildCommentaryPrompt(ctx) {
   lines.push(``);
   lines.push(`[작성 지시]`);
   lines.push(`- **포지션 상황** 으로 시작 (필수)`);
-  lines.push(`- 이후는 상황에 맞는 섹션만: **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순**`);
+  lines.push(`- 이후는 상황에 맞는 섹션만: **폰 구조 & 약점**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순**`);
   lines.push(`- **최선수 분석** 은 항상 포함. [엔진 최선 수순]의 수를 그대로 써서 설명할 것.`);
-  lines.push(`- ★ 기물 위치는 반드시 [현재 보드 위 기물 위치]만 참고. 방금 둔 수가 이미 보드에 반영된 상태이므로, 이동 전 칸이 아닌 이동 후 칸 기준으로 서술.`);
-  lines.push(`- 백/흑 주체를 항상 명시: 각 수마다 "백이 Nf3을", "흑이 cxd5로" 형태로. 주어 없이 수만 나열하지 말 것.`);
-  lines.push(`- 각 섹션은 흐름으로: 수가 두어지면 → 어떤 일이 생기고 → 상대는 어떻게 대응할 수밖에 없는지.`);
-  lines.push(`- 섹션 헤더는 **헤더명** 형태로 새 줄에서 시작.`);
-  lines.push(`- 수 표기 필수(Nf3, cxd5 등). "이 수", "해당 수" 절대 금지.`);
-  lines.push(`- 공허한 표현 금지: "기물의 발전을 돕는다", "중앙 장악", "승리의 기회를 높입니다"`);
-  lines.push(`- 각 섹션 2~4문장, 전체 500~700자`);
+  lines.push(`- 실제 수 표기 필수(Nf3, cxd5 등). "이 수", "해당 수" 절대 금지.`);
   lines.push(`- cp/점수/승률 수치 절대 금지`);
 
   return lines.join('\n');
@@ -632,43 +608,148 @@ async function callCommentaryAPI(ctx) {
   const SYSTEM = `당신은 체스 전문 해설가 "체스인사이드"입니다. 국면의 본질적인 '구도'와 '전략', 그리고 '구조'를 해설하는 데 집중하세요.
 
 ───────────────────────────────
-★ 전문가급 포지션 분석 지침
+★ 필수 표준 용어 (Piece Names)
 ───────────────────────────────
+아래 이름 외에 다른 단어(루크, 전차, 기사 등)는 절대 사용하지 마세요:
+- King → **킹**
+- Queen → **퀸**
+- Rook → **룩**
+- Bishop → **비숍**
+- Knight → **나이트**
+- Pawn → **폰**
 
-1. [전장 파악] 주요 전장이 **킹사이드**, **퀸사이드**, 혹은 **중앙** 중 어디인지 명확히 설명하세요.
+───────────────────────────────
+★ 형세에 따른 해설 어조 (Tone of Voice)
+───────────────────────────────
+1. [우세한 쪽] 승기를 굳히거나 주도권을 행사하는 관점.
+2. [불리한 쪽] 최대한 버티며 상대의 실수를 유도하는 관점. 불리한 쪽에게 "이득 유지" 표현 절대 금지.
 
-2. [기물 활동성] 말들의 '가치'가 아닌 '영향력'을 보세요. (예: 지배적인 룩, 갇힌 비숍 등)
+───────────────────────────────
+★ 폰 구조 분석의 핵심 정의 (Hallucination Check)
+───────────────────────────────
+1. **더블 폰**: 같은 열(File)에 우리 편 폰이 겹쳐 있는 경우.
+2. **매달린 폰 (Hanging Pawns)**: 인접한 두 열에 폰 한 쌍이 나란히 있지만, 뒤나 옆의 보호가 없는 상태. (예: d6, e6 폰 쌍)
+3. **고립된 폰**: 양옆 열에 우리 편 폰이 없는 경우.
+4. **뒤처진 폰 (Backward Pawn)**: 인접한 열의 폰들보다 뒤에 처져 있어 지원을 못 받는 상태.
 
-3. [폰 구조 분석] 폰은 체스의 골격입니다. 아래 요소들을 반드시 체크하여 해설에 반영하세요:
-   - **고립된 폰 (Isolated Pawn)**: 주변에 보호해줄 폰이 없어 공격의 타겟이 되는 폰.
-   - **더블 폰 (Doubled Pawns)**: 같은 열에 겹쳐 있어 기동성이 떨어지는 폰.
-   - **뒤처진 폰 (Backward Pawn)**: 전진하지 못하고 뒤에 처져서 약점이 된 폰.
-   - **매달린 폰 (Hanging Pawns)**: 중앙에서 강력하지만 동시에 공격에 노출된 폰 쌍.
-   - "이 폰 구조 때문에 나중에 엔드게임에서 불리해질 수 있거든요" 처럼 장기적 관점을 제시하세요.
-
-4. [색깔 약점] 밝은색/어두운색 칸의 균형과 취약한 지점을 짚어주세요.
+───────────────────────────────
+★ 전문가급 분석 지침 (Grand Strategy)
+───────────────────────────────
+1. [전장 파악] 주요 전장(킹사이드/퀸사이드/중앙) 명시.
+2. [킹의 안전] 폰 스톰 레이스나 킹 노출 위험 분석.
+3. [기물 활동성] 배터리(Battery)와 연결성 분석.
+4. [전략적 개념] **중앙 카운터**, **폰 우위**, **예방수(h3, a3 등)** 의도 파악.
+5. [교환 & 엔드게임] **단순화**, **중화**, **킹의 활동성**, **오포지션**, **주크크방** 인식.
 
 ★ 출력 형식
-**포지션 상황** (주요 전장과 전체적인 구도 요약)
-**폰 구조 & 약점** (폰 구조의 특징과 그로 인한 취약점 서술)
-**강점 분석** (활동성이 좋은 기물이나 공간 우위)
-**위협 & 아이디어** / **최선수 분석** / **이후 수순**
+**포지션 상황** (현재 형세와 전장 요약)
+**폰 구조 & 약점** (구조적 특징 설명)
+**강점 분석** (활동성, 배터리, 공간 우위)
+**위협 & 아이디어** (교환 전략 및 엔드게임 계획)
+**최선수 분석** / **이후 수순**
 
-최선수 분석은 반드시 엔진 1순위 라인의 의도를 전략적으로 해설하세요.`;
+최선수 분석은 엔진 1순위 라인을 바탕으로 전략적으로 해설하세요.`;
 
   const prompt = buildCommentaryPrompt(ctx);
   return callGroqAPIWithSystem(SYSTEM, prompt, 1100);
 }
 
+async function callThreatAPI(ctx) {
+  const mover     = ctx.turn === 'w' ? '백(White)' : '흑(Black)';
+  const opponent  = ctx.turn === 'w' ? '흑(Black)' : '백(White)';
+
+  const THREAT_SYSTEM = `당신은 체스 분석 전문가입니다. 한국어로만 답변하세요.
+엔진 라인을 분석하여 세 가지 섹션(**아이디어**, **문제점**, **해결책**)을 작성하세요.
+
+**아이디어:** ${mover}이 노리는 공격 계획을 설명하세요.
+**문제점:** ${opponent}의 최선 대응이나 방어 수단을 설명하세요.
+**해결책:** ${mover}이 문제를 어떻게 해결하고 이득을 유지할지 엔진 1순위 수를 바탕으로 설명하세요.
+
+수 표기(e4, Nf3 등)는 영문 그대로 쓰세요. 1~2문장으로 간결하게 작성하세요.`;
+
+  const userMsg = [
+    `차례: ${mover}`,
+    ctx.bestLine  ? `엔진 1순위 라인: ${ctx.bestLine}` : '',
+    ctx.line2     ? `엔진 2순위 라인: ${ctx.line2}` : '',
+    ctx.line3     ? `엔진 3순위 라인: ${ctx.line3}` : '',
+    `FEN: ${ctx.fen}`,
+  ].join('\n');
+
+  const response = await fetch('/api/groq', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 500,
+      temperature: 0.3,
+      messages: [
+        { role: 'system', content: THREAT_SYSTEM },
+        { role: 'user',   content: userMsg },
+      ],
+    }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${response.status}`);
+  }
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+async function callBestExplainAPI(ctx, moves, focusIdx) {
+  const EXPLAIN_SYSTEM = `당신은 한국어로 체스 수를 해설하는 AI입니다. 한국어만 출력하고, 체스 수 표기는 영문(Nf3, e4, O-O)을 유지하세요.
+
+★ 핵심 원칙: "이 수가 좋은 이유는 ~" 식의 나열 금지.
+대신 수를 두면 어떤 일이 생기고 → 상대는 어떻게 대응할 수밖에 없는지 → 결국 어떤 결과가 나오는지를 따라가세요.
+
+★ 전술이 있으면 반드시 이름으로: **포크**, **핀**, **스큐어**, **디스커버드 어택**. 구체적으로 설명하세요.
+★ 금지 표현: "기물의 발전을 방해합니다", "중앙을 장악할 수 있습니다", "상대방을 약화시킵니다", "폰 구조를 강화합니다"
+
+출력 형식:
+1번째 줄: "[수 표기]이/가 나오면서:" (예: "Qa1이 나오면서:")
+이후 3~4개 bullet, 각 "• " 로 시작, 한 문장씩.
+전체 300자 이내.`;
+
+  const focusMove = moves[focusIdx] || moves[0];
+  const seq       = moves.slice(0, 5).join(' ');
+
+  const userMsg = [
+    `엔진 최선 수순: ${seq}`,
+    `${focusIdx + 1}번째 수인 "${focusMove}"이/가 왜 좋은지 설명해주세요.`,
+    `차례: ${ctx.turn === 'w' ? '백' : '흑'}`,
+    `FEN: ${ctx.fen}`,
+    `구체적인 위협명/칸/기물을 이용해 이유를 설명하세요.`,
+  ].join('\n');
+
+  const response = await fetch('/api/groq', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 400,
+      temperature: 0.25,
+      messages: [
+        { role: 'system', content: EXPLAIN_SYSTEM },
+        { role: 'user',   content: userMsg },
+      ],
+    }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${response.status}`);
+  }
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
 // 공통 Groq 호출 (system 없이 — 수동 질문용)
 async function callGroqAPI(userContent) {
-  const SYSTEM = `You are a Korean-language chess coach in the style of "ChessInside" YouTube channel.
-Always respond ONLY in Korean (한국어). Chess move notation (e4, Nf3, O-O) stays in English/algebraic form.
-Never output Japanese, Chinese, Arabic, or any non-Korean script.
-Never output numerical evaluation scores. Never output placeholders like <<_0>>.
-Mandatory: Identify and name tactical patterns (Fork, Pin, etc.) using Korean terms like "**포크**", "**핀**".`;
+  const SYSTEM = `당신은 한국 최고의 체스 채널 "체스인사이드" 스타일의 AI 코치입니다.
+항상 한국어로만 답변하고, 체스 수 표기(e4, Nf3, O-O)는 영문/알제브릭 형태를 유지하세요.
+표준 용어(킹, 퀸, 룩, 비숍, 나이트, 폰)를 엄수하고 다른 단어는 쓰지 마세요.
+전술(포크, 핀 등)이 보 보인다면 반드시 용어를 사용하여 설명하세요.`;
 
-  return callGroqAPIWithSystem(SYSTEM, userContent, 800);
+  return callGroqAPIWithSystem(SYSTEM, userContent, 850);
 }
 
 async function callGroqAPIWithSystem(systemPrompt, userContent, maxTokens = 800) {
@@ -758,30 +839,26 @@ function formatCommentary(text) {
     return formatPlain(escaped);
   }
 
+  // ── 통합 정규식 (SAN 수순 + 개별 칸) ──
+  const comboRegex = /\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x[a-h][1-8][+#=]?|[a-h][1-8])\b/g;
+
   let html = '<div class="commentary-wrapper">';
   const renderedKeys = new Set();
   for (const def of SECTION_DEFS) {
     const body = parsed[def.key];
     if (!body || renderedKeys.has(def.key)) continue;
     
-    // ── 인터랙티브 토큰 처리 (Phase 2) ──
-    // 1) 굵은 텍스트
+    // 1) 굵은 텍스트 먼저 처리
     let formatted = body.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     
-    // 2) 체스 수 (SAN) - e.g. Nf3, O-O, e4xe5, Qh6xf6+
-    // 겹침 방지를 위해 복잡한 수부터 먼저 처리
-    const moveRegex = /\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x[a-h][1-8][+#=]?)\b/g;
-    formatted = formatted.replace(moveRegex, m => `<span class="chess-move-link" onclick="game.previewAIMove('${m}')">${m}</span>`);
-    
-    // 3) 개별 칸 좌표 (e4, f7 등)
-    // 단, 이미 처리된 <span> 태그의 속성이나 내용물 내부의 텍스트는 건드리지 않음
-    // 간단한 구현: 'e4' 형태만 매칭하되, 앞뒤에 특정 문자가 없는 경우만 (Lookbehind 대용)
-    const sqRegex = /\b([a-h][1-8])\b/g;
-    formatted = formatted.replace(sqRegex, (m, offset, str) => {
-      // 이미 <span> 안에 있거나 속성값의 일부인지 체크 (매우 단순화된 체크)
-      const part = str.slice(Math.max(0, offset - 40), offset + m.length + 10);
-      if (part.includes('<span') || part.includes('game.')) return m;
-      return `<span class="chess-sq-link" onmouseover="game.highlightSquare('${m}')" onmouseout="game.clearInteractions()">${m}</span>`;
+    // 2) 통합 토큰 처리
+    formatted = formatted.replace(comboRegex, (match) => {
+      // 2글자이고 [a-h][1-8] 형태면 개별 칸 링크로 처리
+      if (match.length === 2 && /^[a-h][1-8]$/.test(match)) {
+        return `<span class="chess-sq-link" onmouseover="game.highlightSquare('${match}')" onmouseout="game.clearInteractions()">${match}</span>`;
+      }
+      // 그 외엔 체스 수순(SAN) 링크로 처리
+      return `<span class="chess-move-link" onclick="game.previewAIMove('${match}')">${match}</span>`;
     });
 
     formatted = formatted.replace(/\n/g, '<br>');
@@ -856,15 +933,6 @@ function toggleThreatPanel() {
   }
 }
 
-function toggleThreatCollapse() {
-  const body = document.getElementById('threat-body');
-  const btn  = document.getElementById('threat-collapse-btn');
-  if (!body) return;
-  const collapsed = body.classList.toggle('collapsed');
-  btn.textContent = collapsed ? '▼' : '▲';
-  btn.title = collapsed ? '펼치기' : '접기';
-}
-
 async function runThreatAnalysis() {
   if (!coachApiKey || threatLoading) return;
   const ctx = buildChessContext();
@@ -904,48 +972,6 @@ async function runThreatAnalysis() {
   } finally {
     threatLoading = false;
   }
-}
-
-async function callThreatAPI(ctx) {
-  const mover     = ctx.turn === 'w' ? '백(White)' : '흑(Black)';
-  const opponent  = ctx.turn === 'w' ? '흑(Black)' : '백(White)';
-
-  const THREAT_SYSTEM = `당신은 체스 분석 전문가입니다. 한국어로만 답변하세요.
-엔진 라인을 분석하여 세 가지 섹션(**아이디어**, **문제점**, **해결책**)을 작성하세요.
-
-**아이디어:** ${mover}이 노리는 공격 계획을 설명하세요. (예: "백은 Nf3로 킹사이드를 압박하며 포크를 노린다")
-**문제점:** ${opponent}의 최선 대응이나 방어 수단을 설명하세요.
-**해결책:** ${mover}이 문제를 어떻게 해결하고 이득을 유지할지 엔진 1순위 수를 바탕으로 설명하세요.
-
-수 표기(e4, Nf3 등)는 영문 그대로 쓰세요. 1~2문장으로 간결하게 작성하세요.`;
-
-  const userMsg = [
-    `차례: ${mover}`,
-    ctx.bestLine  ? `엔진 1순위 라인: ${ctx.bestLine}` : '',
-    ctx.line2     ? `엔진 2순위 라인: ${ctx.line2}` : '',
-    ctx.line3     ? `엔진 3순위 라인: ${ctx.line3}` : '',
-    `FEN: ${ctx.fen}`,
-  ].join('\n');
-
-  const response = await fetch('/api/groq', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 500,
-      temperature: 0.3,
-      messages: [
-        { role: 'system', content: THREAT_SYSTEM },
-        { role: 'user',   content: userMsg },
-      ],
-    }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${response.status}`);
-  }
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
 }
 
 function renderThreatPanel(text) {
@@ -999,7 +1025,7 @@ function renderThreatPanel(text) {
 
     // ── 인터랙티브 토큰 처리 (Phase 2) ──
     const formattedBody = body
-      .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?)\b/g,
+      .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x[a-h][1-8][+#=]?|[a-h][1-8])\b/g,
                (m) => `<span class="chess-move-link" onclick="game.previewAIMove('${m}')">${m}</span>`)
       .replace(/\b([a-h][1-8])\b/g,
                (m) => `<span class="chess-sq-link" onmouseover="game.highlightSquare('${m}')" onmouseout="game.clearInteractions()">${m}</span>`)
@@ -1108,52 +1134,6 @@ function renderBestSeqBar(moves, activeIdx, ctx) {
     turn = turn === 'w' ? 'b' : 'w';
   });
   bar.innerHTML = html;
-}
-
-async function callBestExplainAPI(ctx, moves, focusIdx) {
-  const EXPLAIN_SYSTEM = `당신은 한국어로 체스 수를 해설하는 AI입니다. 한국어만 출력하고, 체스 수 표기는 영문(Nf3, e4, O-O)을 유지하세요.
-
-★ 핵심 원칙: "이 수가 좋은 이유는 ~" 식의 나열 금지.
-대신 수를 두면 어떤 일이 생기고 → 상대는 어떻게 대응할 수밖에 없는지 → 결국 어떤 결과가 나오는지를 따라가세요.
-
-★ 전술이 있으면 반드시 이름으로: **포크**, **핀**, **스큐어**, **디스커버드 어택**. 구체적으로 설명하세요.
-★ 금지 표현: "기물의 발전을 방해합니다", "중앙을 장악할 수 있습니다", "상대방을 약화시킵니다", "폰 구조를 강화합니다"
-
-출력 형식:
-1번째 줄: "[수 표기]이/가 나오면서:" (예: "Qa1이 나오면서:")
-이후 3~4개 bullet, 각 "• " 로 시작, 한 문장씩.
-전체 300자 이내.`;
-
-  const focusMove = moves[focusIdx] || moves[0];
-  const seq       = moves.slice(0, 5).join(' ');
-
-  const userMsg = [
-    `엔진 최선 수순: ${seq}`,
-    `${focusIdx + 1}번째 수인 "${focusMove}"이/가 왜 좋은지 설명해주세요.`,
-    `차례: ${ctx.turn === 'w' ? '백' : '흑'}`,
-    `FEN: ${ctx.fen}`,
-    `구체적인 위협명/칸/기물을 이용해 이유를 설명하세요.`,
-  ].join('\n');
-
-  const response = await fetch('/api/groq', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 400,
-      temperature: 0.25,
-      messages: [
-        { role: 'system', content: EXPLAIN_SYSTEM },
-        { role: 'user',   content: userMsg },
-      ],
-    }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${response.status}`);
-  }
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
 }
 
 function renderBestExplain(text, focusMove, moves, activeIdx, ctx) {

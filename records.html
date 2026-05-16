@@ -399,8 +399,29 @@
       align-items: center;
       justify-content: center;
       position: relative;
-      overflow: hidden;
-      min-width: 0
+      overflow-y: auto; /* Allow vertical scroll */
+      overflow-x: hidden;
+      min-width: 0;
+    }
+
+    @media (max-width: 768px) {
+      #viewer-panel {
+        height: auto;
+        min-height: 500px;
+        padding: 20px 0;
+        overflow: visible;
+      }
+      
+      #viewer-container {
+        height: auto !important;
+        justify-content: flex-start !important;
+      }
+
+      #viewer-board-wrap {
+        width: 92vw;
+        max-width: 92vw;
+        height: 92vw;
+      }
     }
 
     #viewer-panel::before {
@@ -514,9 +535,9 @@
     #viewer-board-wrap {
       width: 100%;
       max-width: 560px;
-      aspect-ratio: 1;
+      aspect-ratio: 1 / 1;
       position: relative;
-      display: block
+      margin: 0 auto;
     }
 
     /* ── 화살표 오버레이 ── */
@@ -530,71 +551,7 @@
       z-index: 10
     }
 
-    .move-judgment-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 15px;
-      height: 15px;
-      padding: 0 3px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 800;
-      color: #fff;
-      margin-left: 4px;
-      vertical-align: middle;
-      cursor: default;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-    }
-
-    /* ── 후보수 툴팁 ── */
-    .move-san {
-      position: relative
-    }
-
-    #viewer-board {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: grid;
-      grid-template-columns: repeat(8, 1fr);
-      border: 2px solid var(--border-light);
-      border-radius: 4px;
-      overflow: hidden;
-      user-select: none
-    }
-
-    .vsq {
-      aspect-ratio: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative
-    }
-
-    .vsq.light {
-      background: var(--board-light)
-    }
-
-    .vsq.dark {
-      background: var(--board-dark)
-    }
-
-    .vsq.last-from {
-      background: rgba(205, 210, 106, .5) !important
-    }
-
-    .vsq.last-to {
-      background: rgba(205, 210, 106, .7) !important
-    }
-
-    .vsq.in-check {
-      background: rgba(220, 50, 50, .55) !important
-    }
-
-    .vsq .rank-label {
+    .square .rank-label {
       position: absolute;
       left: 2px;
       top: 1px;
@@ -604,7 +561,7 @@
       pointer-events: none
     }
 
-    .vsq .file-label {
+    .square .file-label {
       position: absolute;
       right: 2px;
       bottom: 0;
@@ -614,18 +571,6 @@
       pointer-events: none
     }
 
-    .vsq .piece-img {
-      width: 88%;
-      height: 88%;
-      object-fit: contain;
-      pointer-events: none;
-      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .4))
-    }
-
-    .vsq .piece-img.black-piece {
-      filter: drop-shadow(0 0 1px rgba(180, 180, 180, .9)) drop-shadow(0 0 1px rgba(150, 150, 150, .7)) drop-shadow(0 1px 2px rgba(0, 0, 0, .5))
-    }
-
     .viewer-main {
       display: flex;
       flex-direction: column;
@@ -633,7 +578,8 @@
       width: 100%;
       max-width: 880px;
       align-items: stretch;
-      justify-content: center
+      justify-content: center;
+      min-width: 0;
     }
 
     .viewer-side {
@@ -1873,7 +1819,7 @@
         </div>
         <div class="viewer-main">
           <div id="viewer-board-wrap">
-            <div id="viewer-board"></div>
+            <div id="viewer-board" class="layered-board"></div>
             <svg id="viewer-arrow-svg" class="board-arrow-overlay" viewBox="0 0 800 800" preserveAspectRatio="none"
               xmlns="http://www.w3.org/2000/svg">
               <defs>
