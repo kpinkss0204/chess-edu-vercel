@@ -443,6 +443,10 @@ function buildCommentaryPrompt(ctx) {
 
   lines.push(`아래 체스 포지션을 보고, 체스인사이드 채널처럼 해설하세요.`);
   lines.push(``);
+  lines.push(`[중요] 전술 감지 지시:`);
+  lines.push(`엔진 라인과 FEN을 면밀히 분석하여 포크(Fork), 핀(Pin), 스큐어(Skewer), 디스커버드 어택 등 전술적 요소가 있다면 반드시 해당 용어를 사용하여 설명하세요.`);
+  lines.push(`특히 킹과 다른 기물을 동시에 공격하는 수(포크)가 있다면 절대 놓치지 마세요.`);
+  lines.push(``);
   lines.push(`핵심 원칙: 이 포지션에서 실제로 보이는 것을 있는 그대로 관찰하고 설명하세요.`);
   lines.push(`폰이 약하면 "이 폰은 지키기가 어려운 폰이라고 볼 수 있죠"처럼,`);
   lines.push(`긴장이 생기면 "비숍이 뒤쪽으로 빠지면서 룩 긴장이 생겨났고요"처럼,`);
@@ -499,6 +503,7 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`- 해설은 반드시 **포지션 상황** 섹션으로 시작`);
   lines.push(`- 이후 섹션은 상황에 맞는 것만 선택: **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순**`);
   lines.push(`- **최선수 분석** 은 항상 포함. 반드시 [엔진 1순위 라인]의 수순을 그대로 사용해서 설명할 것.`);
+  lines.push(`- 전술적 요소(포크 등)가 있다면 **최선수 분석**이나 **위협 & 아이디어** 섹션에서 명확히 언급할 것.`);
   lines.push(`- 섹션 헤더는 반드시 **헤더명** 형태. 새 줄에서 시작, 헤더 다음 줄바꿈 하나.`);
   lines.push(`- 본문 안에 다른 섹션 이름을 쓰지 말 것.`);
   lines.push(`- 실제 수 표기 사용 필수. "이 수", "해당 수" 금지.`);
@@ -550,6 +555,9 @@ function buildCoachPrompt(ctx, question) {
   if (ctx.pgnMoves) lines.push(`전체 기보: ${ctx.pgnMoves}`);
   lines.push(`FEN: ${ctx.fen}`);
   lines.push(``);
+  lines.push(`[중요 전술 체크]`);
+  lines.push(`질문에 답변할 때 포지션의 전술적 요소(포크, 핀, 디스커버드 어택 등)를 면밀히 살펴보고 답변에 포함시키세요.`);
+  lines.push(``);
   lines.push(`[사용자 질문]`);
   lines.push(question);
   lines.push(``);
@@ -570,13 +578,15 @@ async function callCommentaryAPI(ctx) {
 WHAT THIS STYLE MEANS:
 You watch the board like a coach reviewing a real game. You notice things — a pawn that's hard to defend, a bishop retreating to create rook tension, a knight that might get pushed away eventually. You say what you see, explain why it matters, and follow the consequences naturally. You do NOT use templates or repeat fixed phrases.
 
-TACTICAL AWARENESS:
-If the engine lines or the position involves tactical themes, you MUST use professional chess terminology to explain them clearly. This includes:
-- 포크 (Fork), 핀 (Pin), 스큐어 (Skewer)
-- 디스커버드 어택 (Discovered Attack), 더블 체크 (Double Check)
-- 기물 과부하 (Overloading), 제거 (Deflection), 유인 (Decoy)
-- 백랭크 메이트 (Back-rank Mate), 질식 메이트 (Smothered Mate)
-- 희생 (Sacrifice) 및 전술적 연계
+TACTICAL ANALYSIS MANDATE:
+Before generating commentary, you MUST perform a thorough tactical scan of the FEN and engine lines.
+Identify and EXPLICITLY NAME any of the following tactical patterns if they are present or created by the engine moves:
+- 포크 (Fork): A piece attacking two or more enemy pieces simultaneously (especially hitting the King).
+- 핀 (Pin): A piece restricted from moving because it would expose a more valuable piece.
+- 스큐어 (Skewer): A valuable piece is attacked and must move, exposing a less valuable piece behind it.
+- 디스커버드 어택 (Discovered Attack): An attack revealed by moving a blocking piece.
+- 희생 (Sacrifice): Giving up material for a tactical or positional advantage.
+If these exist, you MUST use the Korean terms (e.g., "**포크**", "**핀**") in your explanation.
 
 HOW TO COMMENT:
 - Look at the actual position: which pawns are weak? which pieces are active? what tension exists?
@@ -599,7 +609,8 @@ async function callGroqAPI(userContent) {
   const SYSTEM = `You are a Korean-language chess coach in the style of "ChessInside" YouTube channel.
 Always respond ONLY in Korean (한국어). Chess move notation (e4, Nf3, O-O) stays in English/algebraic form.
 Never output Japanese, Chinese, Arabic, or any non-Korean script.
-Never output numerical evaluation scores. Never output placeholders like <<_0>>.`;
+Never output numerical evaluation scores. Never output placeholders like <<_0>>.
+Mandatory: Identify and name tactical patterns (Fork, Pin, etc.) using Korean terms like "**포크**", "**핀**".`;
 
   return callGroqAPIWithSystem(SYSTEM, userContent, 800);
 }
@@ -844,14 +855,15 @@ async function callThreatAPI(ctx) {
   const THREAT_SYSTEM = `You are a Korean chess analyst. Output ONLY in Korean (한국어).
 Chess move notation stays in algebraic form (Nf3, e4, dxc4, O-O).
 
-CRITICAL: You will be given the actual engine lines and FEN for the current position. Use ONLY those moves. Never invent or hallucinate moves. Never copy from examples.
+CRITICAL: You will be given the actual engine lines and FEN for the current position. Use ONLY those moves. Never invent or hallucinate moves.
 
-TACTICAL SCANNING:
-Scan the provided engine lines for tactical themes and use the exact terms:
-- 포크 (Fork), 핀 (Pin), 스큐어 (Skewer)
-- 디스커버드 어택 (Discovered Attack), 더블 체크 (Double Check)
-- 희생 (Sacrifice)
-If a move creates a fork or a pin, you MUST state it explicitly. (e.g., "Nf3+는 킹과 퀸을 동시에 공격하는 **포크**입니다.")
+TACTICAL MANDATE:
+You MUST analyze the engine lines for tactical patterns.
+- If a move is a fork (attacking two pieces), you MUST say "**포크**".
+- If a move is a pin, you MUST say "**핀**".
+- If a move is a skewer, you MUST say "**스큐어**".
+- If a move is a discovered attack, you MUST say "**디스커버드 어택**".
+Identify these BEFORE writing the sections.
 
 Analyze the position using the provided engine data and write three sections:
 **핵심 계획:** — What does ${mover} want to do? State the concrete threat using the ACTUAL moves from the engine line provided. Format: "${mover}은 [move]로 [goal]을 노린다: [line] → [result]."
@@ -861,7 +873,7 @@ Analyze the position using the provided engine data and write three sections:
 Rules:
 - Use ONLY moves from the engine lines provided. Do not invent any move.
 - Every section must contain actual algebraic move notation from the data.
-- Always identify and name tactical patterns (Fork, Pin, etc.) if they exist.
+- Always identify and name tactical patterns (Fork, Pin, etc.) using Korean terms.
 - No vague phrases like "기물 발전", "중앙 장악", "상대를 약화".
 - Keep each section 1~2 sentences. Total under 400 characters.`;
 
@@ -1059,6 +1071,13 @@ async function callBestExplainAPI(ctx, moves, focusIdx) {
 Chess move notation (Nf3, e4, O-O) stays in English algebraic form.
 
 CRITICAL: Use ONLY the moves provided in the engine line. Never invent or hallucinate moves.
+
+TACTICAL MANDATE:
+You MUST identify if the move is part of a tactical pattern.
+- If it attacks two pieces: "**포크**"
+- If it pins a piece: "**핀**"
+- If it reveals an attack: "**디스커버드 어택**"
+Explain the tactic clearly using Korean terms.
 
 The user wants to understand WHY a specific move is good. Give CONCRETE reasons based on what actually happens in this position — not generic chess advice.
 
