@@ -687,7 +687,7 @@ async function callGroqAPIWithSystem(systemPrompt, userContent, maxTokens = 800)
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'openai/gpt-oss-120b',
+      model: 'llama-3.3-70b-versatile',
       max_tokens: maxTokens,
       temperature: 0.3,
       messages: [
@@ -703,6 +703,7 @@ async function callGroqAPIWithSystem(systemPrompt, userContent, maxTokens = 800)
   }
 
   const data = await response.json();
+  console.log('[Groq API Response]', data);
   const raw  = data.choices?.[0]?.message?.content || '응답을 받지 못했습니다.';
   return cleanKorean(raw);
 }
