@@ -1,6 +1,23 @@
 let coachApiKey = '';
 let coachOpen = false;
 let coachLoading = false;
+const BACKEND_URL = 'https://chess-backend-r3bc.onrender.com';
+
+// 백엔드에서 사실 데이터 가져오기
+async function getChessFactsFromBackend(fen) {
+  try {
+    const res = await fetch(`${BACKEND_URL}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fen })
+    });
+    if (!res.ok) throw new Error('Backend error');
+    return await res.json();
+  } catch (e) {
+    console.error("Backend fetch failed", e);
+    return null;
+  }
+}
 
 // API 키 저장/불러오기
 function saveApiKey() {
@@ -311,6 +328,8 @@ async function _executePositionCommentary() {
       await wait(300);
     }
     freshCtx = buildChessContext();
+    // 백엔드 사실 분석 데이터 가져오기
+    freshCtx.backendFacts = await getChessFactsFromBackend(freshCtx.fen);
 
     // 3. 통합 AI 해설 요청 (최선수 이유 + 전략 리포트 합침)
     responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> AI 전략 리포트 생성 중...`;
@@ -461,6 +480,18 @@ function buildCommentaryPrompt(ctx) {
     if (ctx.threatData.idea) lines.push(`아이디어: ${ctx.threatData.idea}`);
     if (ctx.threatData.prob) lines.push(`문제점: ${ctx.threatData.prob}`);
     if (ctx.threatData.sol)  lines.push(`해결책: ${ctx.threatData.sol}`);
+  }
+
+  // 백엔드 사실 데이터 추가
+  if (ctx.backendFacts && ctx.backendFacts.facts) {
+    lines.push(``);
+    lines.push(`[파이썬 백엔드 전술 분석 — 이 사실들을 반드시 해설에 통합하여 정확성을 높이세요]`);
+    if (ctx.backendFacts.facts.attackers && ctx.backendFacts.facts.attackers.length > 0) {
+        lines.push(`전술적 공격 사실: ${ctx.backendFacts.facts.attackers.join(', ')}`);
+    }
+    if (ctx.backendFacts.facts.pins && ctx.backendFacts.facts.pins.length > 0) {
+        lines.push(`핀(Pin) 상황: ${ctx.backendFacts.facts.pins.join(', ')}`);
+    }
   }
 
   if (ctx.bestExplainData) {
