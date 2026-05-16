@@ -2801,8 +2801,11 @@
       const move = state.move, prevBoard = _states[_viewIdx - 1]?.board;
       const isCapture = prevBoard && prevBoard[move.to[0]] && prevBoard[move.to[0]][move.to[1]];
       const nb = state.board, nextTurn = state.turn;
-      if (isInCheck(nb, nextTurn)) { const leg = getAllLegal(nb, nextTurn, state.castling, state.enPassant); return leg.length === 0 ? 'checkmate' : 'check'; }
-      const leg2 = getAllLegal(nb, nextTurn, state.castling, state.enPassant);
+      if (isInCheck(nb, nextTurn)) { 
+        const leg = getAllLegalMoves(nb, nextTurn, state.castling, state.enPassant); 
+        return leg.length === 0 ? 'checkmate' : 'check'; 
+      }
+      const leg2 = getAllLegalMoves(nb, nextTurn, state.castling, state.enPassant);
       if (!isInCheck(nb, nextTurn) && leg2.length === 0) return 'stalemate';
       if (move.castle) return 'castle';
       if (isCapture || move.enPassant) return 'capture';
@@ -2893,6 +2896,7 @@
       el.innerHTML = '';
       
       const state = _states[_viewIdx], board = state.board, flipped = _viewMyColor === 'b', lastMove = state.move, turn = state.turn;
+      const FILES_ARR = ['a','b','c','d','e','f','g','h'];
       
       // 1. Squares Layer
       const squaresLayer = document.createElement('div');
@@ -2905,16 +2909,16 @@
           const sq = document.createElement('div'); 
           sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
           
-          if (ci === 0) { 
+          if (ci === (flipped ? 7 : 0)) { 
             const lbl = document.createElement('span'); 
             lbl.className = 'coord-rank'; 
             lbl.textContent = 8 - r; 
             sq.appendChild(lbl); 
           }
-          if (ri === 7) { 
+          if (ri === (flipped ? 0 : 7)) { 
             const lbl = document.createElement('span'); 
             lbl.className = 'coord-file'; 
-            lbl.textContent = FILES[c]; 
+            lbl.textContent = FILES_ARR[c]; 
             sq.appendChild(lbl); 
           }
           
@@ -2933,13 +2937,18 @@
       piecesLayer.className = 'board-pieces-layer';
       el.appendChild(piecesLayer);
 
+      const getPieceImg = (p) => {
+        const style = (typeof currentPieceStyle !== 'undefined') ? currentPieceStyle : 'cburnett';
+        return `https://lichess1.org/assets/piece/${style}/${p[0]}${p[1].toUpperCase()}.svg`;
+      };
+
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
           const piece = board[r][c];
           if (piece) {
             const img = document.createElement('img');
             img.className = 'piece-img' + (piece[0] === 'b' ? ' black-piece' : '');
-            img.src = pieceImg(piece); 
+            img.src = getPieceImg(piece); 
             img.alt = piece; 
             img.draggable = false;
             

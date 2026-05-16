@@ -175,17 +175,19 @@ html[data-color-mode="light"] #right-panel {
   cursor: grabbing;
 }
 
-.board-pieces-layer .piece-img.dragging {
-  z-index: 100;
-  transition: none !important;
-  cursor: grabbing;
-}
-
 .square {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.square.light {
+  background: var(--board-light, #f0d9b5);
+}
+
+.square.dark {
+  background: var(--board-dark, #b58863);
 }
 
 .possible-move::after,
