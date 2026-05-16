@@ -427,17 +427,21 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`차례: ${ctx.turn === 'w' ? '백' : '흑'}`);
   lines.push(`FEN: ${ctx.fen}`);
 
-  // 백엔드 사실 데이터를 최우선으로 배치
+  // 백엔드 사실 데이터 추가
   if (ctx.backendFacts && ctx.backendFacts.facts) {
     lines.push(``);
     lines.push(`[전술적 사실 - 이 데이터만 기반으로 해설하세요]`);
-    if (ctx.backendFacts.facts.attackers && ctx.backendFacts.facts.attackers.length > 0) {
-        lines.push(`공격 상황: ${ctx.backendFacts.facts.attackers.join(', ')}`);
+    if (ctx.backendFacts.facts.white_attackers && ctx.backendFacts.facts.white_attackers.length > 0) {
+        lines.push(`백의 공격: ${ctx.backendFacts.facts.white_attackers.join(', ')}`);
+    }
+    if (ctx.backendFacts.facts.black_attackers && ctx.backendFacts.facts.black_attackers.length > 0) {
+        lines.push(`흑의 공격: ${ctx.backendFacts.facts.black_attackers.join(', ')}`);
     }
     if (ctx.backendFacts.facts.pins && ctx.backendFacts.facts.pins.length > 0) {
         lines.push(`핀(Pin) 상황: ${ctx.backendFacts.facts.pins.join(', ')}`);
     }
   }
+
 
   lines.push(``);
   lines.push(`[작성 지시]`);
