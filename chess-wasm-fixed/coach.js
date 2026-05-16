@@ -765,24 +765,28 @@ function formatCommentary(text) {
     if (!body || renderedKeys.has(def.key)) continue;
     
     // ── 인터랙티브 토큰 처리 (Phase 2) ──
-    const formatted = body
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      // 1) 체스 수 (SAN) 매칭 및 클릭/호버 이벤트 추가
-      .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?)\b/g,
-               m => `<span class="chess-move-link" 
-                            onclick="game.previewAIMove('${m}')">${m}</span>`)
-      // 2) 개별 칸 좌표 (e4, f7 등) 매칭
-      .replace(/\b([a-h][1-8])\b/g,
-               m => `<span class="chess-sq-link" 
-                            onmouseover="game.highlightSquare('${m}')" 
-                            onmouseout="game.clearInteractions()">${m}</span>`)
-      .replace(/\n/g, '<br>');
+    // 1) 굵은 텍스트
+    let formatted = body.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     
-    html += `
-      <div class="commentary-section ${def.cls}">
-        <div class="commentary-label">${def.icon} ${def.key}</div>
-        <div class="commentary-body">${formatted}</div>
-      </div>`;
+    // 2) 체스 수 (SAN) - e.g. Nf3, O-O, e4xe5, Qh6xf6+
+    // 겹침 방지를 위해 복잡한 수부터 먼저 처리
+    const moveRegex = /\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x[a-h][1-8][+#=]?)\b/g;
+    formatted = formatted.replace(moveRegex, m => `<span class="chess-move-link" onclick="game.previewAIMove('${m}')">${m}</span>`);
+    
+    // 3) 개별 칸 좌표 (e4, f7 등)
+    // 단, 이미 처리된 <span> 태그의 속성이나 내용물 내부의 텍스트는 건드리지 않음
+    // 간단한 구현: 'e4' 형태만 매칭하되, 앞뒤에 특정 문자가 없는 경우만 (Lookbehind 대용)
+    const sqRegex = /\b([a-h][1-8])\b/g;
+    formatted = formatted.replace(sqRegex, (m, offset, str) => {
+      // 이미 <span> 안에 있거나 속성값의 일부인지 체크 (매우 단순화된 체크)
+      const part = str.slice(Math.max(0, offset - 40), offset + m.length + 10);
+      if (part.includes('<span') || part.includes('game.')) return m;
+      return `<span class="chess-sq-link" onmouseover="game.highlightSquare('${m}')" onmouseout="game.clearInteractions()">${m}</span>`;
+    });
+
+    formatted = formatted.replace(/\n/g, '<br>');
+    
+    html += `<div class="commentary-section ${def.cls}"><div class="commentary-label">${def.icon} ${def.key}</div><div class="commentary-body">${formatted}</div></div>`;
     renderedKeys.add(def.key);
   }
   html += '</div>';
