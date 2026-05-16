@@ -470,35 +470,41 @@ class ChessGame {
   }
 
   renderBoard() {
-    const board = document.getElementById('chessboard');
-    board.innerHTML = '';
+    const boardContainer = document.getElementById('chessboard');
+    if (!boardContainer) return;
+    boardContainer.innerHTML = '';
     const theme = this.boardThemes[this.currentTheme];
+
+    // 1. Squares Layer
+    const squaresLayer = document.createElement('div');
+    squaresLayer.className = 'board-squares-layer';
+    boardContainer.appendChild(squaresLayer);
 
     for (let displayR = 0; displayR < 8; displayR++) {
       for (let displayC = 0; displayC < 8; displayC++) {
-        const r = this.flipped ? 7-displayR : displayR;
-        const c = this.flipped ? 7-displayC : displayC;
+        const r = this.flipped ? 7 - displayR : displayR;
+        const c = this.flipped ? 7 - displayC : displayC;
 
         const sq = document.createElement('div');
-        const isLight = (r+c)%2===0;
-        sq.className = `square ${isLight?'light':'dark'}`;
+        const isLight = (r + c) % 2 === 0;
+        sq.className = `square ${isLight ? 'light' : 'dark'}`;
         sq.style.background = isLight ? theme.light : theme.dark;
 
         // Last move highlight
         if (this.showHighlight && this.lastMove) {
-          const [fr,fc]=this.lastMove.from,[tr,tc]=this.lastMove.to;
-          if ((r===fr&&c===fc)||(r===tr&&c===tc)) {
+          const [fr, fc] = this.lastMove.from, [tr, tc] = this.lastMove.to;
+          if ((r === fr && c === fc) || (r === tr && c === tc)) {
             sq.style.background = isLight ? '#cdd46e' : '#aaa23a';
           }
         }
 
         // Selected
-        if (this.selectedSq && this.selectedSq[0]===r && this.selectedSq[1]===c) {
+        if (this.selectedSq && this.selectedSq[0] === r && this.selectedSq[1] === c) {
           sq.style.background = 'rgba(50,200,100,0.55)';
         }
 
         // Possible moves
-        const isPossible = this.possibleMoves.some(m => m.to[0]===r&&m.to[1]===c);
+        const isPossible = this.possibleMoves.some(m => m.to[0] === r && m.to[1] === c);
         if (isPossible) {
           sq.classList.add(this.board[r][c] ? 'possible-capture' : 'possible-move');
         }
@@ -508,7 +514,7 @@ class ChessGame {
           if (c === (this.flipped ? 7 : 0)) {
             const rank = document.createElement('span');
             rank.className = 'coord-rank';
-            rank.textContent = this.flipped ? r+1 : 8-r;
+            rank.textContent = this.flipped ? r + 1 : 8 - r;
             sq.appendChild(rank);
           }
           if (r === (this.flipped ? 0 : 7)) {
@@ -519,30 +525,11 @@ class ChessGame {
           }
         }
 
-        // Piece — use Lichess SVG image
-        const piece = this.board[r][c];
-        if (piece) {
-          const img = document.createElement('img');
-          img.className = 'piece-img' + (piece.startsWith('b') ? ' black-piece' : '');
-          img.src = pieceImg(piece);
-          img.alt = piece;
-          img.draggable = false; // HTML5 drag 완전 비활성
-          // mousedown → 드래그 시작
-          img.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return;
-            e.preventDefault();
-            e.stopPropagation();
-            this._startMouseDrag(r, c, e, img);
-          });
-          sq.appendChild(img);
-        }
-
-        // 빈 칸 클릭: 선택된 기물의 이동 목적지로 처리
+        // Click handler for empty square or target square
         sq.addEventListener('mousedown', (e) => {
           if (e.button !== 0) return;
-          if (e.target.classList.contains('piece-img')) return; // 기물은 img mousedown이 처리
+          if (e.target.classList.contains('piece-img')) return;
           e.preventDefault();
-          // 이미 선택된 기물이 있으면 이동 시도
           if (this.selectedSq) {
             const [sr, sc] = this.selectedSq;
             const lm = legalMoves(this.board, sr, sc, this.castling, this.enPassant);
@@ -556,11 +543,105 @@ class ChessGame {
           this.handleSquareClick(r, c);
         });
 
-        board.appendChild(sq);
+        squaresLayer.appendChild(sq);
+      }
+    }
+
+    // 2. Pieces Layer
+    const piecesLayer = document.createElement('div');
+    piecesLayer.className = 'board-pieces-layer';
+    boardContainer.appendChild(piecesLayer);
+
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const piece = this.board[r][c];
+        if (piece) {
+          const img = document.createElement('img');
+          img.className = 'piece-img' + (piece.startsWith('b') ? ' black-piece' : '');
+          img.src = pieceImg(piece);
+          img.alt = piece;
+          img.draggable = false;
+          
+          const dispR = this.flipped ? 7 - r : r;
+          const dispC = this.flipped ? 7 - c : c;
+          img.style.top = (dispR * 12.5) + '%';
+          img.style.left = (dispC * 12.5) + '%';
+
+          img.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            this._startMouseDrag(r, c, e, img);
+          });
+          piecesLayer.appendChild(img);
+        }
       }
     }
 
     this.updateCapturedPieces();
+  }
+
+  // ── AI 인터랙티브 동기화 메서드 (Phase 2) ──────────────────
+  
+  // 특정 칸 강조 (AI 해설 호버 시)
+  highlightSquare(sqStr, color = 'rgba(255, 255, 0, 0.5)') {
+    const col = FILES.indexOf(sqStr[0]);
+    const row = 8 - parseInt(sqStr[1]);
+    if (col < 0 || row < 0 || row > 7) return;
+
+    const squares = document.querySelectorAll('.square');
+    // 뒤집기 고려한 인덱스 계산
+    const dispR = this.flipped ? 7 - row : row;
+    const dispC = this.flipped ? 7 - col : col;
+    const idx = dispR * 8 + dispC;
+    
+    if (squares[idx]) {
+      squares[idx].style.boxShadow = `inset 0 0 0 4px ${color}`;
+      squares[idx].classList.add('ai-highlight');
+    }
+  }
+
+  // 화살표 그리기 (AI 해설 내 수순 호버 시)
+  drawTempArrow(fromStr, toSqStr, isSequence = false) {
+    const fc = FILES.indexOf(fromStr[0]), fr = 8 - parseInt(fromStr[1]);
+    const tc = FILES.indexOf(toSqStr[0]), tr = 8 - parseInt(toSqStr[1]);
+    
+    const layer = document.getElementById('viewer-arrow-layer') || document.getElementById('coach-arrow-layer');
+    if (!layer) return;
+
+    const getCenter = (r, c) => {
+      const dr = this.flipped ? 7 - r : r;
+      const dc = this.flipped ? 7 - c : c;
+      return { x: dc * 100 + 50, y: dr * 100 + 50 };
+    };
+
+    const start = getCenter(fr, fc), end = getCenter(tr, tc);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', start.x); line.setAttribute('y1', start.y);
+    line.setAttribute('x2', end.x);   line.setAttribute('y2', end.y);
+    line.setAttribute('stroke', isSequence ? 'rgba(80,160,255,0.8)' : 'rgba(255,165,0,0.8)');
+    line.setAttribute('stroke-width', '16');
+    line.setAttribute('marker-end', isSequence ? 'url(#viewer-arrow-head-seq)' : 'url(#viewer-arrow-head)');
+    line.classList.add('temp-ai-arrow');
+    layer.appendChild(line);
+  }
+
+  clearInteractions() {
+    document.querySelectorAll('.ai-highlight').forEach(el => {
+      el.style.boxShadow = '';
+      el.classList.remove('ai-highlight');
+    });
+    document.querySelectorAll('.temp-ai-arrow').forEach(el => el.remove());
+  }
+
+  // AI가 제안한 특정 수 시뮬레이션 (클릭 시)
+  previewAIMove(san) {
+    const allLM = getAllLegalMoves(this.board, this.turn, this.castling, this.enPassant);
+    const move = sanToMove(san, this.board, this.turn, allLM);
+    if (move) {
+      this._startVariation(san, move);
+      showToast(`AI 추천수 ${san} 미리보기 중...`);
+    }
   }
 
   // ── 마우스 드래그 이동 (mousedown 즉시 드래그 시작) ──────────

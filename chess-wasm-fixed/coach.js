@@ -723,7 +723,7 @@ function formatCommentary(text) {
 
   const SECTION_DEFS = [
     { key: '포지션 상황',    icon: '🔍', cls: 'section-pos'    },
-    { key: '약점 분석',      icon: '⚠️', cls: 'section-weak'   },
+    { key: '폰 구조 & 약점',  icon: '⚠️', cls: 'section-weak'   },
     { key: '강점 분석',      icon: '💪', cls: 'section-strong' },
     { key: '위협 & 아이디어', icon: '⚡', cls: 'section-threat' },
     { key: '아이디어',      icon: '💡', cls: 'section-threat' },
@@ -735,8 +735,6 @@ function formatCommentary(text) {
 
   const SECTION_KEYS = SECTION_DEFS.map(s => s.key);
 
-  // ── 개선된 섹션 파싱 ──────────────────────────────────────────────────────
-  // ** 없이도 섹션 헤더를 인식하도록 정규식 강화
   const allHeaderPat = new RegExp(
     '(?:\\*\\*|#|\\n|^)(' + SECTION_KEYS.map(k => k.replace(/&/g,'&amp;').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')[:\\s：]*(?:\\*\\*|)?',
     'g'
@@ -753,8 +751,6 @@ function formatCommentary(text) {
     const { key, bodyStart } = found[fi];
     const bodyEnd = fi + 1 < found.length ? found[fi + 1].start : escaped.length;
     let body = escaped.slice(bodyStart, bodyEnd).trim().replace(/^[:：\s]+/, '').trim();
-
-    // 중복 제거 및 클리닝
     if (body) parsed[key] = body;
   }
 
@@ -763,16 +759,23 @@ function formatCommentary(text) {
   }
 
   let html = '<div class="commentary-wrapper">';
-  // 유니크한 섹션만 렌더링 (동의어 처리)
   const renderedKeys = new Set();
   for (const def of SECTION_DEFS) {
     const body = parsed[def.key];
     if (!body || renderedKeys.has(def.key)) continue;
     
+    // ── 인터랙티브 토큰 처리 (Phase 2) ──
     const formatted = body
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?|[a-h][1-8])\b/g,
-               m => m.length >= 2 ? `<span class="chess-move">${m}</span>` : m)
+      // 1) 체스 수 (SAN) 매칭 및 클릭/호버 이벤트 추가
+      .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?)\b/g,
+               m => `<span class="chess-move-link" 
+                            onclick="game.previewAIMove('${m}')">${m}</span>`)
+      // 2) 개별 칸 좌표 (e4, f7 등) 매칭
+      .replace(/\b([a-h][1-8])\b/g,
+               m => `<span class="chess-sq-link" 
+                            onmouseover="game.highlightSquare('${m}')" 
+                            onmouseout="game.clearInteractions()">${m}</span>`)
       .replace(/\n/g, '<br>');
     
     html += `
@@ -990,9 +993,12 @@ function renderThreatPanel(text) {
     const body = parsed[s.key];
     if (!body || renderedBaseKeys.has(s.cls)) continue;
 
+    // ── 인터랙티브 토큰 처리 (Phase 2) ──
     const formattedBody = body
-      .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?|[a-h][1-8][+#]?)\b/g,
-               (m) => m.length >= 2 ? '<span class="t-move">' + m + '</span>' : m)
+      .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?)\b/g,
+               (m) => `<span class="chess-move-link" onclick="game.previewAIMove('${m}')">${m}</span>`)
+      .replace(/\b([a-h][1-8])\b/g,
+               (m) => `<span class="chess-sq-link" onmouseover="game.highlightSquare('${m}')" onmouseout="game.clearInteractions()">${m}</span>`)
       .replace(/\n/g,'<br>');
     
     html += `
@@ -1129,7 +1135,7 @@ async function callBestExplainAPI(ctx, moves, focusIdx) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'openai/gpt-oss-120b',
+      model: 'llama-3.3-70b-versatile',
       max_tokens: 400,
       temperature: 0.25,
       messages: [

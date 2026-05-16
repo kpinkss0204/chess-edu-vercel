@@ -56,6 +56,17 @@
       overflow: hidden
     }
 
+    @media (max-width: 768px) {
+      body {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding-bottom: 56px;
+      }
+    }
+
     /* SIDEBAR */
     #sidebar {
       width: 72px;
@@ -2931,23 +2942,69 @@
     }
 
     function renderViewerBoard() {
-      const el = document.getElementById('viewer-board'); if (!el) return; el.innerHTML = '';
+      const el = document.getElementById('viewer-board'); 
+      if (!el) return; 
+      el.innerHTML = '';
+      
       const state = _states[_viewIdx], board = state.board, flipped = _viewMyColor === 'b', lastMove = state.move, turn = state.turn;
-      for (let ri = 0; ri < 8; ri++)for (let ci = 0; ci < 8; ci++) {
-        const r = flipped ? 7 - ri : ri, c = flipped ? 7 - ci : ci;
-        const sq = document.createElement('div'); sq.className = 'vsq ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
-        if (ci === 0) { const lbl = document.createElement('span'); lbl.className = 'rank-label'; lbl.textContent = 8 - r; sq.appendChild(lbl); }
-        if (ri === 7) { const lbl = document.createElement('span'); lbl.className = 'file-label'; lbl.textContent = FILES[c]; sq.appendChild(lbl); }
-        if (lastMove) { if (lastMove.from[0] === r && lastMove.from[1] === c) sq.classList.add('last-from'); if (lastMove.to[0] === r && lastMove.to[1] === c) sq.classList.add('last-to'); }
-        if (board[r][c] === turn + 'K' && isInCheck(board, turn)) sq.classList.add('in-check');
-        const piece = board[r][c];
-        if (piece) {
-          const img = document.createElement('img');
-          img.className = 'piece-img' + (piece[0] === 'b' ? ' black-piece' : '');
-          img.src = pieceImg(piece); img.alt = piece; img.draggable = false;
-          sq.appendChild(img);
+      
+      // 1. Squares Layer
+      const squaresLayer = document.createElement('div');
+      squaresLayer.className = 'board-squares-layer';
+      el.appendChild(squaresLayer);
+
+      for (let ri = 0; ri < 8; ri++) {
+        for (let ci = 0; ci < 8; ci++) {
+          const r = flipped ? 7 - ri : ri, c = flipped ? 7 - ci : ci;
+          const sq = document.createElement('div'); 
+          sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
+          
+          if (ci === 0) { 
+            const lbl = document.createElement('span'); 
+            lbl.className = 'coord-rank'; 
+            lbl.textContent = 8 - r; 
+            sq.appendChild(lbl); 
+          }
+          if (ri === 7) { 
+            const lbl = document.createElement('span'); 
+            lbl.className = 'coord-file'; 
+            lbl.textContent = FILES[c]; 
+            sq.appendChild(lbl); 
+          }
+          
+          if (lastMove) { 
+            if (lastMove.from[0] === r && lastMove.from[1] === c) sq.style.background = '#cdd46e'; 
+            if (lastMove.to[0] === r && lastMove.to[1] === c) sq.style.background = '#aaa23a'; 
+          }
+          if (board[r][c] === turn + 'K' && isInCheck(board, turn)) sq.style.background = 'rgba(220, 50, 50, 0.55)';
+          
+          squaresLayer.appendChild(sq);
         }
-        el.appendChild(sq);
+      }
+
+      // 2. Pieces Layer
+      const piecesLayer = document.createElement('div');
+      piecesLayer.className = 'board-pieces-layer';
+      el.appendChild(piecesLayer);
+
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = board[r][c];
+          if (piece) {
+            const img = document.createElement('img');
+            img.className = 'piece-img' + (piece[0] === 'b' ? ' black-piece' : '');
+            img.src = pieceImg(piece); 
+            img.alt = piece; 
+            img.draggable = false;
+            
+            const dispR = flipped ? 7 - r : r;
+            const dispC = flipped ? 7 - c : c;
+            img.style.top = (dispR * 12.5) + '%';
+            img.style.left = (dispC * 12.5) + '%';
+            
+            piecesLayer.appendChild(img);
+          }
+        }
       }
     }
     document.addEventListener('keydown', e => {
