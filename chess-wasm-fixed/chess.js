@@ -503,9 +503,7 @@ function updateMoveAnnotations() {
   return; 
   /* 
   if (!game || !game.history || !evalCache) return;
-  ... (기존 로직 생략) ...
-  */
-}
+
   if (!game || game.history.length === 0) return;
 
   let changed = false;
@@ -520,70 +518,27 @@ function updateMoveAnnotations() {
     const fenAfter  = h.fenAfter || (game.history[i+1] && game.history[i+1].fenBefore);
     if (!fenBefore || !fenAfter) continue;
 
-    const before = evalCache[normFen(fenBefore)];
-    const after  = evalCache[normFen(fenAfter)];
-    if (!before || !after) continue;
+    const cacheB = evalCache[normFen(fenBefore)];
+    const cacheA = evalCache[normFen(fenAfter)];
 
-    // ── 최소 depth 18 미만이면 분류 보류 (불안정한 평가로 오분류 방지) ──
-    const MIN_DEPTH = 18;
-    if ((before.depth ?? 0) < MIN_DEPTH || (after.depth ?? 0) < MIN_DEPTH) continue;
+    if (cacheB && cacheA) {
+      const topAlts = cacheB.topAlts;
+      const cpB = cacheB.cp;
+      const cpA = cacheA.cp;
+      const turn = h.turn;
 
-    // best1uci: 엔진 1순위 수의 UCI 표기 (e.g. "e2e4") — 실제 둔 수와 비교용
-    const best1uci = before.pvs?.[1]?.pv?.[0] ?? null;
-    // 실제 둔 수를 UCI로 변환
-    const FILES = ['a','b','c','d','e','f','g','h'];
-    let playedUci = null;
-    if (h.move) {
-      const fr = 8 - h.move.from[0], ff = FILES[h.move.from[1]];
-      const tr = 8 - h.move.to[0],   tf = FILES[h.move.to[1]];
-      const promo = h.move.promotion ? h.move.promotion.toLowerCase() : '';
-      playedUci = ff + fr + tf + tr + promo;
+      const ann = classifyMove(cpB, cpA, turn, topAlts);
+      if (ann) {
+        h.annotation = ann;
+        changed = true;
+      }
     }
-
-    // legalMoveCount: 캐시에 없으면 lazy 계산 (forced 판정용, 드문 케이스)
-    let legalMoveCount = before.legalMoveCount ?? null;
-    if (legalMoveCount === null && h.fenBefore) {
-      try {
-        const fp = h.fenBefore.split(' ');
-        const tb = parseFenBoard(fp[0]);
-        const tc = parseFenCastling(fp[2] || '-');
-        const te = parseFenEP(fp[3] || '-');
-        if (tb) {
-          legalMoveCount = getAllLegalMoves(tb, fp[1], tc, te).length;
-          before.legalMoveCount = legalMoveCount; // 캐시에 저장해 다음 호출 시 재계산 방지
-        }
-      } catch(e) {}
-    }
-    const topAlts = {
-      best1cp:        before.topAlts?.best1cp  ?? null,
-      best2cp:        before.topAlts?.best2cp  ?? null,
-      hasSacrifice:   isSacrifice(h),
-      legalMoveCount,
-      mateInBefore:   (before.mateIn != null && before.mateIn > 0) ? before.mateIn : null,
-      mateInAfter:    (after.mateIn  != null && after.mateIn  > 0) ? after.mateIn  : null,
-      isEngineBest:   best1uci != null && playedUci != null && best1uci === playedUci,
-    };
-
-    let cls = classifyMove(before.cp, after.cp, h.turn, topAlts);
-
-    // ── Miss 판정 (Chess.com 공식) ──────────────────────────
-    // W_best > 0.8이었는데 실제 둔 수로 W_move < 0.5가 된 경우 (승리 기회 상실)
-    // brilliant/great/best/forced/blunder/mistake는 miss로 격하 안 함
-    const missExempt = new Set(['brilliant','great','best','forced','blunder','mistake']);
-    if (!missExempt.has(cls)) {
-      const wBest1_miss = before.topAlts?.best1cp != null
-        ? winProb(h.turn === 'w' ? before.topAlts.best1cp : -before.topAlts.best1cp)
-        : getWinProb(before.cp, h.turn);
-      const wMove_miss = getWinProb(after.cp, h.turn);
-      if (wBest1_miss > 0.8 && wMove_miss < 0.5) cls = 'miss';
-    }
-
-    // ── 최초 1회 확정 저장 (이후 변경 불가) ─────────────
-    h.annotation = cls;
-    changed = true;
   }
 
-  if (changed) game.renderMoveList();
+  if (changed) {
+    game.renderMoveList();
+  }
+  */
 }
 
 // ── 기보 셀 HTML 생성 (기물 아이콘 포함) ──────────────────────

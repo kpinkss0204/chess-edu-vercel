@@ -69,7 +69,19 @@ class ChessGame {
   }
 
   reset() {
-    this.board = INIT_BOARD.map(r => [...r]);
+    // INIT_BOARD는 chess.js에 정의되어 있어야 함. 
+    // 로드 순서 문제에 대비해 window.INIT_BOARD 또는 직접 참조 시도
+    const initialBoard = (typeof INIT_BOARD !== 'undefined') ? INIT_BOARD : [
+      ['bR','bN','bB','bQ','bK','bB','bN','bR'],
+      ['bP','bP','bP','bP','bP','bP','bP','bP'],
+      [null,null,null,null,null,null,null,null],
+      [null,null,null,null,null,null,null,null],
+      [null,null,null,null,null,null,null,null],
+      [null,null,null,null,null,null,null,null],
+      ['wP','wP','wP','wP','wP','wP','wP','wP'],
+      ['wR','wN','wB','wQ','wK','wB','wN','wR'],
+    ];
+    this.board = initialBoard.map(r => [...r]);
     this.turn = 'w';
     this.castling = { wK: true, wQ: true, bK: true, bQ: true };
     this.enPassant = null;
