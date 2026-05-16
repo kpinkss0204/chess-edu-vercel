@@ -493,6 +493,10 @@ window.executeEnginePlayMove = executeEnginePlayMove;
 function handleMainWorkerMessage(e) {
   const line = e.data;
   if (!line) return;
+  
+  // 디버깅용: 모든 info 라인 로그 (필요 시 주석 해제)
+  // if (line.startsWith('info')) console.log('[SF-INFO]', line);
+
   if (line.includes('currmove')) return;
 
   if (line.startsWith('info') && line.includes('depth') && line.includes('score')) {
