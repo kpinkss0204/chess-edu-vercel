@@ -468,9 +468,9 @@ function classifyMove(cpBefore, cpAfter, turn, topAlts) {
 }
 // ── 배지 아이콘 ─────────────────────────────────────────────
 const ANN_ICON = {
-  brilliant:  '!!',
-  great:      '!',
-  best:       '',   // 배지 없음 — 가장 흔해서 시각적 노이즈 방지
+  brilliant:  '',
+  great:      '',
+  best:       '',
   excellent:  '',
   good:       '',
   book:       '',
@@ -478,26 +478,34 @@ const ANN_ICON = {
   mistake:    '?',
   blunder:    '??',
   miss:       '✗',
-  forced:     '',   // 배지 없음 — 강제 수는 책임 없음
+  forced:     '',
 };
 
 // ── 배지 툴팁 레이블 (Chess.com 분류 기준) ─────────────────
 const ANN_LABEL = {
-  brilliant:  '탁월한 수 (!!)  — 기물 희생 + 최선수',
-  great:      '훌륭한 수 (!)   — 유일수 또는 역전',
-  best:       '최선의 수       — 엔진 1순위',
-  excellent:  '뛰어난 수       — ΔW ≤ 2%',
-  good:       '좋은 수         — ΔW ≤ 5%',
+  brilliant:  '탁월한 수',
+  great:      '훌륭한 수',
+  best:       '최선의 수',
+  excellent:  '뛰어난 수',
+  good:       '좋은 수',
   book:       '이론',
-  inaccuracy: '부정확한 수 (?!) — ΔW 5~10%',
-  mistake:    '실수 (?)         — ΔW 10~20%',
-  blunder:    '블런더 (??)      — ΔW > 20%',
-  miss:       '놓친 수 (✗)     — 승리 기회 상실',
+  inaccuracy: '부정확한 수 (?!)',
+  mistake:    '실수 (?)',
+  blunder:    '블런더 (??)',
+  miss:       '놓친 수 (✗)',
   forced:     '강제 수',
 };
 
 // ── 수 분류 전체 업데이트 ────────────────────────────────────
+// 주석: 이제 수동 '분석하기' 버튼을 통해서만 주석이 달리도록 합니다.
+// 자동 실시간 주석은 성능 및 시각적 노이즈 방지를 위해 비활성화합니다.
 function updateMoveAnnotations() {
+  return; 
+  /* 
+  if (!game || !game.history || !evalCache) return;
+  ... (기존 로직 생략) ...
+  */
+}
   if (!game || game.history.length === 0) return;
 
   let changed = false;

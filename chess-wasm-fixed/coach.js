@@ -628,28 +628,22 @@ async function callCommentaryAPI(ctx) {
 
 2. 말을 이어가듯 쓰기
    문장을 툭 끊지 말고 "~고요", "~거든요", "~죠", "~겠습니다", "~라고 볼 수 있겠네요" 로 자연스럽게 이어가세요.
-   나쁜 예: "흑의 폰은 지키기 어렵습니다. 나이트가 불안정합니다."
-   좋은 예: "지금 흑 입장에서는 이 폰을 지키기가 쉽지 않은 상황이거든요. 나이트도 위치가 좀 불안정하다 보니 나중에라도 밀려날 수 있다는 걸 고려하면, 이 폰은 결국 잡히는 게 어느 정도 기정사실이라고 할 수 있겠습니다."
 
-3. 전술이 있으면 반드시 이름 붙이기
+3. [중요] 공간 지각 및 기물 관계 정확성
+   - 기물이 같은 선(Rank/File/Diagonal)에 있다고 해서 무조건 공격하는 것이 아닙니다. 사이에 다른 기물이나 폰이 있는지 면밀히 확인하세요.
+   - 예: Qc6가 h6에 있는 퀸을 "직접 견제"한다고 하지 마세요. 사이에 폰이 있다면 견제가 아닙니다.
+   - 기물이 보호하는 칸을 정확히 말하세요. Qc6가 b5를 보호한다고 하기 전, 실제로 b5가 c6의 대각선이나 직선상에 있는지 확인하세요.
+   - 실제 FEN과 보드 상황을 기반으로만 말하고, 추측하거나 지어내지 마세요.
+
+4. 전술이 있으면 반드시 이름 붙이기
    포크(Fork), 핀(Pin), 스큐어(Skewer), 디스커버드 어택, 희생(Sacrifice)이 있으면 한국어 용어를 쓰되, 어떤 기물이 어떤 기물을 동시에 공격하는지 구체적으로 설명하세요.
 
-4. 수 표기는 항상 실제 수로
+5. 수 표기는 항상 실제 수로
    "이 수", "해당 수" 금지. 항상 실제 수(Nf3, cxd5 등)를 쓰세요.
 
-5. 억지 드라마 금지
+6. 억지 드라마 금지
    상황이 평범하면 평범하게 쓰세요. 모든 포지션을 극적으로 만들 필요 없습니다.
-   공허한 표현 금지: "기물의 발전을 돕는다", "중앙을 장악합니다", "승리의 기회를 높입니다"
-
-6. 어색한 번역체 표현 절대 금지 — 아래 표현은 쓰지 말고 오른쪽 대체 표현을 쓰세요.
-   ✗ "~을 잠금해"        → ✓ "~을 막고 있고", "~의 이동을 막아두는 거죠"
-   ✗ "~을 장악해"        → ✓ "~을 쥐고 있고", "~을 확보하고 있는 상황이죠"
-   ✗ "~을 억제합니다"    → ✓ "~을 견제하고 있고", "~이 쉽게 움직이지 못하는 거죠"
-   ✗ "~를 수행합니다"    → ✓ "~역할을 하기가 어렵죠", "~하기엔 좀 거리가 멀고요"
-   ✗ "~을 가로지르며"    → ✓ "~쪽을 보고 있고", "~방향을 노리고 있는 거죠"
-   ✗ "침투할 가능성이 높아집니다" → ✓ "들어올 수 있는 자리가 생기는 거거든요"
-   ✗ "~을 확보하고 있습니다" → ✓ "~자리를 잡아두고 있는 거죠"
-   기본 원칙: 해설할 때 소리 내어 읽어봤을 때 자연스러우면 OK, 어색하면 다시 쓰세요.
+   공허한 표현 금지: "기물 발전", "중앙 장악", "승리의 기회를 높입니다"
 
 ───────────────────────────────
 ★ 실제 체스인사이드 해설 예시 (참고)
@@ -657,8 +651,6 @@ async function callCommentaryAPI(ctx) {
 "비숍이 g5 칸 나가면서 나이트를 핀에 걸고 중앙 d5 칸에 대한 싸움을 이어갑니다."
 "여기서 폰 교환이 만들어지죠. 익스체인지 형태로 전환이 되는 모습이고 그다음 흑의 선택은 나이트로 잡는 거였습니다."
 "퀸이 b3 칸 나오면서 나이트에 대한 위협을 걸어줍니다. 근데 피로우자가 이걸 그냥 가뿐하게 무시하고 가죠. 이거는 누가 봐도 함정이에요."
-"나이트 잡고 퀸이 들어가면 대각선 열어줬기 때문에 룩에 대한 공격도 들어가고, 이거는 공짜가 아닌가 싶은데 — 세상에 공짜는 없습니다."
-"룩 체크가 들어가고요. 그리고 여기서 룩 교환은 안 되죠. 룩이 교환되고 나면 흑의 킹 포지션이 조금 더 개선이 되겠습니다."
 
 ───────────────────────────────
 ★ 차례(Turn) 규칙 — 절대 혼동 금지
@@ -667,14 +659,7 @@ async function callCommentaryAPI(ctx) {
 엔진 수순도 "1.백:Qxf6 1...흑:Kxf6 2.백:Nh5" 처럼 백/흑이 표시됩니다.
 이 표시를 그대로 따르세요.
 
-★ 최선수 분석 섹션에서는 반드시 지금 차례인 쪽의 최선수를 해설하세요.
-  - 차례가 백이면 → "백의 최선수는 Qxf6+로..."
-  - 차례가 흑이면 → "흑의 최선수는 Rg7로..."
-  엔진 수순 1번째 수(1.백: 또는 1...흑:)가 지금 차례인 쪽의 최선수입니다.
-
-───────────────────────────────
 ★ 출력 형식
-───────────────────────────────
 섹션 헤더만 아래 형식으로 쓰고 나머지는 자연스러운 흐름의 한국어 문장:
 **포지션 상황** (필수)
 **약점 분석** / **강점 분석** / **위협 & 아이디어** / **최선수 분석** / **이후 수순** (상황에 맞는 것만)
@@ -702,7 +687,7 @@ async function callGroqAPIWithSystem(systemPrompt, userContent, maxTokens = 800)
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'openai/gpt-oss-120b',
+      model: 'llama-3.3-70b-versatile',
       max_tokens: maxTokens,
       temperature: 0.3,
       messages: [
@@ -965,7 +950,7 @@ Rules:
 - Use ONLY moves from the engine lines provided. Do not invent any move.
 - Every section must contain actual algebraic move notation from the data.
 - Always identify and name tactical patterns (Fork, Pin, etc.) using Korean terms.
-- No vague phrases like "기물 발전", "중앙 장악", "상대를 약화".
+- No vague phrases like "기물의 발전", "중앙 장악", "상대를 약화".
 - Keep each section 1~2 sentences. Total under 400 characters.`;
 
   const userMsg = [
@@ -988,7 +973,7 @@ Rules:
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'openai/gpt-oss-120b',
+      model: 'llama-3.3-70b-versatile',
       max_tokens: 500,
       temperature: 0.3,
       messages: [
@@ -1191,7 +1176,7 @@ async function callBestExplainAPI(ctx, moves, focusIdx) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'openai/gpt-oss-120b',
+      model: 'llama-3.3-70b-versatile',
       max_tokens: 400,
       temperature: 0.25,
       messages: [
