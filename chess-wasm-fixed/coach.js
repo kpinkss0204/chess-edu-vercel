@@ -441,7 +441,7 @@ function buildCommentaryPrompt(ctx) {
   const liveLine3    = livePv3 && livePv3.moves ? livePv3.moves.slice(0, 6).join(' ') : ctx.line3;
   const liveBestMove = livePv1 && livePv1.moves && livePv1.moves[0] ? livePv1.moves[0] : ctx.bestMove;
 
-  // FEN에서 주요 기물 위치를 파싱해서 모델에게 명시 (환각 방지)
+  // FEN에서 주요 기물 위치를 파싱해서 모델에게 명시 (환각 방지용 내부 데이터)
   function parseFenToSquares(fen) {
     const pieceMap = {
       'K':'백 킹','Q':'백 퀸','R':'백 룩','B':'백 비숍','N':'백 나이트','P':'백 폰',
@@ -478,10 +478,10 @@ function buildCommentaryPrompt(ctx) {
 
   if (ctx.lastMoveSan) {
     const ann = ctx.lastMoveAnnotation ? ` (${ctx.lastMoveAnnotation})` : '';
-    lines.push(`방금 둔 수: ${ctx.lastMoveSan}${ann} (이미 둔 수 — 현재 보드에 반영된 상태)`);
+    lines.push(`방금 둔 수: ${ctx.lastMoveSan}${ann} (이미 보드에 반영됨)`);
   }
 
-  lines.push(`★ 현재 보드 위 기물 위치 (FEN 기준, 이것만 믿을 것):`);
+  lines.push(`★ 현재 보드 위 기물 위치 (내부 참고용):`);
   lines.push(piecePositions);
 
   // 엔진 라인을 "수 번호 + 차례" 형태로 전개해서 백/흑 혼동 방지
@@ -518,9 +518,9 @@ function buildCommentaryPrompt(ctx) {
   if (ctx.threatData) {
     lines.push(``);
     lines.push(`[위협 분석 — 해설에 녹여서 사용할 것]`);
-    if (ctx.threatData.idea) lines.push(`핵심 계획: ${ctx.threatData.idea}`);
+    if (ctx.threatData.idea) lines.push(`아이디어: ${ctx.threatData.idea}`);
     if (ctx.threatData.prob) lines.push(`문제점: ${ctx.threatData.prob}`);
-    if (ctx.threatData.sol)  lines.push(`최선책: ${ctx.threatData.sol}`);
+    if (ctx.threatData.sol)  lines.push(`해결책: ${ctx.threatData.sol}`);
   }
 
   if (ctx.bestExplainData) {
@@ -542,11 +542,10 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`- **최선수 분석** 은 항상 포함. [엔진 최선 수순]의 수를 그대로 써서 설명할 것.`);
   lines.push(`- ★ 기물 위치는 반드시 [현재 보드 위 기물 위치]만 참고. 방금 둔 수가 이미 보드에 반영된 상태이므로, 이동 전 칸이 아닌 이동 후 칸 기준으로 서술.`);
   lines.push(`- 백/흑 주체를 항상 명시: 각 수마다 "백이 Nf3을", "흑이 cxd5로" 형태로. 주어 없이 수만 나열하지 말 것.`);
-  lines.push(`- 같은 수·같은 표현 반복 금지. 한 섹션 안에서 동일 수(예: Nh5)나 동일 표현이 두 번 이상 나오지 않게.`);
   lines.push(`- 각 섹션은 흐름으로: 수가 두어지면 → 어떤 일이 생기고 → 상대는 어떻게 대응할 수밖에 없는지.`);
   lines.push(`- 섹션 헤더는 **헤더명** 형태로 새 줄에서 시작.`);
   lines.push(`- 수 표기 필수(Nf3, cxd5 등). "이 수", "해당 수" 절대 금지.`);
-  lines.push(`- 공허한 표현 금지: "기물 발전", "중앙 장악", "승리의 기회를 높입니다"`);
+  lines.push(`- 공허한 표현 금지: "기물의 발전을 돕는다", "중앙 장악", "승리의 기회를 높입니다"`);
   lines.push(`- 각 섹션 2~4문장, 전체 500~700자`);
   lines.push(`- cp/점수/승률 수치 절대 금지`);
 
@@ -586,9 +585,9 @@ function buildCoachPrompt(ctx, question) {
   if (ctx.threatData) {
     lines.push(``);
     lines.push(`[위협 분석 데이터]`);
-    if (ctx.threatData.idea) lines.push(`핵심 계획(Idea): ${ctx.threatData.idea}`);
-    if (ctx.threatData.prob) lines.push(`문제점(Problem): ${ctx.threatData.prob}`);
-    if (ctx.threatData.sol)  lines.push(`최선책(Solution): ${ctx.threatData.sol}`);
+    if (ctx.threatData.idea) lines.push(`아이디어: ${ctx.threatData.idea}`);
+    if (ctx.threatData.prob) lines.push(`문제점: ${ctx.threatData.prob}`);
+    if (ctx.threatData.sol)  lines.push(`해결책: ${ctx.threatData.sol}`);
   }
 
   if (ctx.pgnMoves) lines.push(`전체 기보: ${ctx.pgnMoves}`);
@@ -724,8 +723,6 @@ function formatCommentary(text) {
 
   // ── 개선된 섹션 파싱 ──────────────────────────────────────────────────────
   // 전략: 모든 **헤더** 위치를 먼저 찾아 정렬한 뒤, 각 헤더 사이 본문만 추출.
-  // LLM이 본문 안에 "비공식 헤더(** 없이 평문)"를 쓸 경우 다음 ** 헤더 위치로
-  // 잘라내기 때문에 중복이 발생하지 않음.
 
   // 1) 모든 알려진 헤더 위치 탐색
   const allHeaderPat = new RegExp(
@@ -746,7 +743,6 @@ function formatCommentary(text) {
     let body = escaped.slice(bodyStart, bodyEnd).trim().replace(/^[:：\s]+/, '').trim();
 
     // 본문 안에 평문으로 다른 섹션 이름이 붙어있으면 그 앞까지만 사용
-    // (예: "...공격을 준비합니다. 최선수 분석 백의 최선수는...")
     const inlineHeaderPat = new RegExp(
       '(?:^|\n)(' + SECTION_KEYS.map(k => k.replace(/&/g,'&amp;').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')(?:\s|$)',
       'i'
@@ -820,10 +816,6 @@ function cleanKorean(text) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  // ★ 라틴 문자(영문) 제거는 하지 않음
-  // 체스 수 표기(e4, Nf3, O-O 등)가 라틴 문자이므로 제거하면 수가 사라짐
-  // 대신 LLM 프롬프트에서 한국어 외 출력을 금지하여 불필요한 영문 혼입을 방지
-
   return out;
 }
 
@@ -876,7 +868,6 @@ async function runThreatAnalysis() {
   lastThreatFen   = fenKey;
 
   try {
-    // 체크메이트 즉시 감지 — API 호출 없이 클라이언트에서 바로 처리
     const mover    = ctx.turn === 'w' ? '백' : '흑';
     const isMate   = ctx.bestMove && ctx.bestMove.includes('#');
 
@@ -906,15 +897,10 @@ async function callThreatAPI(ctx) {
   const mover     = ctx.turn === 'w' ? '백(White)' : '흑(Black)';
   const opponent  = ctx.turn === 'w' ? '흑(Black)' : '백(White)';
 
-  // 체크메이트/즉승 여부 감지: 엔진 1순위 수에 # 포함 여부
-  const isMate    = ctx.bestMove && ctx.bestMove.includes('#');
-  // 엔진 1순위 수에 + 포함 (체크) 여부
-  const isCheck   = ctx.bestMove && (ctx.bestMove.includes('+') || isMate);
-
   const THREAT_SYSTEM = `You are a Korean chess analyst. Output ONLY in Korean (한국어).
 Chess move notation stays in algebraic form (Nf3, e4, dxc4, O-O).
 
-CRITICAL: You will be given the actual engine lines and FEN for the current position. Use ONLY those moves. Never invent or hallucinate moves.
+CRITICAL: You will be given the actual engine lines and FEN for the current position. Use ONLY those moves. Never invent moves.
 
 TACTICAL MANDATE:
 You MUST analyze the engine lines for tactical patterns.
@@ -932,24 +918,18 @@ Analyze the position using the provided engine data and write three sections:
 Rules:
 - Use ONLY moves from the engine lines provided. Do not invent any move.
 - Every section must contain actual algebraic move notation from the data.
-- Always identify and name tactical patterns (Fork, Pin, etc.) using Korean terms.
-- No vague phrases like "기물의 발전", "중앙 장악", "상대를 약화".
+- Always identify tactical patterns using Korean terms.
 - Keep each section 1~2 sentences. Total under 400 characters.`;
 
   const userMsg = [
-    `[현재 포지션 분석 — 아래 데이터만 사용하고 수를 절대 만들어내지 마세요]`,
     `차례: ${mover}`,
     ctx.bestLine  ? `엔진 1순위 라인 (최선): ${ctx.bestLine}` : '',
     ctx.line2     ? `엔진 2순위 라인: ${ctx.line2}` : '',
     ctx.line3     ? `엔진 3순위 라인: ${ctx.line3}` : '',
-    isMate        ? `⚠️ 즉각 체크메이트 가능: ${ctx.bestMove}` : '',
-    isCheck && !isMate ? `엔진 최선수(체크): ${ctx.bestMove}` : '',
     ctx.lastMoveSan ? `방금 둔 수: ${ctx.lastMoveSan}` : '',
-    ctx.pgnMoves  ? `기보: ${ctx.pgnMoves}` : '',
     `FEN: ${ctx.fen}`,
     ``,
     `위 엔진 라인의 실제 수만 사용해서 아이디어/문제점/해결책을 분석하세요.`,
-    `엔진 라인에 없는 수(예시에서 본 수, 상상한 수)를 절대 쓰지 마세요.`,
   ].filter(Boolean).join('\n');
 
   const response = await fetch('/api/groq', {
@@ -1131,29 +1111,24 @@ async function callBestExplainAPI(ctx, moves, focusIdx) {
 ★ 핵심 원칙: "이 수가 좋은 이유는 ~" 식의 나열 금지.
 대신 수를 두면 어떤 일이 생기고 → 상대는 어떻게 대응할 수밖에 없는지 → 결국 어떤 결과가 나오는지를 따라가세요.
 
-★ 전술이 있으면 반드시 이름으로: **포크**, **핀**, **스큐어**, **디스커버드 어택**. 어떤 기물이 어디를 동시에 위협하는지 구체적으로.
-
-★ 금지 표현: "기물의 발전을 방해합니다", "중앙을 장악할 수 있습니다", "상대방을 약화시킵니다", "기물 교환으로 물량을 줄입니다", "폰 구조를 강화합니다"
-★ "이 수", "해당 수" 금지 — 항상 실제 수 표기(Nf3 등) 사용.
+★ 전술이 있으면 반드시 이름으로: **포크**, **핀**, **스큐어**, **디스커버드 어택**. 구체적으로 설명하세요.
+★ 금지 표현: "기물의 발전을 방해합니다", "중앙을 장악할 수 있습니다", "상대방을 약화시킵니다", "폰 구조를 강화합니다"
 
 출력 형식:
 1번째 줄: "[수 표기]이/가 나오면서:" (예: "Qa1이 나오면서:")
-이후 3~4개 bullet, 각 "• " 로 시작, 한 문장씩. 흐름으로 이어지게.
+이후 3~4개 bullet, 각 "• " 로 시작, 한 문장씩.
 전체 300자 이내.`;
 
   const focusMove = moves[focusIdx] || moves[0];
   const seq       = moves.slice(0, 5).join(' ');
 
   const userMsg = [
-    `현재 포지션에서 엔진 최선 수순: ${seq}`,
-    `그 중 ${focusIdx + 1}번째 수인 "${focusMove}"이/가 왜 좋은지 설명해주세요.`,
+    `엔진 최선 수순: ${seq}`,
+    `${focusIdx + 1}번째 수인 "${focusMove}"이/가 왜 좋은지 설명해주세요.`,
     `차례: ${ctx.turn === 'w' ? '백' : '흑'}`,
-    ctx.lastMoveSan ? `직전 수: ${ctx.lastMoveSan}` : '',
-    ctx.threatData?.prob ? `상대의 위협: ${ctx.threatData.prob}` : '',
-    ctx.threatData?.idea ? `현재 계획: ${ctx.threatData.idea}` : '',
     `FEN: ${ctx.fen}`,
-    `반드시 구체적인 위협명/칸/기물을 이용해 이유를 설명하세요. "기물 발전", "중앙 장악" 같은 막연한 표현 금지.`,
-  ].filter(Boolean).join('\n');
+    `구체적인 위협명/칸/기물을 이용해 이유를 설명하세요.`,
+  ].join('\n');
 
   const response = await fetch('/api/groq', {
     method: 'POST',
@@ -1192,12 +1167,11 @@ function renderBestExplain(text, focusMove, moves, activeIdx, ctx) {
       if (txt) reasonLines.push(txt);
     }
   }
-  // 이유가 없으면 모든 줄을 이유로
   if (reasonLines.length === 0) {
     lines.forEach(l => { if (l) reasonLines.push(l); });
   }
 
-  // 기물 아이콘 결정 (focusIdx 기준 차례 계산)
+  // 기물 아이콘 결정
   let turnForFocus = ctx.turn;
   for (let k = 0; k < activeIdx; k++) turnForFocus = turnForFocus === 'w' ? 'b' : 'w';
   const color = turnForFocus;
@@ -1207,13 +1181,11 @@ function renderBestExplain(text, focusMove, moves, activeIdx, ctx) {
   else pieceCode = color + 'P';
   const pieceImg_ = `<img src="${pieceImg(pieceCode)}" alt="${focusMove}">`;
 
-  // 아이콘 색상 순서: 파랑 → 반투명파랑 → 초록 → 노랑
   const iconCls = ['reason-positive','reason-neutral','reason-good','reason-warning'];
 
-  // 타이틀: "[기물아이콘 Qa1]이/가 좋은 이유:"
   let html = `
     <div class="best-explain-title">
-      <span class="be-move-chip">${pieceImg_}${focusMove}</span>이/가 나오면서:
+      <span class="be-move-chip">${pieceImg_}${focusMove}</span>이/가 좋은 이유:
     </div>
     <div class="best-reason-list">`;
 
