@@ -1193,7 +1193,12 @@ function loadPositionFromInput() {
 
   /* ── 차례 설정 ── */
   window.palTurn = function(turn) {
-    if (typeof game !== 'undefined' && game) { try { game.turn = turn; } catch(e){} }
+    if (typeof game !== 'undefined' && game) { 
+      try { 
+        game.turn = turn; 
+        game.halfMove = 0; // 차례 변경 시에도 초기화 (0.0 고정 방지)
+      } catch(e){} 
+    }
     var tw = document.getElementById('pal-tw');
     var tb = document.getElementById('pal-tb');
     if (tw) { tw.classList.toggle('pal-active-w', turn==='w'); tw.classList.remove('pal-active-b'); }
@@ -1203,6 +1208,9 @@ function loadPositionFromInput() {
     var obb = document.getElementById('turn-btn-b');
     if (obw) { obw.classList.toggle('active-w', turn==='w'); }
     if (obb) { obb.classList.toggle('active-b', turn==='b'); }
+    
+    // 추가: 차례 변경 시 실시간 분석 요청
+    if (typeof analyzePosition === 'function') analyzePosition(true);
   };
   window.setEditorTurn = window.palTurn;
 
@@ -1211,7 +1219,15 @@ function loadPositionFromInput() {
     if (!confirm('보드의 모든 기물을 삭제할까요?')) return;
     if (typeof game === 'undefined' || !game || !game.board) return;
     for (var r=0;r<8;r++) for (var c=0;c<8;c++) game.board[r][c]=null;
+    
+    // 추가: 보드 전체 삭제 시 상태 초기화 (평가치 0.0 고정 방지)
+    game.halfMove = 0;
+    game.fullMove = 1;
+    game.enPassant = null;
+    game.castling = { wK:false, wQ:false, bK:false, bQ:false };
+    
     refresh();
+    if (typeof analyzePosition === 'function') analyzePosition(true);
   };
   window.palReset = function() {
     var START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -1251,6 +1267,11 @@ function loadPositionFromInput() {
         // game.js가 기대하는 형식: "wK", "bQ" 등 (색깔 + 기물 대문자)
         game.board[row][col] = p.color + p.type.toUpperCase();
       }
+      
+      // 추가: 기물 수동 배치 시 50수 규칙용 클락 초기화 (평가치 0.0 고정 방지)
+      game.halfMove = 0;
+      game.enPassant = null;
+      
       refresh();
       // 추가: 기물 배치 시 실시간 분석 요청
       if (typeof analyzePosition === 'function') {
