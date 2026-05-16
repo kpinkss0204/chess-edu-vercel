@@ -865,9 +865,12 @@ function loadPositionFromInput() {
 
     <div id="analysis-panel">
       <div class="analysis-header">
-        <div class="engine-badge">
-          <div class="engine-dot idle" id="engine-dot"></div>
-          <span id="engine-name">Stockfish 18</span>
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <div class="engine-badge">
+            <div class="engine-dot idle" id="engine-dot"></div>
+            <span id="engine-name">Stockfish 18</span>
+          </div>
+          <div id="pos-warn-msg" style="display:none; color:#ff6b6b; font-size:10px; font-weight:700; white-space:nowrap;">⚠️ 엔진 제한 초과</div>
         </div>
         <span class="depth-info" id="depth-info">준비 중</span>
       </div>
@@ -1306,6 +1309,9 @@ function loadPositionFromInput() {
       // 추가: 캐슬링 권리 자동 갱신 (불가능한 위치면 권리 박탈)
       validateCastling();
       
+      // 추가: 포지션 유효성 검사 및 UI 경고 표시
+      updatePositionWarning();
+      
       refresh();
       // 추가: 기물 배치 시 실시간 분석 요청
       if (typeof analyzePosition === 'function') {
@@ -1314,6 +1320,30 @@ function loadPositionFromInput() {
       }
     } catch(e) { console.warn('[pal]',e); }
   }
+
+  function updatePositionWarning() {
+    if (!game || !game.board) return;
+    var wK=0, bK=0, w=0, b=0;
+    for(var r=0;r<8;r++) for(var c=0;c<8;c++){
+      var p = game.board[r][c];
+      if(p){
+        if(p[0]==='w') { w++; if(p[1]==='K') wK++; }
+        else { b++; if(p[1]==='K') bK++; }
+      }
+    }
+    var msg = '';
+    if (wK !== 1 || bK !== 1) msg = '⚠️ 킹 부족/과다';
+    else if (w > 16 || b > 16) msg = '⚠️ 엔진 기물수 제한 초과 (16개)';
+    else if (w + b > 32) msg = '⚠️ 엔진 총 기물수 제한 초과 (32개)';
+
+    var warnEl = document.getElementById('pos-warn-msg');
+    if (warnEl) {
+      warnEl.textContent = msg;
+      warnEl.style.display = msg ? 'block' : 'none';
+      if (msg) warnEl.title = 'Stockfish Lite 엔진은 표준 기물 수(사이드당 16개, 총 32개)를 초과하면 평가를 중단합니다.';
+    }
+  }
+
   function refresh() {
     if (typeof renderBoard==='function') renderBoard();
     else if (typeof game!=='undefined'&&game&&typeof game.renderBoard==='function') game.renderBoard();
