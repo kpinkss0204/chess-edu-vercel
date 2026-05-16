@@ -2116,6 +2116,28 @@ class ChessGame {
     return { startTurn: t, startMoveNum: mn };
   }
 
+  generatePgn() {
+    if (!this.history || this.history.length === 0) return '';
+    let pgn = '';
+    
+    // Start FEN if not standard
+    const firstMove = this.history[0];
+    const standardStart = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    if (firstMove && firstMove.fenBefore && firstMove.fenBefore !== standardStart) {
+      pgn += `[FEN "${firstMove.fenBefore}"]\n\n`;
+    }
+
+    for (let i = 0; i < this.history.length; i++) {
+      const state = this.history[i];
+      if (state.turn === 'w') {
+        pgn += `${state.fullMove}. ${state.san} `;
+      } else {
+        pgn += `${state.san} `;
+      }
+    }
+    return pgn.trim();
+  }
+
   updateStatus() {
     const statusEl = document.getElementById('status-text');
     const allMoves = getAllLegalMoves(this.board, this.turn, this.castling, this.enPassant);

@@ -1409,9 +1409,9 @@ function loadPositionFromInput() {
 
   window.copyCurrentPgn = function() {
     if (typeof game === 'undefined' || !game) return;
-    var pgn = game.generatePgn ? game.generatePgn() : '';
+    var pgn = (typeof game.generatePgn === 'function') ? game.generatePgn() : '';
     if (!pgn) {
-       // generatePgn이 없으면 FEN이라도 복사
+       // generatePgn이 없거나 비어있으면 FEN이라도 복사
        var fen = boardToFen(game.board, game.turn, game.castling, game.enPassant, game.halfMove, game.fullMove);
        pgn = '[FEN "' + fen + '"] *';
     }
@@ -1423,7 +1423,7 @@ function loadPositionFromInput() {
   window.saveCurrentGame = async function() {
     if (typeof game === 'undefined' || !game) return;
     var fen = boardToFen(game.board, game.turn, game.castling, game.enPassant, game.halfMove, game.fullMove);
-    var pgn = game.generatePgn ? game.generatePgn() : '';
+    var pgn = (typeof game.generatePgn === 'function') ? game.generatePgn() : '';
     
     var title = prompt('기보의 제목을 입력해주세요:', '연습 대국 - ' + new Date().toLocaleDateString());
     if (title === null) return; // 취소
@@ -1431,11 +1431,12 @@ function loadPositionFromInput() {
     showToast('💾 기보를 저장하는 중...');
     
     try {
-      // Firebase 연동 확인
-      if (typeof auth !== 'undefined' && auth.currentUser) {
+      // Firebase 연동 확인 (window._auth 또는 firebase.auth() 사용)
+      var currentAuth = window._auth || (typeof firebase !== 'undefined' ? firebase.auth() : null);
+      if (currentAuth && currentAuth.currentUser) {
         const db = firebase.firestore();
         await db.collection('games').add({
-          uid: auth.currentUser.uid,
+          uid: currentAuth.currentUser.uid,
           title: title,
           fen: fen,
           pgn: pgn,
