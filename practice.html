@@ -1233,18 +1233,23 @@ function loadPositionFromInput() {
 
   /* ── 보드 읽기/쓰기 ── */
   function get(col,row) {
-    try { return game.board[row][col]; } catch(e) { return null; }
+    try {
+      var raw = game.board[row][col];
+      if (!raw) return null;
+      // game.js 형식: "wK", "bQ" 같은 2글자 문자열 → 팔레트용 객체로 변환
+      if (typeof raw === 'string') return { color: raw[0], type: raw[1] };
+      return raw;
+    } catch(e) { return null; }
   }
   function set(col,row,p) {
     if (typeof game==='undefined'||!game||!game.board) return;
     try {
-      if (p===null) { game.board[row][col]=null; }
-      else {
-        game.board[row][col] = {
-          type: p.type.toLowerCase(),
-          color: p.color,
-          piece: p.color==='w' ? p.type.toUpperCase() : p.type.toLowerCase()
-        };
+      if (!p) {
+        // null과 undefined 모두 처리 (버그 2 수정)
+        game.board[row][col] = null;
+      } else {
+        // game.js가 기대하는 형식: "wK", "bQ" 등 (색깔 + 기물 대문자)
+        game.board[row][col] = p.color + p.type.toUpperCase();
       }
       refresh();
     } catch(e) { console.warn('[pal]',e); }
