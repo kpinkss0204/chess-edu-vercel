@@ -1203,14 +1203,16 @@ async function askCoach() {
 function buildCommentaryPrompt(ctx) {
   const lines = [];
 
-  // pvData에서 직접 최신 라인 읽기 (ctx의 캐시된 값 대신)
-  const livePv1 = pvData && pvData[1];
-  const livePv2 = pvData && pvData[2];
-  const livePv3 = pvData && pvData[3];
+  // pvData에서 직접 최신 라인 읽기 (window.pvData 사용)
+  const livePv1 = window.pvData && window.pvData[1];
+  const livePv2 = window.pvData && window.pvData[2];
+  const livePv3 = window.pvData && window.pvData[3];
   const liveBestLine = livePv1 && livePv1.moves ? livePv1.moves.slice(0, 8).join(' ') : ctx.bestLine;
+  console.log('[Debug Prompt] liveBestLine:', liveBestLine);
   const liveLine2    = livePv2 && livePv2.moves ? livePv2.moves.slice(0, 6).join(' ') : ctx.line2;
   const liveLine3    = livePv3 && livePv3.moves ? livePv3.moves.slice(0, 6).join(' ') : ctx.line3;
   const liveBestMove = livePv1 && livePv1.moves && livePv1.moves[0] ? livePv1.moves[0] : ctx.bestMove;
+  console.log('[Debug Prompt] liveBestMove:', liveBestMove);
 
   lines.push(`[포지션 데이터]`);
   lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수 | 차례: ${ctx.turn === 'w' ? '백(White)' : '흑(Black)'}`);
