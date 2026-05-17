@@ -27,43 +27,54 @@ def analyze_position(board: ChessBoard):
             names = {'p': '폰', 'n': '나이트', 'b': '비숍', 'r': '룩', 'q': '퀸', 'k': '킹'}
             return names.get(symbol.lower(), '기물')
 
+        # 1. 공격 관계 분석 (기존)
         white_attackers = []
         black_attackers = []
-        
         for square in chess.SQUARES:
             piece = b.piece_at(square)
             if piece:
-                # 모든 공격자 찾기 (폰의 공격 포함)
                 attackers_mask = b.attackers(not piece.color, square)
                 for attacker_sq in attackers_mask:
                     attacker_piece = b.piece_at(attacker_sq)
-                    
-                    # 기물 이름 명확하게 표기
                     attacker_name = get_piece_name(attacker_piece.symbol())
                     target_name = get_piece_name(piece.symbol())
-                    
                     msg = (
                         f"{'백' if attacker_piece.color else '흑'} {attacker_name}({chess.square_name(attacker_sq)})"
                         f"가 {'백' if piece.color else '흑'} {target_name}({chess.square_name(square)})"
                         f"를 공격하고 있습니다."
                     )
-                    
                     if attacker_piece.color == chess.WHITE:
                         white_attackers.append(msg)
                     else:
                         black_attackers.append(msg)
         
+        # 2. 핀 분석 (기존)
         pins = []
         for square in chess.SQUARES:
             if b.is_pinned(b.turn, square):
                 pins.append(f"{chess.square_name(square)}칸의 {get_piece_name(b.piece_at(square).symbol())}은(는) 핀에 의해 움직임이 제한됩니다.")
         
+        # 3. 추가: 중앙 점유 및 기물 활동성
+        center_squares = [chess.D4, chess.D5, chess.E4, chess.E5]
+        center_control = { 'white': 0, 'black': 0 }
+        for sq in center_squares:
+            if b.is_attacked_by(chess.WHITE, sq): center_control['white'] += 1
+            if b.is_attacked_by(chess.BLACK, sq): center_control['black'] += 1
+        
+        # 4. 추가: 킹 안전 (간략화 - 체크 여부 및 주변 방패)
+        king_safety = {
+            'white_in_check': b.is_check() and b.turn == chess.WHITE,
+            'black_in_check': b.is_check() and b.turn == chess.BLACK
+        }
+
         return JSONResponse(content={
             "fen": board.fen,
             "facts": {
                 "white_attackers": white_attackers,
                 "black_attackers": black_attackers,
-                "pins": pins
+                "pins": pins,
+                "center_control": center_control,
+                "king_safety": king_safety
             }
         })
     except Exception as e:
