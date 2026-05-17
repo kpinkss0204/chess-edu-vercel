@@ -200,6 +200,9 @@ function buildChessContext() {
     }
   } catch(e) { /* 무시 */ }
 
+  // 포지션 구조 인사이트 추출 (FEN 기반 정제 분석)
+  const positionInsights = extractPositionInsights(fen);
+
   return {
     turn, fen, bestMove, bestLine, line2, line3, evaluation, depth, cpFromWhite,
     lastMove, lastMoveSan, lastMoveAnnotation,
@@ -211,7 +214,762 @@ function buildChessContext() {
     bestExplainData,
     candidateMoves,
     sequenceMoves,
+    positionInsights,
   };
+}
+
+// ══════════════════════════════════════════════════════
+// 포지션 정제 분석 레이어 — AI에게 넘길 구조적 특징 추출
+// ══════════════════════════════════════════════════════
+
+/**
+ * FEN 문자열로부터 8x8 보드 배열을 만든다.
+ * board[rank][file] = { piece: 'P'|'p'|..., color: 'w'|'b' } | null
+ * rank 0 = 8랭크(흑 홈), rank 7 = 1랭크(백 홈)
+ */
+function fenToMatrix(fen) {
+  const ranks = fen.split(' ')[0].split('/');
+  const board = [];
+  for (const rank of ranks) {
+    const row = [];
+    for (const ch of rank) {
+      if ('12345678'.includes(ch)) {
+        for (let i = 0; i < parseInt(ch); i++) row.push(null);
+      } else {
+        row.push({ piece: ch.toUpperCase(), color: ch === ch.toUpperCase() ? 'w' : 'b', raw: ch });
+      }
+    }
+    board.push(row);
+  }
+  return board; // board[0..7][0..7], board[0] = rank8
+}
+
+// 랭크/파일 인덱스 → 체스 칸 이름 (예: [0,0] → 'a8')
+function idxToSq(r, f) {
+  return 'abcdefgh'[f] + (8 - r);
+}
+
+// 체스 칸 이름 → [rank, file] (예: 'e4' → [4, 4])
+function sqToIdx(sq) {
+  return [8 - parseInt(sq[1]), 'abcdefgh'.indexOf(sq[0])];
+}
+
+/**
+ * 특정 칸을 공격하는 기물 목록을 반환.
+ * 슬라이딩 기물(R,B,Q)은 경로 차단 여부도 확인.
+ * returns: [{ sq: 'e4', piece: 'R', color: 'w' }, ...]
+ */
+function getAttackers(board, targetR, targetF) {
+  const attackers = [];
+
+  for (let r = 0; r < 8; r++) {
+    for (let f = 0; f < 8; f++) {
+      const cell = board[r][f];
+      if (!cell) continue;
+      const { piece, color } = cell;
+      const dr = targetR - r;
+      const df = targetF - f;
+
+      // 폰 공격
+      if (piece === 'P') {
+        const dir = color === 'w' ? -1 : 1; // 백폰은 위로(rank 감소), 흑폰은 아래로
+        if (dr === dir && Math.abs(df) === 1) attackers.push({ sq: idxToSq(r, f), piece, color });
+        continue;
+      }
+      // 나이트
+      if (piece === 'N') {
+        if ((Math.abs(dr) === 2 && Math.abs(df) === 1) || (Math.abs(dr) === 1 && Math.abs(df) === 2))
+          attackers.push({ sq: idxToSq(r, f), piece, color });
+        continue;
+      }
+      // 킹
+      if (piece === 'K') {
+        if (Math.abs(dr) <= 1 && Math.abs(df) <= 1 && (dr !== 0 || df !== 0))
+          attackers.push({ sq: idxToSq(r, f), piece, color });
+        continue;
+      }
+      // 슬라이딩 기물 — 방향 및 경로 확인
+      const isRook   = piece === 'R';
+      const isBishop = piece === 'B';
+      const isQueen  = piece === 'Q';
+      const straight = dr === 0 || df === 0;
+      const diagonal = Math.abs(dr) === Math.abs(df);
+
+      if ((isRook && !straight) || (isBishop && !diagonal) || (isQueen && !straight && !diagonal)) continue;
+
+      const stepR = dr === 0 ? 0 : dr / Math.abs(dr);
+      const stepF = df === 0 ? 0 : df / Math.abs(df);
+      let blocked = false;
+      let cr = r + stepR, cf = f + stepF;
+      while (cr !== targetR || cf !== targetF) {
+        if (board[cr][cf]) { blocked = true; break; }
+        cr += stepR; cf += stepF;
+      }
+      if (!blocked) attackers.push({ sq: idxToSq(r, f), piece, color });
+    }
+  }
+  return attackers;
+}
+
+/**
+ * 포지션 구조 인사이트를 추출해 문자열 배열로 반환.
+ * AI 프롬프트에 직접 삽입할 수 있는 한국어 문장들.
+ */
+function extractPositionInsights(fen) {
+  const insights = [];
+  try {
+    const board = fenToMatrix(fen);
+    const turn  = fen.split(' ')[1] || 'w';
+
+    const PIECE_KR = { P: '폰', N: '나이트', B: '비숍', R: '룩', Q: '퀸', K: '킹' };
+    const COLOR_KR = { w: '백', b: '흑' };
+    const OPP = { w: 'b', b: 'w' };
+
+    // ─── 1. 칸별 압박 집계 ──────────────────────────────
+    // squareControl[r][f] = { w: attackers[], b: attackers[] }
+    const squareControl = Array.from({ length: 8 }, () =>
+      Array.from({ length: 8 }, () => ({ w: [], b: [] }))
+    );
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const atks = getAttackers(board, r, f);
+        for (const a of atks) squareControl[r][f][a.color].push(a);
+      }
+    }
+
+    // ─── 2. 집중 압박 칸 감지 (3+ 기물이 한 칸 공격) ──
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const ctrl = squareControl[r][f];
+        const sq   = idxToSq(r, f);
+        const cell = board[r][f];
+
+        for (const color of ['w', 'b']) {
+          const atks = ctrl[color];
+          if (atks.length >= 3) {
+            const pieces = atks.map(a => PIECE_KR[a.piece]).join(', ');
+            insights.push(`[집중 압박] ${COLOR_KR[color]}이 ${sq} 칸을 ${atks.length}개 기물(${pieces})로 집중 공격 중`);
+          } else if (atks.length === 2) {
+            // 고가치 기물(Q,R)이 포함된 2중 압박은 언급
+            const hasHeavy = atks.some(a => a.piece === 'Q' || a.piece === 'R');
+            if (hasHeavy && cell && cell.color !== color) {
+              const pieces = atks.map(a => PIECE_KR[a.piece]).join('+');
+              const target = PIECE_KR[cell.piece];
+              insights.push(`[이중 압박] ${COLOR_KR[color]} ${pieces}가 ${sq}의 ${COLOR_KR[cell.color]} ${target}을 동시에 위협`);
+            }
+          }
+        }
+
+        // 수비 과부하: 한 기물이 두 칸을 동시에 지키는지는 아래 오버로딩에서 처리
+        // 공격 측 수 > 수비 측 수이며 상대 기물이 있는 칸
+        if (cell) {
+          const atkW = ctrl['w'].length, atkB = ctrl['b'].length;
+          const [attColor, defColor] = cell.color === 'w' ? ['b', 'w'] : ['w', 'b'];
+          const attackCount = cell.color === 'w' ? atkB : atkW;
+          const defendCount = cell.color === 'w' ? atkW : atkB;
+          if (attackCount > defendCount && attackCount >= 2) {
+            const atkPieces = ctrl[attColor].map(a => PIECE_KR[a.piece]).join('+');
+            insights.push(`[수적 우세] ${COLOR_KR[attColor]} ${atkPieces}가 ${sq}의 ${COLOR_KR[cell.color]} ${PIECE_KR[cell.piece]}를 공격, 수비 기물(${defendCount}개) 부족`);
+          }
+        }
+      }
+    }
+
+    // ─── 3. 배터리 감지 (같은 열/대각선에 R+R, Q+R, Q+B) ──
+    // 열(파일) 배터리: R+R 또는 Q+R
+    for (let f = 0; f < 8; f++) {
+      const heavies = { w: [], b: [] };
+      for (let r = 0; r < 8; r++) {
+        const cell = board[r][f];
+        if (cell && (cell.piece === 'R' || cell.piece === 'Q')) {
+          heavies[cell.color].push({ piece: cell.piece, sq: idxToSq(r, f) });
+        }
+      }
+      for (const color of ['w', 'b']) {
+        const h = heavies[color];
+        if (h.length >= 2) {
+          const types = h.map(x => PIECE_KR[x.piece]).join('+');
+          const sqs   = h.map(x => x.sq).join(', ');
+          insights.push(`[배터리] ${COLOR_KR[color]} ${types}가 ${f + 1}번 파일(${sqs})에 배터리 형성`);
+        }
+      }
+    }
+
+    // 랭크 배터리
+    for (let r = 0; r < 8; r++) {
+      const heavies = { w: [], b: [] };
+      for (let f = 0; f < 8; f++) {
+        const cell = board[r][f];
+        if (cell && (cell.piece === 'R' || cell.piece === 'Q')) {
+          heavies[cell.color].push({ piece: cell.piece, sq: idxToSq(r, f) });
+        }
+      }
+      for (const color of ['w', 'b']) {
+        const h = heavies[color];
+        if (h.length >= 2) {
+          const types = h.map(x => PIECE_KR[x.piece]).join('+');
+          const sqs   = h.map(x => x.sq).join(', ');
+          insights.push(`[배터리] ${COLOR_KR[color]} ${types}가 ${8 - r}랭크(${sqs})에 배터리 형성`);
+        }
+      }
+    }
+
+    // 대각선 배터리: Q+B
+    const diagChecked = new Set();
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const cell = board[r][f];
+        if (!cell || (cell.piece !== 'Q' && cell.piece !== 'B')) continue;
+        for (const [dr, df] of [[1,1],[1,-1]]) {
+          const diagKey = `${r - dr * Math.min(r, f)}_${f - df * Math.min(r, f)}_${dr}_${df}`;
+          if (diagChecked.has(diagKey)) continue;
+          diagChecked.add(diagKey);
+          // 대각선 전체 수집
+          const diag = { w: [], b: [] };
+          let cr = r, cf = f;
+          while (cr >= 0 && cr < 8 && cf >= 0 && cf < 8) {
+            const c = board[cr][cf];
+            if (c && (c.piece === 'Q' || c.piece === 'B')) diag[c.color].push({ piece: c.piece, sq: idxToSq(cr, cf) });
+            cr += dr; cf += df;
+          }
+          // 시작점도 포함되니 역방향도
+          cr = r - dr; cf = f - df;
+          while (cr >= 0 && cr < 8 && cf >= 0 && cf < 8) {
+            const c = board[cr][cf];
+            if (c && (c.piece === 'Q' || c.piece === 'B')) diag[c.color].push({ piece: c.piece, sq: idxToSq(cr, cf) });
+            cr -= dr; cf -= df;
+          }
+          for (const color of ['w', 'b']) {
+            const d = diag[color];
+            if (d.length >= 2) {
+              const types = d.map(x => PIECE_KR[x.piece]).join('+');
+              const sqs   = d.map(x => x.sq).join(', ');
+              insights.push(`[대각 배터리] ${COLOR_KR[color]} ${types}(${sqs})가 같은 대각선에 배치`);
+            }
+          }
+        }
+      }
+    }
+
+    // ─── 4. 열린 파일 독점 ──────────────────────────────
+    for (let f = 0; f < 8; f++) {
+      let hasWpawn = false, hasBpawn = false;
+      const rooks = { w: [], b: [] };
+      for (let r = 0; r < 8; r++) {
+        const cell = board[r][f];
+        if (!cell) continue;
+        if (cell.piece === 'P') {
+          if (cell.color === 'w') hasWpawn = true; else hasBpawn = true;
+        }
+        if (cell.piece === 'R' || cell.piece === 'Q') rooks[cell.color].push(PIECE_KR[cell.piece]);
+      }
+      const fileLetter = 'abcdefgh'[f];
+      if (!hasWpawn && !hasBpawn) {
+        // 완전 열린 파일
+        if (rooks.w.length > 0 && rooks.b.length === 0)
+          insights.push(`[열린 파일 독점] 백 ${rooks.w.join('+')}가 ${fileLetter}파일을 단독 지배 (상대 중기물 없음)`);
+        else if (rooks.b.length > 0 && rooks.w.length === 0)
+          insights.push(`[열린 파일 독점] 흑 ${rooks.b.join('+')}가 ${fileLetter}파일을 단독 지배 (상대 중기물 없음)`);
+      } else if (!hasWpawn && rooks.b.length > 0) {
+        // 반열린 파일 (백 폰 없음, 흑 룩 있음)
+        insights.push(`[반열린 파일] 흑 ${rooks.b.join('+')}가 ${fileLetter}파일 반열린 파일 장악 (백 폰 부재)`);
+      } else if (!hasBpawn && rooks.w.length > 0) {
+        insights.push(`[반열린 파일] 백 ${rooks.w.join('+')}가 ${fileLetter}파일 반열린 파일 장악 (흑 폰 부재)`);
+      }
+    }
+
+    // ─── 5. 아웃포스트 (상대 폰이 공격 못하는 중앙 나이트/비숍) ──
+    const CENTER = [[2,2],[2,3],[2,4],[2,5],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,2],[5,3],[5,4],[5,5]];
+    for (const [r, f] of CENTER) {
+      const cell = board[r][f];
+      if (!cell || (cell.piece !== 'N' && cell.piece !== 'B')) continue;
+      const { color } = cell;
+      const opp = OPP[color];
+      // 상대 폰이 이 칸을 공격할 수 있는지
+      const oppPawnDir = opp === 'w' ? -1 : 1;
+      const pawnAtk1 = board[r + oppPawnDir]?.[f - 1];
+      const pawnAtk2 = board[r + oppPawnDir]?.[f + 1];
+      const underPawnAttack =
+        (pawnAtk1 && pawnAtk1.piece === 'P' && pawnAtk1.color === opp) ||
+        (pawnAtk2 && pawnAtk2.piece === 'P' && pawnAtk2.color === opp);
+      if (!underPawnAttack) {
+        insights.push(`[아웃포스트] ${COLOR_KR[color]} ${PIECE_KR[cell.piece]}(${idxToSq(r, f)})가 상대 폰의 공격을 받지 않는 중앙 아웃포스트 장악`);
+      }
+    }
+
+    // ─── 6. 킹 안전 ─────────────────────────────────────
+    for (const color of ['w', 'b']) {
+      let kingR = -1, kingF = -1;
+      outer: for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const c = board[r][f];
+          if (c && c.piece === 'K' && c.color === color) { kingR = r; kingF = f; break outer; }
+        }
+      }
+      if (kingR < 0) continue;
+      const opp = OPP[color];
+
+      // 킹 주변 2×3 구역(킹사이드/퀸사이드 기준) 폰 방패 확인
+      const shieldR = color === 'w' ? kingR - 1 : kingR + 1; // 폰이 있어야 할 랭크
+      if (shieldR >= 0 && shieldR < 8) {
+        let missingShields = 0;
+        for (let sf = Math.max(0, kingF - 1); sf <= Math.min(7, kingF + 1); sf++) {
+          const shield = board[shieldR][sf];
+          if (!shield || shield.piece !== 'P' || shield.color !== color) missingShields++;
+        }
+        if (missingShields >= 2) {
+          insights.push(`[킹 안전 위협] ${COLOR_KR[color]} 킹(${idxToSq(kingR, kingF)}) 앞 폰 방패 ${missingShields}개 부재 — 킹이 노출됨`);
+        }
+      }
+
+      // 킹이 있는 파일 또는 인접 파일이 열려있고 상대 중기물이 있는지
+      for (let df = -1; df <= 1; df++) {
+        const cf = kingF + df;
+        if (cf < 0 || cf > 7) continue;
+        let friendlyPawn = false, enemyHeavy = false;
+        for (let r = 0; r < 8; r++) {
+          const c = board[r][cf];
+          if (!c) continue;
+          if (c.piece === 'P' && c.color === color) friendlyPawn = true;
+          if ((c.piece === 'R' || c.piece === 'Q') && c.color === opp) enemyHeavy = true;
+        }
+        if (!friendlyPawn && enemyHeavy) {
+          const fileLetter = 'abcdefgh'[cf];
+          insights.push(`[킹 안전 위협] ${COLOR_KR[color]} 킹 인접 ${fileLetter}파일 열려있고 ${COLOR_KR[opp]} 중기물 존재 — 직접 공격 가능`);
+        }
+      }
+
+      // 상대방 기물이 킹 주변 칸을 공격하는 수 집계
+      let kingZoneAttacks = 0;
+      for (let dr = -2; dr <= 2; dr++) {
+        for (let df = -2; df <= 2; df++) {
+          const nr = kingR + dr, nf = kingF + df;
+          if (nr < 0 || nr > 7 || nf < 0 || nf > 7) continue;
+          const atks = squareControl[nr][nf][opp];
+          if (atks.some(a => a.piece !== 'P')) kingZoneAttacks++;
+        }
+      }
+      if (kingZoneAttacks >= 4) {
+        insights.push(`[킹존 압박] ${COLOR_KR[opp]}이 ${COLOR_KR[color]} 킹 주변 ${kingZoneAttacks}개 칸을 공격 — 킹사이드 공격 위험`);
+      }
+    }
+
+    // ─── 7. 폰 구조 ─────────────────────────────────────
+    const pawns = { w: [], b: [] };
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const c = board[r][f];
+        if (c && c.piece === 'P') pawns[c.color].push({ r, f, sq: idxToSq(r, f) });
+      }
+    }
+
+    for (const color of ['w', 'b']) {
+      const opp = OPP[color];
+      const myPawns   = pawns[color];
+      const oppPawns  = pawns[opp];
+
+      // 고립 폰
+      for (const p of myPawns) {
+        const hasNeighbor = myPawns.some(q => q.f === p.f - 1 || q.f === p.f + 1);
+        if (!hasNeighbor) {
+          insights.push(`[고립 폰] ${COLOR_KR[color]} ${p.sq} 폰 고립 (인접 파일 아군 폰 없음) — 장기적 약점`);
+        }
+      }
+
+      // 이중 폰
+      const fileCount = {};
+      for (const p of myPawns) fileCount[p.f] = (fileCount[p.f] || 0) + 1;
+      for (const [f, cnt] of Object.entries(fileCount)) {
+        if (cnt >= 2) {
+          insights.push(`[이중 폰] ${COLOR_KR[color]} ${'abcdefgh'[f]}파일에 폰 ${cnt}개 중첩 — 구조적 약점`);
+        }
+      }
+
+      // 통과 폰 (passed pawn)
+      for (const p of myPawns) {
+        const advDir = color === 'w' ? -1 : 1;
+        const isBlocked = oppPawns.some(q =>
+          (q.f === p.f || q.f === p.f - 1 || q.f === p.f + 1) &&
+          (color === 'w' ? q.r < p.r : q.r > p.r)
+        );
+        if (!isBlocked) {
+          const rankLabel = 8 - p.r;
+          insights.push(`[통과 폰] ${COLOR_KR[color]} ${p.sq} 통과 폰 — 상대 폰이 막지 못함, 승진 가능성`);
+        }
+      }
+    }
+
+    // ─── 8. 기물 과부하 (한 기물이 2개 칸 동시 수비) ──
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const defender = board[r][f];
+        if (!defender || defender.piece === 'K' || defender.piece === 'P') continue;
+        const { color } = defender;
+        const defSq = idxToSq(r, f);
+
+        // 이 기물이 방어하는 아군 기물 칸 목록
+        const guarding = [];
+        for (let tr = 0; tr < 8; tr++) {
+          for (let tf = 0; tf < 8; tf++) {
+            if (tr === r && tf === f) continue;
+            const target = board[tr][tf];
+            if (!target || target.color !== color || target.piece === 'P') continue;
+            // defender가 target 칸을 공격(=방어)하는지
+            const atks = squareControl[tr][tf][color];
+            if (atks.some(a => a.sq === defSq)) {
+              // target이 상대에게 공격받고 있는지
+              const underAttack = squareControl[tr][tf][OPP[color]].length > 0;
+              if (underAttack) guarding.push({ sq: idxToSq(tr, tf), piece: target.piece });
+            }
+          }
+        }
+        if (guarding.length >= 2) {
+          const guardList = guarding.map(g => `${PIECE_KR[g.piece]}(${g.sq})`).join(', ');
+          insights.push(`[기물 과부하] ${COLOR_KR[color]} ${PIECE_KR[defender.piece]}(${defSq})가 ${guardList}를 동시에 수비 중 — 과부하 상태`);
+        }
+      }
+    }
+
+    // ─── 9. 주도권 (템포) — 공격 위협이 더 많은 쪽 ──
+    let wThreats = 0, bThreats = 0;
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const cell = board[r][f];
+        if (!cell) continue;
+        if (cell.color === 'b') wThreats += squareControl[r][f]['w'].length;
+        if (cell.color === 'w') bThreats += squareControl[r][f]['b'].length;
+      }
+    }
+    if (wThreats > bThreats + 3)
+      insights.push(`[주도권] 백이 흑 기물에 대해 공격 우세 (공격 ${wThreats} vs ${bThreats}) — 이니셔티브 보유`);
+    else if (bThreats > wThreats + 3)
+      insights.push(`[주도권] 흑이 백 기물에 대해 공격 우세 (공격 ${bThreats} vs ${wThreats}) — 이니셔티브 보유`);
+
+    // ─── 10. 킹사이드/퀸사이드 전장 판단 ──────────────
+    // 각 색의 기물(폰 제외)이 킹사이드(e~h파일)와 퀸사이드(a~d파일)에 몇 개 있는지 집계
+    for (const color of ['w', 'b']) {
+      let kingSidePieces = 0, queenSidePieces = 0;
+      let kingSidePawns = 0, queenSidePawns = 0;
+      let kingFile = -1;
+      for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const c = board[r][f];
+          if (!c || c.color !== color) continue;
+          if (c.piece === 'K') { kingFile = f; continue; }
+          if (c.piece === 'P') {
+            if (f >= 4) kingSidePawns++; else queenSidePawns++;
+            continue;
+          }
+          if (f >= 4) kingSidePieces++; else queenSidePieces++;
+        }
+      }
+      const opp = OPP[color];
+      // 상대 킹 위치 파악
+      let oppKingFile = -1;
+      outer2: for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const c = board[r][f];
+          if (c && c.piece === 'K' && c.color === opp) { oppKingFile = f; break outer2; }
+        }
+      }
+
+      const ksDiff = kingSidePieces - queenSidePieces;
+      const pawnDiff = kingSidePawns - queenSidePawns;
+
+      if (ksDiff >= 2 || (ksDiff >= 1 && pawnDiff >= 2)) {
+        insights.push(`[전장 판단] ${COLOR_KR[color]} 기물이 킹사이드(e~h파일)에 집중 — 킹사이드 공격 전개 중`);
+      } else if (ksDiff <= -2 || (ksDiff <= -1 && pawnDiff <= -2)) {
+        insights.push(`[전장 판단] ${COLOR_KR[color]} 기물이 퀸사이드(a~d파일)에 집중 — 퀸사이드 공격 전개 중`);
+      }
+
+      // 상대 킹이 한쪽에 있고 아군 기물이 그쪽에 집중돼 있으면 직접 언급
+      if (oppKingFile >= 0) {
+        const oppKingSide = oppKingFile >= 4 ? 'king' : 'queen';
+        if (oppKingSide === 'king' && kingSidePieces >= 3) {
+          insights.push(`[공격 방향] ${COLOR_KR[opp]} 킹이 킹사이드에 위치, ${COLOR_KR[color]} 기물 3개 이상이 킹사이드 집중 — 킹사이드 직접 공격 가능`);
+        } else if (oppKingSide === 'queen' && queenSidePieces >= 3) {
+          insights.push(`[공격 방향] ${COLOR_KR[opp]} 킹이 퀸사이드에 위치, ${COLOR_KR[color]} 기물 3개 이상이 퀸사이드 집중 — 퀸사이드 직접 공격 가능`);
+        }
+      }
+    }
+
+    // ─── 11. 전술 패턴 감지 ───────────────────────────
+
+    // 포크 감지: 한 기물이 상대 기물 2개 이상을 동시에 공격
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const attacker = board[r][f];
+        if (!attacker || attacker.piece === 'K') continue;
+        const { color } = attacker;
+        const opp = OPP[color];
+        const attackerSq = idxToSq(r, f);
+        // 이 기물이 공격하는 상대 기물 목록
+        const forkedTargets = [];
+        for (let tr = 0; tr < 8; tr++) {
+          for (let tf = 0; tf < 8; tf++) {
+            const target = board[tr][tf];
+            if (!target || target.color !== opp) continue;
+            if (target.piece === 'P') continue; // 폰은 포크 대상에서 제외(가치 낮음)
+            const atks = squareControl[tr][tf][color];
+            if (atks.some(a => a.sq === attackerSq)) {
+              forkedTargets.push({ sq: idxToSq(tr, tf), piece: target.piece });
+            }
+          }
+        }
+        if (forkedTargets.length >= 2) {
+          const targets = forkedTargets.map(t => `${PIECE_KR[t.piece]}(${t.sq})`).join(', ');
+          insights.push(`[포크] ${COLOR_KR[color]} ${PIECE_KR[attacker.piece]}(${attackerSq})가 ${targets}를 동시에 공격 — 포크 상황`);
+        }
+      }
+    }
+
+    // 추크추방(Zwischenzug) 가능성: 상대가 반드시 응수해야 할 중간 위협이 있는지
+    // 간이 감지: 상대 킹이 체크 위협을 받고 있으면서 동시에 다른 고가치 기물도 공격받는 경우
+    for (const color of ['w', 'b']) {
+      const opp = OPP[color];
+      let oppKingR = -1, oppKingF = -1;
+      outer3: for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const c = board[r][f];
+          if (c && c.piece === 'K' && c.color === opp) { oppKingR = r; oppKingF = f; break outer3; }
+        }
+      }
+      if (oppKingR < 0) continue;
+      const kingAtks = squareControl[oppKingR][oppKingF][color];
+      if (kingAtks.length > 0) {
+        // 킹 위협 동시에 다른 고가치 기물도 공격받고 있으면 추크추방 환경
+        for (let r = 0; r < 8; r++) {
+          for (let f = 0; f < 8; f++) {
+            const target = board[r][f];
+            if (!target || target.color !== opp || (target.piece !== 'Q' && target.piece !== 'R')) continue;
+            const targetAtks = squareControl[r][f][color];
+            if (targetAtks.length > 0) {
+              insights.push(`[추크추방] ${COLOR_KR[color]}이 ${COLOR_KR[opp]} 킹 체크 위협과 ${PIECE_KR[target.piece]}(${idxToSq(r,f)}) 공격을 동시에 보유 — 중간 수(추크추방) 가능성`);
+            }
+          }
+        }
+      }
+    }
+
+    // 디스커버드 어택(발견 공격) 감지: 슬라이딩 기물 앞에 아군 기물이 있고, 그 아군이 움직이면 뒤 슬라이더가 고가치 기물을 직격
+    for (const color of ['w', 'b']) {
+      const opp = OPP[color];
+      for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const slider = board[r][f];
+          if (!slider || slider.color !== color) continue;
+          if (slider.piece !== 'R' && slider.piece !== 'B' && slider.piece !== 'Q') continue;
+
+          const dirs = slider.piece === 'R' ? [[0,1],[0,-1],[1,0],[-1,0]]
+                     : slider.piece === 'B' ? [[1,1],[1,-1],[-1,1],[-1,-1]]
+                     : [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
+
+          for (const [dr, df] of dirs) {
+            let cr = r + dr, cf = f + df;
+            let blocker = null;
+            while (cr >= 0 && cr < 8 && cf >= 0 && cf < 8) {
+              const c = board[cr][cf];
+              if (c) {
+                if (!blocker && c.color === color && c.piece !== 'K') {
+                  blocker = { r: cr, f: cf, piece: c.piece, sq: idxToSq(cr, cf) };
+                } else if (blocker && c.color === opp && (c.piece === 'Q' || c.piece === 'R' || c.piece === 'K')) {
+                  insights.push(`[디스커버드 어택] ${COLOR_KR[color]} ${PIECE_KR[blocker.piece]}(${blocker.sq})가 움직이면 뒤 ${PIECE_KR[slider.piece]}(${idxToSq(r,f)})가 ${COLOR_KR[opp]} ${PIECE_KR[c.piece]}(${idxToSq(cr,cf)})를 발견 공격`);
+                  break;
+                } else {
+                  break;
+                }
+              }
+              cr += dr; cf += df;
+            }
+          }
+        }
+      }
+    }
+
+    // ─── 12. 폰 구조 상세 분석 ───────────────────────────
+    // 뒤처진 폰(Backward Pawn)
+    for (const color of ['w', 'b']) {
+      const opp = OPP[color];
+      const myPawns = pawns[color];
+      const advDir = color === 'w' ? -1 : 1; // rank 감소 = 전진(백), rank 증가 = 전진(흑)
+
+      for (const p of myPawns) {
+        // 인접 파일에 아군 폰이 있는지
+        const hasSideNeighbor = myPawns.some(q => (q.f === p.f - 1 || q.f === p.f + 1));
+        if (!hasSideNeighbor) continue; // 고립 폰은 별도 처리
+
+        // 뒤처진 폰: 인접 폰보다 뒤에 있고, 전진하면 상대 폰 공격을 받음
+        const aheadR = p.r + advDir;
+        if (aheadR < 0 || aheadR > 7) continue;
+        const oppPawnLeft  = board[aheadR]?.[p.f - 1];
+        const oppPawnRight = board[aheadR]?.[p.f + 1];
+        const attackedIfAdvance =
+          (oppPawnLeft  && oppPawnLeft.piece  === 'P' && oppPawnLeft.color  === opp) ||
+          (oppPawnRight && oppPawnRight.piece === 'P' && oppPawnRight.color === opp);
+
+        // 인접 아군 폰이 이미 더 앞에 있는지
+        const neighborAhead = myPawns.some(q =>
+          (q.f === p.f - 1 || q.f === p.f + 1) &&
+          (color === 'w' ? q.r < p.r : q.r > p.r)
+        );
+
+        if (attackedIfAdvance && neighborAhead) {
+          insights.push(`[뒤처진 폰] ${COLOR_KR[color]} ${p.sq} 폰은 전진하면 상대 폰 공격을 받고 인접 아군 폰 지원이 없음 — 장기적 약점`);
+        }
+      }
+
+      // 폰 사슬(Pawn Chain) — 대각선으로 연결된 폰 3개 이상
+      const sortedPawns = [...myPawns].sort((a, b) => color === 'w' ? b.r - a.r : a.r - b.r);
+      let chainLen = 1;
+      for (let i = 1; i < sortedPawns.length; i++) {
+        const prev = sortedPawns[i - 1];
+        const curr = sortedPawns[i];
+        if (Math.abs(curr.f - prev.f) === 1 && Math.abs(curr.r - prev.r) === 1) {
+          chainLen++;
+        } else {
+          if (chainLen >= 3) {
+            insights.push(`[폰 사슬] ${COLOR_KR[color]} 폰이 대각선 사슬 ${chainLen}개 형성 — 공간 통제력 높음, 기물 교환 자제 권장`);
+          }
+          chainLen = 1;
+        }
+      }
+      if (chainLen >= 3) {
+        insights.push(`[폰 사슬] ${COLOR_KR[color]} 폰이 대각선 사슬 ${chainLen}개 형성 — 공간 통제력 높음, 기물 교환 자제 권장`);
+      }
+
+      // 폰 구조 기반 영역 우세 (킹사이드/퀸사이드 폰 수 우세)
+      const myKS = myPawns.filter(p => p.f >= 4).length;
+      const myQS = myPawns.filter(p => p.f < 4).length;
+      const oppKS = pawns[opp].filter(p => p.f >= 4).length;
+      const oppQS = pawns[opp].filter(p => p.f < 4).length;
+      if (myKS > oppKS + 1) {
+        insights.push(`[폰 영역 우세] ${COLOR_KR[color]}이 킹사이드 폰 수적 우세(${myKS} vs ${oppKS}) — 마이너리티 공격 또는 킹사이드 공세 가능`);
+      }
+      if (myQS > oppQS + 1) {
+        insights.push(`[폰 영역 우세] ${COLOR_KR[color]}이 퀸사이드 폰 수적 우세(${myQS} vs ${oppQS}) — 마이너리티 공격 또는 퀸사이드 공세 가능`);
+      }
+
+      // 마이너리티 공격: 상대가 폰 수 우세인 쪽에 아군 폰이 더 적어 폰 교환으로 약점 생성 가능
+      if (myKS < oppKS && myKS >= 1 && oppKS >= 2) {
+        insights.push(`[마이너리티 공격] ${COLOR_KR[color]}이 킹사이드에 폰 소수(${myKS})로 ${COLOR_KR[opp]} 폰 다수(${oppKS}) 공격 — 마이너리티 공격으로 약점 생성 가능`);
+      }
+      if (myQS < oppQS && myQS >= 1 && oppQS >= 2) {
+        insights.push(`[마이너리티 공격] ${COLOR_KR[color]}이 퀸사이드에 폰 소수(${myQS})로 ${COLOR_KR[opp]} 폰 다수(${oppQS}) 공격 — 마이너리티 공격으로 약점 생성 가능`);
+      }
+
+      // a3/a4, h3/h6 예방적 폰 전진 감지 (비숍 핀 예방 + 공간 확장)
+      for (const p of myPawns) {
+        const fileLetter = 'abcdefgh'[p.f];
+        const rankNum = 8 - p.r;
+        // 백: a3, a4, h3 / 흑: a6, a5, h6
+        const isPreventivePush =
+          (color === 'w' && ((p.f === 0 && (rankNum === 3 || rankNum === 4)) || (p.f === 7 && rankNum === 3))) ||
+          (color === 'b' && ((p.f === 0 && (rankNum === 6 || rankNum === 5)) || (p.f === 7 && rankNum === 6)));
+        if (isPreventivePush) {
+          insights.push(`[예방 전진] ${COLOR_KR[color]} ${p.sq} 폰 — 오프닝 비숍 핀 예방 + 미들/엔드게임 측면 공간 확장(${p.f === 0 ? '퀸사이드' : '킹사이드'} 공격 발판) 가능`);
+        }
+      }
+    }
+
+    // ─── 13. 기물 동적 가치 평가 (위치 기반) ────────────
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const cell = board[r][f];
+        if (!cell) continue;
+        const { piece, color } = cell;
+        const sq = idxToSq(r, f);
+        const rankNum = 8 - r; // 백 기준 랭크 번호 (1=백홈, 8=흑홈)
+        const opp = OPP[color];
+
+        // 폰 7랭크 도달 — 승진 직전, 가치 최고조
+        if (piece === 'P') {
+          const promotionRank = color === 'w' ? 2 : 7; // rank index: 백7랭크=r1, 흑7랭크=r6
+          const actualRank = color === 'w' ? rankNum : 9 - rankNum;
+          if (actualRank === 7) {
+            insights.push(`[기물 가치↑] ${COLOR_KR[color]} 폰(${sq})이 7랭크 도달 — 승진 위협으로 기물 가치 최고조, 상대는 즉각 저지 필요`);
+          }
+        }
+
+        // 나이트: 7랭크 또는 중앙 아웃포스트
+        if (piece === 'N') {
+          const actualRank = color === 'w' ? rankNum : 9 - rankNum;
+          if (actualRank >= 5) {
+            const oppPawnDir = opp === 'w' ? -1 : 1;
+            const pawnThreat1 = board[r + oppPawnDir]?.[f - 1];
+            const pawnThreat2 = board[r + oppPawnDir]?.[f + 1];
+            const safe = !(
+              (pawnThreat1 && pawnThreat1.piece === 'P' && pawnThreat1.color === opp) ||
+              (pawnThreat2 && pawnThreat2.piece === 'P' && pawnThreat2.color === opp)
+            );
+            if (safe) {
+              insights.push(`[기물 가치↑] ${COLOR_KR[color]} 나이트(${sq})가 ${actualRank}랭크 안전 전진 — 상대 진영 깊숙이 침투, 공격 기여도 높음`);
+            }
+          }
+          // 나이트 중앙 근접도
+          const centerDist = Math.max(Math.abs(f - 3.5), Math.abs(r - 3.5));
+          if (centerDist < 1.5) {
+            insights.push(`[기물 가치↑] ${COLOR_KR[color]} 나이트(${sq})가 중앙 근접 — 영향력 최대, 8개 이동 가능`);
+          }
+        }
+
+        // 비숍: 오픈 대각선 또는 자기 폰과 다른 색 칸
+        if (piece === 'B') {
+          const bishopColorLight = (r + f) % 2 === 0; // 비숍이 밝은 칸에 있는지
+          // 같은 색 폰이 비숍 길을 막고 있는지 계산
+          let blockedCount = 0, openCount = 0;
+          let myPawnCount = 0;
+          const dirs = [[1,1],[1,-1],[-1,1],[-1,-1]];
+          for (const [dr, df] of dirs) {
+            let cr = r + dr, cf = f + df;
+            while (cr >= 0 && cr < 8 && cf >= 0 && cf < 8) {
+              const c = board[cr][cf];
+              if (c) {
+                if (c.piece === 'P' && c.color === color) blockedCount++;
+                else openCount++;
+                break;
+              }
+              openCount++;
+              cr += dr; cf += df;
+            }
+          }
+          // 아군 폰이 비숍과 같은 색 칸에 있으면 bad bishop
+          let samColorPawns = 0;
+          for (const p of pawns[color]) {
+            if ((p.r + p.f) % 2 === bishopColorLight % 2) samColorPawns++;
+          }
+          if (blockedCount === 0 && openCount >= 4) {
+            insights.push(`[기물 가치↑] ${COLOR_KR[color]} 비숍(${sq})의 대각선이 완전히 열려있음 — 장거리 공격력 극대화`);
+          } else if (samColorPawns >= 3) {
+            insights.push(`[기물 가치↓] ${COLOR_KR[color]} 비숍(${sq})과 같은 색 칸에 아군 폰 ${samColorPawns}개 — 배드 비숍, 영향력 제한`);
+          }
+        }
+
+        // 룩: 열린 파일 또는 7랭크
+        if (piece === 'R') {
+          const actualRank = color === 'w' ? rankNum : 9 - rankNum;
+          // 7랭크 룩
+          if (actualRank === 7) {
+            insights.push(`[기물 가치↑] ${COLOR_KR[color]} 룩(${sq})이 7랭크 침투 — 상대 폰 위협 및 킹 압박, 강력한 위치`);
+          }
+          // 열린 파일 여부는 섹션 4에서 이미 처리, 여기서는 반열린 파일 가치만 추가
+          let hasFriendlyPawn = false;
+          for (let tr = 0; tr < 8; tr++) {
+            const c = board[tr][f];
+            if (c && c.piece === 'P' && c.color === color) { hasFriendlyPawn = true; break; }
+          }
+          if (!hasFriendlyPawn) {
+            const fileLetter = 'abcdefgh'[f];
+            insights.push(`[기물 가치↑] ${COLOR_KR[color]} 룩(${sq})이 반열린 ${fileLetter}파일 장악 — 상대 폰 직접 압박 가능`);
+          }
+        }
+      }
+    }
+
+  } catch(e) {
+    console.warn('[PositionInsights] 분석 오류:', e);
+  }
+
+  return insights;
 }
 
 // ══════════════════════════════════════════════════════
@@ -441,14 +1199,6 @@ function buildCommentaryPrompt(ctx) {
   const liveLine3    = livePv3 && livePv3.moves ? livePv3.moves.slice(0, 6).join(' ') : ctx.line3;
   const liveBestMove = livePv1 && livePv1.moves && livePv1.moves[0] ? livePv1.moves[0] : ctx.bestMove;
 
-  lines.push(`아래 체스 포지션을 보고, 체스인사이드 채널처럼 해설하세요.`);
-  lines.push(``);
-  lines.push(`핵심 원칙: 이 포지션에서 실제로 보이는 것을 있는 그대로 관찰하고 설명하세요.`);
-  lines.push(`폰이 약하면 "이 폰은 지키기가 어려운 폰이라고 볼 수 있죠"처럼,`);
-  lines.push(`긴장이 생기면 "비숍이 뒤쪽으로 빠지면서 룩 긴장이 생겨났고요"처럼,`);
-  lines.push(`나이트가 불안정하면 "나이트의 위치가 나중에라도 밀려날 수 있다는 걸 고려하면"처럼.`);
-  lines.push(`상황이 평범하면 평범하게, 복잡하면 복잡하게 — 억지로 극적인 표현이나 고정된 패턴을 쓰지 마세요.`);
-  lines.push(``);
   lines.push(`[포지션 데이터]`);
   lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수 | 차례: ${ctx.turn === 'w' ? '백(White)' : '흑(Black)'}`);
   lines.push(`현재 형세: ${ctx.advantageDesc}`);
@@ -459,24 +1209,28 @@ function buildCommentaryPrompt(ctx) {
   }
 
   // 항상 최신 pvData 기반 라인 사용
-  if (liveBestLine) lines.push(`[엔진 1순위 라인 — 최선수 분석에 반드시 이 수순 사용] ${liveBestLine}`);
-  if (liveLine2)    lines.push(`[엔진 2순위 라인] ${liveLine2}`);
-  if (liveLine3)    lines.push(`[엔진 3순위 라인] ${liveLine3}`);
+  if (liveBestLine) lines.push(`엔진 1순위 수순: ${liveBestLine}`);
+  if (liveLine2)    lines.push(`엔진 2순위 수순: ${liveLine2}`);
+  if (liveLine3)    lines.push(`엔진 3순위 수순: ${liveLine3}`);
 
-  // 사용자 화살표(후보수/수순) 포함
   if (ctx.candidateMoves && ctx.candidateMoves.length > 0) {
-    lines.push(``);
-    lines.push(`[사용자가 화살표로 표시한 후보수: ${ctx.candidateMoves.join(', ')}]`);
-    lines.push(`※ 해설에서 이 후보수들이 엔진 추천과 어떻게 다른지 언급해 주세요.`);
+    lines.push(`사용자 후보수 (화살표): ${ctx.candidateMoves.join(', ')} — 엔진 추천과 비교해서 언급해주세요.`);
   }
   if (ctx.sequenceMoves && ctx.sequenceMoves.length > 0) {
-    lines.push(`[사용자가 Alt+화살표로 표시한 수순: ${ctx.sequenceMoves.join(' → ')}]`);
-    lines.push(`※ 이 수순의 장단점을 간략히 언급해 주세요.`);
+    lines.push(`사용자 수순 (Alt+화살표): ${ctx.sequenceMoves.join(' → ')} — 장단점 간략히 언급해주세요.`);
+  }
+
+  // 포지션 구조 인사이트 (코드로 계산한 확실한 사실)
+  if (ctx.positionInsights && ctx.positionInsights.length > 0) {
+    lines.push(``);
+    lines.push(`[포지션 구조 분석 — 코드로 정밀 계산된 사실, 해설에 반드시 활용할 것]`);
+    ctx.positionInsights.forEach(ins => lines.push(`  • ${ins}`));
+    lines.push(`※ 위 항목 중 핵심적인 것을 "~고요", "~거든요" 등 체스인사이드 말투로 자연스럽게 녹여서 쓸 것. 목록을 그대로 나열하지 말 것.`);
   }
 
   if (ctx.threatData) {
     lines.push(``);
-    lines.push(`[위협 분석 — 해설에 녹여서 사용할 것]`);
+    lines.push(`[위협 분석 데이터 — 해설에 자연스럽게 녹여서 쓸 것]`);
     if (ctx.threatData.idea) lines.push(`핵심 계획: ${ctx.threatData.idea}`);
     if (ctx.threatData.prob) lines.push(`문제점: ${ctx.threatData.prob}`);
     if (ctx.threatData.sol)  lines.push(`최선책: ${ctx.threatData.sol}`);
@@ -484,7 +1238,7 @@ function buildCommentaryPrompt(ctx) {
 
   if (ctx.bestExplainData) {
     lines.push(``);
-    lines.push(`[최선수 이유 데이터 — 자연스러운 문장으로 녹여서 사용할 것]`);
+    lines.push(`[최선수 이유 — 아래 이유들을 "A를 두면 B가 되기 때문에 C가 됩니다" 형태의 인과 문장으로 자연스럽게 서술할 것]`);
     lines.push(`최선수: ${ctx.bestExplainData.move || liveBestMove}`);
     if (ctx.bestExplainData.reasons && ctx.bestExplainData.reasons.length > 0) {
       ctx.bestExplainData.reasons.forEach((r, i) => lines.push(`  ${i+1}. ${r}`));
@@ -495,16 +1249,12 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`FEN: ${ctx.fen}`);
 
   lines.push(``);
-  lines.push(`[작성 규칙]`);
-  lines.push(`- 해설은 반드시 **포지션 상황** 섹션으로 시작`);
-  lines.push(`- 이후 섹션은 상황에 맞는 것만 선택: **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순**`);
-  lines.push(`- **최선수 분석** 은 항상 포함. 반드시 [엔진 1순위 라인]의 수순을 그대로 사용해서 설명할 것.`);
-  lines.push(`- 섹션 헤더는 반드시 **헤더명** 형태. 새 줄에서 시작, 헤더 다음 줄바꿈 하나.`);
-  lines.push(`- 본문 안에 다른 섹션 이름을 쓰지 말 것.`);
-  lines.push(`- 실제 수 표기 사용 필수. "이 수", "해당 수" 금지.`);
-  lines.push(`- 빈 말("승리의 기회를 높입니다", "기물의 발전을 돕는다") 금지 — 항상 구체적 이유 서술.`);
-  lines.push(`- 각 섹션 2~4문장, 전체 500~700자`);
-  lines.push(`- cp/점수/승률 수치 절대 금지`);
+  lines.push(`[작성 지침]`);
+  lines.push(`- **포지션 상황** 으로 시작하고, **최선수 분석** 은 반드시 포함.`);
+  lines.push(`- 나머지 섹션(**약점 분석**, **강점 분석**, **위협 & 아이디어**, **이후 수순**)은 포지션에 실제로 해당하는 것만 선택.`);
+  lines.push(`- **최선수 분석**: 엔진 1순위 수순의 수를 직접 써서 "X를 두면 → Y가 되고 → 결과적으로 Z" 형태로 인과관계를 설명할 것. 수를 나열만 하지 말 것.`);
+  lines.push(`- 섹션 헤더는 **헤더명** 형태로 단독 줄에 쓸 것. 본문 안에 다른 섹션 이름 쓰지 말 것.`);
+  lines.push(`- 위 system prompt의 말투 예시를 그대로 따를 것.`);
 
   return lines.join('\n');
 }
@@ -539,6 +1289,12 @@ function buildCoachPrompt(ctx, question) {
     lines.push(`※ 이 수순이 올바른지 평가해 주세요.`);
   }
 
+  if (ctx.positionInsights && ctx.positionInsights.length > 0) {
+    lines.push(``);
+    lines.push(`[포지션 구조 분석 — 코드로 정밀 계산된 사실]`);
+    ctx.positionInsights.forEach(ins => lines.push(`  • ${ins}`));
+  }
+
   if (ctx.threatData) {
     lines.push(``);
     lines.push(`[위협 분석 데이터]`);
@@ -565,33 +1321,104 @@ function buildCoachPrompt(ctx, question) {
 
 // 포지션 해설 전용 API 호출
 async function callCommentaryAPI(ctx) {
-  const SYSTEM = `You are a Korean-language chess commentator in the style of the YouTube channel "체스인사이드 (ChessInside)".
+  const SYSTEM = `당신은 유튜브 채널 "체스인사이드"의 해설자입니다. 아래 예시들이 정확한 말투와 구조입니다.
 
-WHAT THIS STYLE MEANS:
-You watch the board like a coach reviewing a real game. You notice things — a pawn that's hard to defend, a bishop retreating to create rook tension, a knight that might get pushed away eventually. You say what you see, explain why it matters, and follow the consequences naturally. You do NOT use templates or repeat fixed phrases.
+───────────────────────────────────────
+【예시 A — 폰 약점이 있는 미들게임】
+**포지션 상황**
+방금 흑이 Nf6로 나이트를 전개했고요. 지금 백은 중앙에 e4-d4 폰 센터를 쥐고 있습니다. 이거는 나중에 d5 돌파를 위협할 수 있는 구조인데, 그러려면 일단 기물 전개가 좀 더 이루어져야 하겠죠.
 
-TACTICAL AWARENESS:
-If the engine lines or the position involves tactical themes, you MUST use professional chess terminology to explain them clearly. This includes:
-- 포크 (Fork), 핀 (Pin), 스큐어 (Skewer)
-- 디스커버드 어택 (Discovered Attack), 더블 체크 (Double Check)
-- 기물 과부하 (Overloading), 제거 (Deflection), 유인 (Decoy)
-- 백랭크 메이트 (Back-rank Mate), 질식 메이트 (Smothered Mate)
-- 희생 (Sacrifice) 및 전술적 연계
+**약점 분석**
+흑 입장에서는 c6 폰이 조금 신경 쓰이는 부분이라고 볼 수 있겠어요. 지금 당장 위협은 아니지만, d5가 열리는 순간 이 폰이 고립될 가능성이 있거든요. 그렇다는 건 흑도 빠르게 대응을 해줘야 하는 상황이라는 거죠.
 
-HOW TO COMMENT:
-- Look at the actual position: which pawns are weak? which pieces are active? what tension exists?
-- Describe what each move does in concrete terms. "d5 폰을 잡고 올라갑니다. 근데 이 폰은 지키기가 어려운 폰이라고 볼 수 있죠." / "비숍이 뒤쪽으로 빠지면서 룩 긴장이 생겨났고요." / "나이트의 위치가 나중에라도 밀려날 수 있다는 걸 고려하면 이 폰은 잡히는 게 어느 정도 기정사실이라고 할 수 있겠네요."
-- When a sacrifice or counter-intuitive move is truly the best: explain the material exchange clearly and why the compensation is worth it.
-- When a position is straightforward: just describe what's happening and the plan. No need to force dramatic phrases.
-- Always use the actual move notation (cxd5, Nb3, Rf1 etc). Never say "이 수" or "해당 수".
-- Keep it conversational: "~라고 볼 수 있죠", "~하는 거죠", "~하는 상황이라고 볼 수 있겠네요", "~고요", "~거든요".
-- Never use hollow phrases like "기물의 발전을 돕는다", "상대방을 약화시킨다", "승리의 기회를 높입니다" without a specific concrete reason.
-- Only use these section headers: **포지션 상황**, **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순**.
-- Never output placeholders like <<_0>>. Never output numerical scores (cp, win%).
-- Output ONLY in Korean. Chess move notation stays in English algebraic form.`;
+**최선수 분석**
+컴퓨터는 여기서 Bd3를 추천하고 있는데요. 비숍을 능동적인 칸에 두면서 e4 폰을 지원하는 거라고 볼 수 있겠습니다. Bd3 이후 O-O, Re1 수순이면 백의 킹사이드 공격 준비가 자연스럽게 이루어지는 모습이에요. 특히 Re1이 들어오면 e5 돌파 위협이 생기기 때문에 흑도 쉽게 구경만 하고 있을 수는 없는 상황이 되겠습니다.
+
+**이후 수순**
+Bd3 이후 흑이 O-O로 대응한다면 백은 h3 정도로 대기하면서 흑의 반격을 견제할 수 있겠어요. 흑이 c5로 카운터를 치려 한다면 d5 돌파로 즉각 응수할 수 있는 준비를 해두는 게 적합할 것 같습니다.
+
+───────────────────────────────────────
+【예시 B — 희생이 최선인 포지션】
+**포지션 상황**
+백이 Rxf7을 둔 상황입니다. 얼핏 보면 기물을 그냥 내주는 것처럼 보이는데, 세상에 공짜는 없거든요. 여기서 룩 희생에는 꽤 깊은 계산이 깔려 있습니다.
+
+**위협 & 아이디어**
+Rxf7 이후 Kxf7을 유도하고 나면 Ng5+로 킹을 체크하면서 퀸 포크를 노리는 수순이 따라옵니다. 흑 킹이 e8로 피한다면 Qxd8+로 퀸까지 잡히는 모습이 되거든요. 폰 하나 준 게 아니라 결국 기물 우위를 가져가는 구조라고 볼 수 있겠습니다.
+
+**최선수 분석**
+엔진 최선 수순은 Rxf7 Kxf7 Ng5+ Ke8 Qxd8+ Kxd8인데요. 여기서 백은 룩 하나를 내주는 대신 퀸을 얻는 교환이 성립합니다. 킹도 노출된 채로 남으니까 이후 공격 가담이 훨씬 쉬워지는 상황이겠어요.
+
+**이후 수순**
+교환 이후에는 남은 기물로 노출된 흑 킹을 계속 추적하는 플레이가 자연스럽게 이어집니다. 수비 측 킹이 안전한 칸을 찾기 어렵다는 게 지금 포지션의 핵심이라고 볼 수 있겠죠.
+
+───────────────────────────────────────
+【예시 C — 균형 잡힌 포지션】
+**포지션 상황**
+서로 캐슬링을 마쳤고 기물 전개도 어느 정도 완성된 모습입니다. 지금은 양쪽 다 뚜렷한 약점이 없고, 특별히 긴장이 발생하는 칸도 없어요. 조용한 미들게임이 시작되는 시점이라고 볼 수 있겠어요.
+
+**강점 분석**
+백은 나이트가 d4라는 중앙 좋은 칸을 잡고 있다는 게 긍정적입니다. 이 나이트는 쉽게 쫓겨나지 않거든요. c2나 f5로 향하면서 상대에게 지속적인 부담을 줄 수 있는 상황이겠습니다.
+
+**최선수 분석**
+컴퓨터 추천수는 f4인데요. 킹사이드 공간을 열면서 나이트와 연계해 공격을 준비하는 아이디어입니다. f4 이후 흑이 f5로 막는다면 e4로 카운터치면서 중앙 싸움을 가져오는 수순이 이어질 수 있겠어요.
+
+**이후 수순**
+지금 당장 결정적인 전술이 있는 국면은 아니고, 양쪽 다 자원을 모으면서 적절한 타이밍을 재는 상황이라고 보면 되겠습니다. 백이 먼저 확실한 전략 방향을 정하는 게 중요하겠어요.
+
+───────────────────────────────────────
+
+【당신이 이미 알고 있는 체스 지식 — 해설에 자연스럽게 활용할 것】
+
+■ 기물 동적 가치 (위치 기반)
+- 폰이 7랭크에 위치하면 승진 직전 위협으로 가치 최고조. 상대는 즉각 저지해야 함.
+- 나이트는 중앙에 가까울수록, 그리고 상대 진영 깊숙이(5~7랭크) 전진할수록 공격력이 높아짐. 변두리 나이트(a/h파일)는 가치가 낮음.
+- 비숍은 대각선이 열려있을수록, 그리고 아군 폰이 비숍과 다른 색 칸에 배치될수록(good bishop) 가치가 높아짐. 아군 폰이 비숍과 같은 색 칸에 많으면 배드 비숍.
+- 룩은 열린 파일(open file)이나 반열린 파일(semi-open file)에 위치할수록, 7랭크에 침투할수록 가치가 극대화됨.
+
+■ 전술 패턴
+- 포크(Fork): 한 기물이 상대 기물 2개 이상을 동시에 공격. 나이트 포크가 가장 흔함.
+- 핀(Pin): 고가치 기물 앞 기물이 움직일 수 없는 상태. 절대 핀(킹 앞)과 상대 핀(퀸 앞)으로 구분.
+- 디스커버드 어택(Discovered Attack / 발견 공격): 앞에 있는 기물이 움직이면서 뒤 슬라이딩 기물이 상대 기물을 직격.
+- 추크추방(Zwischenzug / 중간 수): 상대가 반드시 응수해야 할 중간 위협을 끼워 넣어 흐름을 끊는 수.
+- 배터리(Battery): 같은 파일/랭크/대각선에 룩+룩, 퀸+룩, 퀸+비숍 배치로 압력 극대화.
+- 아웃포스트(Outpost): 상대 폰이 공격할 수 없는 안전한 중앙 칸에 기물 배치.
+- 기물 과부하(Overloading): 한 기물이 두 곳을 동시에 수비해야 하는 상황, 어느 한쪽을 포기해야 함.
+
+■ 폰 구조
+- 고립 폰(Isolated Pawn): 인접 파일에 아군 폰이 없어 지원받지 못하는 약점 폰.
+- 이중 폰(Doubled Pawn): 같은 파일에 폰 2개 중첩. 구조적 약점.
+- 뒤처진 폰(Backward Pawn): 전진하면 상대 폰 공격을 받고 인접 폰 지원이 없는 폰.
+- 통과 폰(Passed Pawn): 상대 폰이 막지 못하는 폰. 엔드게임에서 가치 매우 높음.
+- 폰 사슬(Pawn Chain): 대각선으로 연결된 폰 구조. 공간 통제력이 높으나 기저 폰이 약점.
+- 폰 구조로 영역 우세를 가진 쪽은 기물 교환을 자제하는 것이 유리함(공간이 줄어들면 폰 구조 이점도 희석됨).
+
+■ 마이너리티 공격(Minority Attack)
+상대보다 폰 수가 적은 쪽에서 그 폰들로 상대 폰 다수를 공격해 약점(고립 폰, 이중 폰)을 만드는 전략.
+예: 백이 퀸사이드에 폰 2개, 흑이 3개인 경우 백이 b4-b5로 밀면 c6 폰을 약화시킬 수 있음.
+
+■ 킹사이드/퀸사이드 전장 판단
+- 기물과 폰이 킹사이드(e~h파일)에 집중돼 있으면 킹사이드 공격을 준비하는 것이 자연스러움.
+- 기물과 폰이 퀸사이드(a~d파일)에 집중돼 있으면 퀸사이드 공격이 주 전장.
+- 상대 킹이 킹사이드에 캐슬링했고 아군 기물이 킹사이드에 집중돼 있으면 직접 킹 공격 가능.
+
+■ 예방적 폰 전진 (a3/a4, h3/h6)
+- 오프닝 초반: 상대 비숍이 Bg5, Bb5 등 핀을 거는 것을 방지하는 예방 목적.
+- 미들/엔드게임: 킹사이드(h3/h6) 또는 퀸사이드(a3/a4) 공간 확장 발판으로 측면 공격이나 영역 확장에 활용 가능.
+
+【절대 규칙】
+1. 위 예시의 말투를 그대로 따를 것: "~고요", "~거든요", "~라고 볼 수 있겠습니다", "~는 거죠", "~인 모습이었고요", "~겠어요", "~라고 볼 수 있겠네요"
+2. 섹션 헤더는 반드시 **포지션 상황**, **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순** 중에서만 쓸 것
+3. **포지션 상황** 과 **최선수 분석** 은 반드시 포함
+4. 나머지 섹션은 실제 포지션에 맞는 것만 선택 (억지로 다 쓰지 말 것)
+5. **최선수 분석** 에서는 반드시 엔진 1순위 라인의 실제 수 표기를 써서 인과관계를 설명할 것 ("A 이후 B가 오면 C가 되기 때문에")
+6. 포지션 인사이트에서 [전술 패턴], [폰 구조], [기물 가치], [전장 판단], [마이너리티 공격], [예방 전진] 등이 보이면 해당 내용을 해설에 자연스럽게 녹여서 쓸 것 — "포크", "핀", "추크추방", "디스커버드 어택", "배드 비숍", "통과 폰", "마이너리티 공격" 등 용어를 직접 사용해도 좋음
+7. "이 수", "해당 수", "기물의 발전을 돕는다", "상대를 약화시킨다", "승리의 기회를 높입니다" 금지
+8. cp/점수/승률 수치 금지
+9. 전체 500~700자, 각 섹션 2~4문장
+10. 한국어로만 출력. 체스 수 표기(e4, Nf3 등)는 영문 그대로.`;
 
   const prompt = buildCommentaryPrompt(ctx);
-  return callGroqAPIWithSystem(SYSTEM, prompt, 900);
+  return callGroqAPIWithSystemTemp(SYSTEM, prompt, 900, 0.45);
 }
 
 // 공통 Groq 호출 (system 없이 — 수동 질문용)
@@ -605,13 +1432,17 @@ Never output numerical evaluation scores. Never output placeholders like <<_0>>.
 }
 
 async function callGroqAPIWithSystem(systemPrompt, userContent, maxTokens = 800) {
+  return callGroqAPIWithSystemTemp(systemPrompt, userContent, maxTokens, 0.3);
+}
+
+async function callGroqAPIWithSystemTemp(systemPrompt, userContent, maxTokens = 800, temperature = 0.3) {
   const response = await fetch('/api/groq', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       max_tokens: maxTokens,
-      temperature: 0.3,
+      temperature: temperature,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user',   content: userContent  },
