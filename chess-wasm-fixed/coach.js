@@ -993,15 +993,11 @@ function extractPositionInsights(fen) {
 // 핵심: 포지션 해설 자동 실행
 // ══════════════════════════════════════════════════════
 
-// 스톡피시 라인이 충분한지 검사 (3개 라인 모두 있고, 각각 최소 4수 이상)
+// 스톡피시 라인이 충분한지 검사 (최소 1수 이상 있으면 시작)
 function hasEnoughLines(ctx) {
-  const pv1 = pvData && pvData[1];
-  const pv2 = pvData && pvData[2];
-  const pv3 = pvData && pvData[3];
+  const pv1 = window.pvData && window.pvData[1];
   const len1 = pv1 && pv1.moves ? pv1.moves.length : 0;
-  const len2 = pv2 && pv2.moves ? pv2.moves.length : 0;
-  const len3 = pv3 && pv3.moves ? pv3.moves.length : 0;
-  return len1 >= 4 && len2 >= 3 && len3 >= 3;
+  return len1 >= 1;
 }
 
 // 스톡피시에 더 깊은 분석 요청 (엔진이 이미 실행 중이라고 가정)
@@ -1153,7 +1149,7 @@ async function askCoach() {
     return;
   }
 
-  const context = buildChessContext();
+  const context = await buildChessContext();
   if (!context) {
     showToast('게임 데이터를 불러올 수 없습니다');
     return;
