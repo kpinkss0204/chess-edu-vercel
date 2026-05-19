@@ -41,6 +41,9 @@ function switchTab(tab) {
 function loadPGN() {
   const pgn = document.getElementById('pgn-input').value.trim();
   if (!pgn) { showToast('PGN을 입력하세요'); return; }
+  if (!window._pendingTacticAnalysis && typeof AnalysisCache !== 'undefined' && game) {
+    AnalysisCache.clearGameAnalysisCache(game);
+  }
   try {
     game.parsePGN(pgn);
     showToast('PGN 불러오기 완료');
@@ -586,6 +589,13 @@ async function loadGameRecord(docId) {
     // 1) 화살표 먼저 로드
     _loadRecordArrows(doc.arrows || null);
 
+    const myColor = doc.myColor || 'w';
+    if (typeof AnalysisCache !== 'undefined' && doc.tacticAnalysis) {
+      AnalysisCache.setPendingTacticAnalysis(doc.tacticAnalysis, myColor);
+    } else if (typeof AnalysisCache !== 'undefined') {
+      AnalysisCache.clearGameAnalysisCache(typeof game !== 'undefined' ? game : null);
+    }
+
     // 2) PGN 로드 (내부에서 switchTab('analysis') + goToEnd 호출됨)
     document.getElementById('pgn-input').value = doc.pgn;
     loadPGN();
@@ -593,6 +603,8 @@ async function loadGameRecord(docId) {
     // 3) 내 색상 적용
     const sel = document.getElementById('my-color-select');
     if (sel && doc.myColor) sel.value = doc.myColor;
+    const sfSel = document.getElementById('sf-color-select');
+    if (sfSel) sfSel.value = myColor;
 
     // 4) PGN 로드 완료 후 화살표 재렌더 (goToEnd 이후 시점)
     setTimeout(() => {

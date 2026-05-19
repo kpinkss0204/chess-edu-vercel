@@ -846,10 +846,46 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       // 오프닝별 통계 맵: key -> {eco, name, variation, w:{wins,draws,losses}, b:{wins,draws,losses}}
       const openingStatsMap = new Map();
 
-      // ── 항상 새로 분석 (캐시 무시, 레포 방식)
+      // ── tacticAnalysis 캐시가 있으면 Stockfish 재분석 생략
       let newlyAnalyzedCount = 0;
-      // 게임 정확도 누적
+      let cachedAnalysisCount = 0;
       let sumMyAccuracy = 0, accuracyCount = 0;
+
+      function accumulateFromAnalysis(doc, a) {
+        sumMyBlunders += a.myBlunders || 0;
+        sumMyMistakes += a.myMistakes || 0;
+        sumMyInaccuracies += a.myInaccuracies || 0;
+        sumOppBlunders += a.oppBlunders || 0;
+        sumOppMistakes += a.oppMistakes || 0;
+        sumOppInaccuracies += a.oppInaccuracies || 0;
+        sumOppBF += a.oppBlunderFound || 0;
+        sumOppBM += a.oppBlunderMissed || 0;
+        sumCheckmates += a.checkmates || 0;
+        sumAbsPinFound += a.absPinFound || 0;
+        sumAbsPinMissed += a.absPinMissed || 0;
+        sumRelPinFound += a.relPinFound || 0;
+        sumRelPinMissed += a.relPinMissed || 0;
+        sumSkewerFound += a.skewerFound || 0;
+        sumSkewerMissed += a.skewerMissed || 0;
+        sumDiscoveredFound += a.discoveredFound || 0;
+        sumDiscoveredMissed += a.discoveredMissed || 0;
+        sumTrapFound += a.trapFound || 0;
+        sumTrapMissed += a.trapMissed || 0;
+        sumDecoyFound += a.decoyFound || 0;
+        sumDecoyMissed += a.decoyMissed || 0;
+        sumCp += a.myCpSum || 0;
+        sumMoves += a.myMoveCount || 0;
+        totalMovesSum += a.totalMoves || 0;
+        for (const k of ['P', 'N', 'B', 'R', 'Q', 'K']) {
+          sumForkFound[k] += (a.forkFound && a.forkFound[k]) || 0;
+          sumForkMissed[k] += (a.forkMissed && a.forkMissed[k]) || 0;
+          sumOppForkCreated[k] += (a.oppForkCreated && a.oppForkCreated[k]) || 0;
+        }
+        if ((a.tacticEvents && a.tacticEvents.length) || (a.moveJudgments && a.moveJudgments.length)) {
+          _statsGameDetails.push({ doc, tacticEvents: a.tacticEvents, moveJudgments: a.moveJudgments });
+        }
+        if (a.myAccuracy > 0) { sumMyAccuracy += a.myAccuracy; accuracyCount++; }
+      }
 
       for (let gi = 0; gi < docs.length; gi++) {
         const doc = docs[gi];
@@ -886,6 +922,16 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
 
         if (!doc.pgn) { if (doc.moveCount) totalMovesSum += doc.moveCount; continue; }
 
+        let expectedMoves = 0;
+        try { expectedMoves = Math.max(0, parsePgnToStates(doc.pgn).length - 1); } catch (e) { /* ignore */ }
+        const ta = doc.tacticAnalysis;
+        const AC = typeof AnalysisCache !== 'undefined' ? AnalysisCache : null;
+        if (AC && AC.isTacticAnalysisComplete(ta, expectedMoves)) {
+          accumulateFromAnalysis(doc, ta);
+          cachedAnalysisCount++;
+          continue;
+        }
+
         // ── Stockfish 분석 (리체스 CpAdvice와 동일한 wc·임계값으로 수 분류)
         const pct = Math.round(gi / total * 100);
         contentEl.innerHTML = `<div class="stats-loading"><div class="stats-spinner"></div><div class="stats-progress-wrap">
@@ -902,26 +948,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
             if (fill) fill.style.width = Math.round(gi / total * 100 + ip / total) + '%';
           });
 
-          sumMyBlunders += a.myBlunders; sumMyMistakes += a.myMistakes; sumMyInaccuracies += a.myInaccuracies;
-          sumOppBlunders += a.oppBlunders; sumOppMistakes += a.oppMistakes; sumOppInaccuracies += a.oppInaccuracies;
-          sumOppBF += a.oppBlunderFound; sumOppBM += a.oppBlunderMissed;
-          sumCheckmates += a.checkmates;
-          sumAbsPinFound += (a.absPinFound || 0); sumAbsPinMissed += (a.absPinMissed || 0);
-          sumRelPinFound += (a.relPinFound || 0); sumRelPinMissed += (a.relPinMissed || 0);
-          sumSkewerFound += (a.skewerFound || 0); sumSkewerMissed += (a.skewerMissed || 0);
-          sumDiscoveredFound += (a.discoveredFound || 0); sumDiscoveredMissed += (a.discoveredMissed || 0);
-          sumTrapFound += (a.trapFound || 0); sumTrapMissed += (a.trapMissed || 0);
-          sumDecoyFound += (a.decoyFound || 0); sumDecoyMissed += (a.decoyMissed || 0);
-          sumCp += a.myCpSum; sumMoves += a.myMoveCount; totalMovesSum += a.totalMoves;
-          for (const k of ['P', 'N', 'B', 'R', 'Q', 'K']) {
-            sumForkFound[k] += (a.forkFound[k] || 0);
-            sumForkMissed[k] += (a.forkMissed[k] || 0);
-            sumOppForkCreated[k] += (a.oppForkCreated?.[k] || 0);
-          }
-          if (a.tacticEvents && a.tacticEvents.length || a.moveJudgments && a.moveJudgments.length) {
-            _statsGameDetails.push({ doc, tacticEvents: a.tacticEvents, moveJudgments: a.moveJudgments });
-          }
-          if (a.myAccuracy > 0) { sumMyAccuracy += a.myAccuracy; accuracyCount++; }
+          accumulateFromAnalysis(doc, a);
           newlyAnalyzedCount++;
 
           // ── Firestore 덮어씌움

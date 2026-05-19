@@ -883,6 +883,7 @@ function tryTriggerTacticsForCurrentMove(fenOptional) {
   const CT = typeof ChessTactics !== 'undefined' ? ChessTactics : null;
   if (!CT || typeof CT.scheduleAutoAnalyzeMove !== 'function') return;
   if (!game || game.historyIndex < 0 || !game.history.length) return;
+  if (typeof AnalysisCache !== 'undefined' && AnalysisCache.isGamePreAnalyzed(game)) return;
 
   const h = game.history[game.historyIndex];
   if (!h || !h.fenBefore) return;

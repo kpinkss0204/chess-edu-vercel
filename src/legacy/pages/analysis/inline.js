@@ -1226,15 +1226,22 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
 
     async function runAutoGameAnalysisIfNeeded() {
       if (!game || !game.history || game.history.length < 2) return;
+      if (typeof AnalysisCache !== 'undefined' && AnalysisCache.isGamePreAnalyzed(game)) return;
       const pgn = typeof game.generatePgn === 'function' ? game.generatePgn() : '';
       const key = pgn + '|' + (document.getElementById('sf-color-select')?.value || 'w');
       if (key === _lastAutoAnalyzedPgnKey || _sfAnalysisBusy) return;
       await analyzeCurrentGameWithSF({ silent: true });
     }
 
+    function markAutoGameAnalysisDone(pgn, myColor) {
+      _lastAutoAnalyzedPgnKey = (pgn || '') + '|' + (myColor || 'w');
+    }
+    window.markAutoGameAnalysisDone = markAutoGameAnalysisDone;
+
     async function analyzeCurrentGameWithSF(opts) {
       opts = opts || {};
       if (_sfAnalysisBusy) return;
+      if (typeof AnalysisCache !== 'undefined' && AnalysisCache.isGamePreAnalyzed(game)) return;
       if (!game || !game.history || game.history.length < 2) {
         if (!opts.silent && typeof showToast === 'function') showToast('수가 너무 짧습니다 (최소 2수 이상).');
         return;

@@ -382,6 +382,7 @@ class ChessGame {
     if (typeof ChessTactics !== 'undefined' && ChessTactics.resetAnalysisState) {
       ChessTactics.resetAnalysisState();
     }
+    if (typeof AnalysisCache !== 'undefined') AnalysisCache.clearGameAnalysisCache(this);
     if (typeof resetAutoGameAnalysisCache === 'function') resetAutoGameAnalysisCache();
     if (typeof notifyGamePositionChanged === 'function') notifyGamePositionChanged();
     return true;
@@ -403,6 +404,7 @@ class ChessGame {
     if (typeof ChessTactics !== 'undefined' && ChessTactics.resetAnalysisState) {
       ChessTactics.resetAnalysisState();
     }
+    if (typeof AnalysisCache !== 'undefined') AnalysisCache.clearGameAnalysisCache(this);
     showToast('보드가 초기화되었습니다');
   }
 
@@ -2203,6 +2205,9 @@ class ChessGame {
     if (openingMatch)document.getElementById('info-opening').textContent = openingMatch[1];
 
     this.reset();
+    if (!global._pendingTacticAnalysis && typeof AnalysisCache !== 'undefined') {
+      AnalysisCache.clearGameAnalysisCache(this);
+    }
 
     const cleaned = pgn
       .replace(/\[[^\]]*\]/g,'')
@@ -2262,6 +2267,7 @@ class ChessGame {
     this.goToStart();
     setTimeout(()=>this.goToEnd(),50);
     setTimeout(function () {
+      if (typeof AnalysisCache !== 'undefined' && AnalysisCache.applyPendingToGame(game)) return;
       if (typeof resetAutoGameAnalysisCache === 'function') resetAutoGameAnalysisCache();
       if (typeof notifyGamePositionChanged === 'function') notifyGamePositionChanged();
     }, 800);

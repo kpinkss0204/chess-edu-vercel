@@ -49,6 +49,7 @@ export function normalizeScriptOrder(scripts) {
     'parse-pgn-states',
     'lichess-judgment',
     'chess-tactics',
+    'analysis-cache',
     'game.js',
     'position-brief',
     'coach.js',
