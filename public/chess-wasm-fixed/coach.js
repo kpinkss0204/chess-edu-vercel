@@ -271,12 +271,33 @@ function debugCoachBrief() {
   const pv1Uci = pv1 && (pv1.moves || pv1.pv) ? (pv1.moves || pv1.pv) : [];
   const pv2Uci = pv2 && (pv2.moves || pv2.pv) ? (pv2.moves || pv2.pv) : [];
 
+  let extra = {};
+  if (game && game.history && game.history.length) {
+    let pgnMoves = '';
+    game.history.forEach((s) => {
+      if (s.turn === 'w') pgnMoves += `${s.fullMove}. `;
+      pgnMoves += s.san + ' ';
+    });
+    const h = game.historyIndex >= 0 ? game.history[game.historyIndex] : null;
+    extra = {
+      pgnMoves: pgnMoves.trim(),
+      recentMoves: game.history.slice(-8).map(x => ({
+        san: x.san, turn: x.turn, annotation: x.annotation || null,
+      })),
+      lastMoveSan: h ? h.san : null,
+      lastMoveAnnotation: h ? h.annotation : null,
+      phase: game.history.length <= 10 ? '오프닝' : game.history.length <= 30 ? '미들게임' : '엔드게임',
+      moveCount: game.history.length,
+    };
+  }
+
   const brief = buildPositionBrief({
     fen,
     turn,
     pv1Uci,
     pv2Uci,
     positionInsights,
+    ...extra,
   });
 
   console.group('[Coach Brief Debug]');
@@ -1105,7 +1126,7 @@ async function runPositionCommentary() {
     // 스톡피시 라인이 부족하면 대기
     if (!hasEnoughLines(ctx)) {
       responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 스톡피시 깊은 분석 대기 중...`;
-      await waitForDeepLines(ctx, 5000);
+      await waitForDeepLines(ctx, 8000);
     }
 
     // 최신 컨텍스트 다시 빌드 (라인이 갱신됐을 수 있음)
@@ -1169,7 +1190,7 @@ async function runPositionCommentary() {
     freshCtx = buildChessContext();
 
     const answer = await callCommentaryAPI(freshCtx);
-    const cleaned = sanitizeAnswer(answer);
+    const cleaned = sanitizeAnswer(answer, freshCtx);
 
     responseDiv.className = '';
     responseDiv.style.display = 'block';
@@ -1286,24 +1307,30 @@ function buildCommentaryPrompt(ctx) {
   const liveLine2       = liveLine2San;
   const liveLine3       = liveLine3San;
   const liveBestMove    = liveBestLineSan ? liveBestLineSan.split(/\s+/)[0] : (livePv1 && livePv1.moves && livePv1.moves[0] ? livePv1.moves[0] : ctx.bestMove);
+  const hasEngineLine = !!(liveBestLineSan && liveBestLineSan.trim());
+  const firstTurnLabel  = ctx.turn === 'w' ? '백' : '흑';
+  const lastMoverLabel  = ctx.turn === 'w' ? '흑' : '백';
 
   lines.push(`[포지션 데이터]`);
-  lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수 | 차례: ${ctx.turn === 'w' ? '백(White)' : '흑(Black)'}`);
+  lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수 | 지금 차례: ${firstTurnLabel}`);
   lines.push(`현재 형세: ${ctx.advantageDesc}`);
 
   if (ctx.lastMoveSan) {
     const ann = ctx.lastMoveAnnotation ? ` (${ctx.lastMoveAnnotation})` : '';
-    lines.push(`방금 둔 수: ${ctx.lastMoveSan}${ann}`);
+    lines.push(`직전 수 (${lastMoverLabel}이 둠): ${ctx.lastMoveSan}${ann} — 지금은 ${firstTurnLabel} 차례`);
   }
 
   // 항상 최신 pvData 기반 라인 사용
   // 수순 해석 안내: 차례에 따라 홀/짝 번째 수 귀속을 명시
-  const firstTurnLabel  = ctx.turn === 'w' ? '백' : '흑';
   const secondTurnLabel = ctx.turn === 'w' ? '흑' : '백';
   lines.push(`[수순 해석 주의] 현재 차례는 ${firstTurnLabel}이므로, 수순에서 1번째·3번째·5번째 수는 ${firstTurnLabel}이 두고, 2번째·4번째·6번째 수는 ${secondTurnLabel}이 둡니다. 해설 시 반드시 각 수마다 "백이 X를 두면" / "흑이 Y로 응수하면" 형태로 주어를 명시할 것.`);
-  if (liveBestLine) lines.push(`엔진 1순위 수순: ${liveBestLine}`);
-  if (liveLine2)    lines.push(`엔진 2순위 수순: ${liveLine2}`);
-  if (liveLine3)    lines.push(`엔진 3순위 수순: ${liveLine3}`);
+  if (hasEngineLine) {
+    lines.push(`엔진 1순위 수순 (이 SAN만 최선수·이후 수순에 사용): ${liveBestLine}`);
+    if (liveLine2) lines.push(`엔진 2순위 수순: ${liveLine2}`);
+    if (liveLine3) lines.push(`엔진 3순위 수순: ${liveLine3}`);
+  } else {
+    lines.push(`[엔진 라인 미준비] 최선수·이후 수순 섹션에서 구체적 SAN 나열 금지. 구조·브리프·직전 수 맥락만 설명.`);
+  }
 
   if (ctx.candidateMoves && ctx.candidateMoves.length > 0) {
     lines.push(`사용자 후보수 (화살표): ${ctx.candidateMoves.join(', ')} — 엔진 추천과 비교해서 언급해주세요.`);
@@ -1324,7 +1351,7 @@ function buildCommentaryPrompt(ctx) {
 
   if (ctx.threatData) {
     lines.push(``);
-    lines.push(`[위협 분석 데이터 — 해설에 자연스럽게 녹여서 쓸 것]`);
+    lines.push(`[위협 분석 데이터 — 엔진·브리프와 충돌하면 브리프·엔진 우선. 없는 수·기물은 인용 금지]`);
     if (ctx.threatData.idea) lines.push(`핵심 계획: ${ctx.threatData.idea}`);
     if (ctx.threatData.prob) lines.push(`문제점: ${ctx.threatData.prob}`);
     if (ctx.threatData.sol)  lines.push(`최선책: ${ctx.threatData.sol}`);
@@ -1335,13 +1362,16 @@ function buildCommentaryPrompt(ctx) {
 
   lines.push(``);
   lines.push(`[작성 지침]`);
-  lines.push(`- **포지션 상황** 으로 시작하고, **최선수 분석** 은 반드시 포함.`);
+  lines.push(`- **포지션 상황** 으로 시작. ${hasEngineLine ? '**최선수 분석** 포함.' : '엔진 라인 없음 → **최선수 분석**은 "엔진 수순 준비 중" 한 문장만. **이후 수순** 섹션 생략.'}`);
   lines.push(`- 나머지 섹션(**약점 분석**, **강점 분석**, **위협 & 아이디어**, **이후 수순**)은 포지션에 실제로 해당하는 것만 선택.`);
-  lines.push(`- **최선수 분석**: [검증된 분석 브리프]의 "엔진 1순위 수순"만 사용. 각 수마다 브리프에 적힌 인과(포획·체크·포크·메이트)를 "~하기 때문에" 형태로 설명. 브리프에 없는 수·기물 추가 금지.`);
+  if (hasEngineLine) {
+    lines.push(`- **최선수 분석**: [검증된 분석 브리프]의 "엔진 1순위 수순" SAN만 사용. 브리프·합법 수 목록에 없는 수 추가 금지.`);
+    lines.push(`- **이후 수순**: 엔진 1순위에 있는 수만, 주어(백/흑)를 매 수마다 명시.`);
+  }
   lines.push(`- **위협 & 아이디어**: 브리프의 "1~3수 메이트"·"전술적 위협"만 사용. 메이트는 브리프에 적힌 수순·패턴만 인용.`);
   lines.push(`- **약점 분석**: 브리프의 "구조적 약점"(밝은/어두운 칸, 폰 구조)을 장기적 이유와 함께 설명.`);
-  lines.push(`- **포지션 상황**에서는 [국면 내러티브]의 오프닝 이름·최근 수순·전개 상태를 2~4문장으로 먼저 짚을 것 (예: "경기는 e4 e5 이후 나이트 전개로 이탈리안 게임에 들어갔고…").`);
-  lines.push(`- 변형·계획(d4 확장, 캐슬, …)은 내러티브·브리프에 있는 것만 언급. 없는 오프닝 이론·DB 통계는 지어내지 말 것.`);
+  lines.push(`- **포지션 상황**: [국면 앵커]의 차례·직전 수를 먼저 맞게 서술. 최근 수순은 브리프에 있는 것만. 직전 수를 "지금 둘 수"처럼 쓰지 말 것.`);
+  lines.push(`- 변형·계획은 내러티브·브리프·엔진·합법 수에 있는 것만. 없는 오프닝 이론·엔진에 없는 SAN 금지.`);
   lines.push(`- 섹션 헤더는 **헤더명** 형태로 단독 줄에 쓸 것.`);
   lines.push(`- 위 system prompt의 말투 예시를 그대로 따를 것. 전체 900~1300자, 문단마다 2~5문장.`);
 
@@ -1528,10 +1558,13 @@ async function callCommentaryAPI(ctx) {
 11. 한국어로만 출력. 체스 수 표기(e4, Nf3 등)는 영문 그대로.
 12. 【수 설명 주어 규칙 — 절대 위반 금지】 모든 수에 대해 **누가(백/흑)** 두는지 주어를 반드시 명시할 것. 엔진 수순을 설명할 때 "백이 A를 두면, 흑은 B로 응수하고, 백은 C를 두어..."와 같이 **모든 수에 대해 주어를 써야 한다**. 주어 생략 및 양쪽 수를 반대편이 두는 것처럼 서술하는 것은 엄격히 금지.
 13. 【이후 수순 섹션 규칙】 수순에 등장하는 각 수에 대해 "누가(백/흑) 무엇을(수 표기) 두면, 왜(구체적 결과)"를 반드시 써야 한다. 수를 나열만 하거나 결과 없이 "X로 막는다", "Y를 노린다"처럼 막연하게 쓰는 것은 금지. 구체적으로 어떤 칸/기물/위협이 발생하는지 서술할 것.
-14. 【킹 위협 서술 규칙】 특정 수가 킹을 위협한다고 쓰려면, 구체적으로 어떤 칸으로 침투하는지 또는 어떤 체크/메이트 위협이 생기는지 반드시 함께 써야 한다. "킹을 노린다"는 단독 표현은 금지.`;
+14. 【킹 위협 서술 규칙】 특정 수가 킹을 위협한다고 쓰려면, 구체적으로 어떤 칸으로 침투하는지 또는 어떤 체크/메이트 위협이 생기는지 반드시 함께 써야 한다. "킹을 노린다"는 단독 표현은 금지.
+15. 【엔진 라인 없음】 사용자 메시지에 "엔진 라인 미준비" 또는 브리프에 "엔진 1순위 수순"이 없으면, **최선수 분석**에서 SAN을 나열하지 말고 한 문장으로만 언급. **이후 수순** 섹션은 쓰지 말 것.
+16. 【차례·직전 수】 "직전 수"는 방금 둔 수이고, "지금 차례"인 쪽의 수만 미래형으로 설명. 직전 수를 현재 차례 수처럼 서술하는 것은 금지.
+17. 【위협 패널】 [위협 분석 데이터]는 엔진·브리프와 충돌하면 무시. 브리프에 없는 포크·메이트·기물 이름을 지어내지 말 것.`;
 
   const prompt = buildCommentaryPrompt(ctx);
-  return callGroqAPIWithSystemTemp(SYSTEM, prompt, 2000, 0.32);
+  return callGroqAPIWithSystemTemp(SYSTEM, prompt, 2000, 0.28);
 }
 
 // 공통 Groq 호출 (system 없이 — 수동 질문용)
@@ -1585,6 +1618,13 @@ function sanitizeAnswer(text, ctx) {
 
   if (out.length < 20) {
     out = `**포지션 상황:** 현재 포지션을 분석 중입니다.\n**약점 분석:** 스톡피시 라인을 바탕으로 분석이 필요합니다.\n**최선수 분석:** 엔진 추천수를 확인해주세요.\n**이후 수순:** 다음 수순을 살펴보세요.`;
+  }
+
+  const pv1 = (ctx && ctx.pvData && ctx.pvData[1]) || (window.pvData && window.pvData[1]);
+  const engineSan = ctx ? (engineLineSan(ctx, pv1, 8) || '') : '';
+  if (!engineSan.trim()) {
+    out = out.replace(/\*\*이후 수순\*\*[\s\S]*?(?=\*\*|$)/gi, '');
+    out = out.replace(/\*\*최선수 분석\*\*[\s\S]*?(?=\*\*|$)/gi, '**최선수 분석**\n엔진 수순이 아직 준비되지 않아, 구체적인 수순은 생략합니다. 구조·위협·직전 수 맥락을 참고해 주세요.\n\n');
   }
 
   return cleanKorean(out);

@@ -575,9 +575,6 @@
       themes.push(`전개 비교 — 백: ${dev.w} / 흑: ${dev.b}`);
     }
 
-    const toMove = COLOR_KR[turn];
-    themes.push(`지금 차례: ${toMove} — ${toMove}의 다음 목표(전개 완성·중앙 확장·상대 약점 공략)를 중심으로 설명할 것`);
-
     return pickTop(themes, 5);
   }
 
@@ -601,13 +598,44 @@
   /**
    * 해설용 내러티브 컨텍스트 (오프닝·전개·전략 테마)
    */
+  function listLegalMovesSan(state, max) {
+    if (!state || typeof global.getAllLegalMoves !== 'function' || typeof global.moveToSAN !== 'function') {
+      return [];
+    }
+    const legal = global.getAllLegalMoves(state.board, state.turn, state.castling, state.enPassant);
+    const out = [];
+    const seen = new Set();
+    for (let i = 0; i < legal.length && out.length < (max || 16); i++) {
+      const san = global.moveToSAN(state.board, legal[i], state.turn, legal);
+      if (san && !seen.has(san)) {
+        seen.add(san);
+        out.push(san);
+      }
+    }
+    return out;
+  }
+
+  function buildPositionAnchor(opts, state) {
+    const turn = state ? state.turn : (opts.turn || 'w');
+    const toMoveKr = COLOR_KR[turn] || turn;
+    const lastMoverKr = turn === 'w' ? '흑' : '백';
+    return {
+      turn,
+      toMoveKr,
+      lastMoverKr,
+      lastMoveSan: opts.lastMoveSan || null,
+      lastMoveAnnotation: opts.lastMoveAnnotation || null,
+      moveCount: opts.moveCount != null ? opts.moveCount : parseSanMoves(opts.pgnMoves || '').length,
+    };
+  }
+
   function buildGameNarrative(opts) {
     const sanMoves = parseSanMoves(opts.pgnMoves || '');
     const state = parseFenState(opts.fen);
     const opening = detectOpening(sanMoves);
     const narrative = {
       phase: opts.phase || '미들게임',
-      moveCount: opts.moveCount || sanMoves.length,
+      moveCount: opts.moveCount != null ? opts.moveCount : sanMoves.length,
       opening,
       sanMoves,
       recentLines: formatRecentMoves(opts.recentMoves, opts.lastMoveSan, opts.lastMoveAnnotation),
@@ -638,10 +666,14 @@
     return narrative;
   }
 
-  function formatGameNarrativeForPrompt(narrative) {
+  function formatGameNarrativeForPrompt(narrative, anchor) {
     if (!narrative) return '';
     const lines = [];
     lines.push('[국면 내러티브 — 오프닝·전개·계획의 뼈대. 아래 내용을 해설 도입·포지션 상황에 자연스럽게 녹일 것]');
+    if (anchor) {
+      lines.push(`■ 국면 앵커 (반드시 준수): 지금은 ${anchor.toMoveKr} 차례. 직전 수는 ${anchor.lastMoverKr}이 둔 ${anchor.lastMoveSan || '(없음)'}${anchor.lastMoveAnnotation ? ' [' + anchor.lastMoveAnnotation + ']' : ''}.`);
+      lines.push(`  ※ 직전 수를 "지금 둘 수"처럼 서술하지 말 것. ${anchor.toMoveKr}만의 다음 수를 말할 때는 [엔진 1순위]·[합법 수]에 있는 SAN만 사용.`);
+    }
     lines.push(`게임 단계: ${narrative.phase} (${narrative.moveCount}수 진행)`);
 
     if (narrative.opening) {
@@ -705,11 +737,16 @@
       strengths: [],
       verifiedFacts: [],
       narrative: null,
+      anchor: null,
+      legalMoves: [],
     };
 
     brief.narrative = buildGameNarrative(opts);
+    brief.anchor = buildPositionAnchor(opts, state);
 
     if (!state) return brief;
+
+    brief.legalMoves = listLegalMovesSan(state, 16);
 
     brief.mateIn1 = detectMateInOne(state);
     brief.mateThreats = brief.mateIn1;
@@ -765,6 +802,15 @@
     [...brief.threats, ...brief.weaknesses, ...brief.ideas].forEach(x => {
       if (x.text) brief.verifiedFacts.push(x.text);
     });
+    if (brief.anchor && brief.anchor.lastMoveSan) {
+      brief.verifiedFacts.push(`직전 수: ${brief.anchor.lastMoverKr} ${brief.anchor.lastMoveSan}`);
+    }
+    if (brief.anchor) {
+      brief.verifiedFacts.push(`현재 차례: ${brief.anchor.toMoveKr}`);
+    }
+    if (brief.legalMoves.length) {
+      brief.verifiedFacts.push(`합법 수 예시: ${brief.legalMoves.join(', ')}`);
+    }
     if (brief.narrative) {
       if (brief.narrative.opening) {
         brief.verifiedFacts.push(`오프닝: ${brief.narrative.opening.name}`);
@@ -772,7 +818,7 @@
       brief.narrative.recentLines.forEach(l => brief.verifiedFacts.push(l));
       brief.narrative.strategicThemes.forEach(t => brief.verifiedFacts.push(t));
     }
-    brief.verifiedFacts = [...new Set(brief.verifiedFacts)].slice(0, 28);
+    brief.verifiedFacts = [...new Set(brief.verifiedFacts)].slice(0, 32);
 
     return brief;
   }
@@ -783,7 +829,18 @@
 
     if (brief.narrative) {
       lines.push('');
-      lines.push(formatGameNarrativeForPrompt(brief.narrative));
+      lines.push(formatGameNarrativeForPrompt(brief.narrative, brief.anchor));
+    }
+
+    if (brief.legalMoves && brief.legalMoves.length) {
+      lines.push('');
+      lines.push(`■ 현재 차례 합법 수 (이 목록·엔진 라인에 없는 수를 "최선수"로 지어내지 말 것): ${brief.legalMoves.join(', ')}`);
+    }
+
+    const hasEngine = brief.engineLine && brief.engineLine.length > 0;
+    if (!hasEngine) {
+      lines.push('');
+      lines.push('■ [엔진 라인 없음] 최선수·이후 수순 섹션에서 구체적 SAN 수순 나열 금지. 구조·위협·직전 수 맥락만 설명.');
     }
 
     if (brief.mateIn1.length) {
@@ -881,12 +938,34 @@
     const pv1Uci = pv1 && (pv1.moves || pv1.pv) ? (pv1.moves || pv1.pv) : [];
     const pv2Uci = pv2 && (pv2.moves || pv2.pv) ? (pv2.moves || pv2.pv) : [];
 
+    let extra = {};
+    if (typeof global.game !== 'undefined' && global.game && global.game.history && global.game.history.length) {
+      let pgnMoves = '';
+      global.game.history.forEach((s) => {
+        if (s.turn === 'w') pgnMoves += `${s.fullMove}. `;
+        pgnMoves += s.san + ' ';
+      });
+      const hi = global.game.historyIndex;
+      const h = hi >= 0 ? global.game.history[hi] : null;
+      extra = {
+        pgnMoves: pgnMoves.trim(),
+        recentMoves: global.game.history.slice(-8).map(x => ({
+          san: x.san, turn: x.turn, annotation: x.annotation || null,
+        })),
+        lastMoveSan: h ? h.san : null,
+        lastMoveAnnotation: h ? h.annotation : null,
+        phase: global.game.history.length <= 10 ? '오프닝' : global.game.history.length <= 30 ? '미들게임' : '엔드게임',
+        moveCount: global.game.history.length,
+      };
+    }
+
     const brief = buildPositionBrief({
       fen,
       turn,
       pv1Uci,
       pv2Uci,
       positionInsights,
+      ...extra,
     });
 
     console.group('[Position Brief Debug]');
