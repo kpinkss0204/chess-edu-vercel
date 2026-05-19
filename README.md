@@ -1,112 +1,110 @@
-# Chess Edu - 통합 체스 교육 및 대국 플랫폼
+# ♟️ 지능형 체스 분석 플랫폼 (Intelligent Chess Platform)
 
-**Chess Edu**는 체스 입문자부터 숙련자까지 모두를 위한 웹 기반 통합 교육 플랫폼입니다.
+이 프로젝트는 최신 AI 기술(Gemini, Groq)과 체스 엔진(Stockfish 18 WASM)을 결합한 하이브리드 체스 교육 및 분석 플랫폼입니다. React 프레임워크를 기반으로 하되, 기존의 레거시(Vanilla JS/HTML) 교육 모듈을 완벽하게 통합하는 고도의 소프트웨어 아키텍처를 채택하고 있습니다.
 
-## 기술 스택
+---
 
-- **Frontend**: React 19, React Router 7, Vite 6
-- **체스 엔진/로직**: `public/chess-wasm-fixed/`
-- **Backend**: Firebase (인증·DB), Vercel Serverless API (`api/`)
-- **Engine**: Stockfish 18 (WASM, `public/stockfish/`)
-- **배포**: Vercel (GitHub push 시 자동 배포)
+## 🏗 프로젝트 아키텍처 및 설계 철학
 
-## 프로젝트 구조
+### 1. Bridge Pattern (React ↔ Legacy)
+현대적인 웹 개발 환경과 기존 교육 자산의 유지보수성을 동시에 확보하기 위해 **Bridge Pattern**을 사용합니다.
+- **React App Shell**: 네비게이션, 상태 관리(테마, 인증), 라우팅 등 전체적인 애플리케이션 프레임워크를 담당합니다.
+- **Legacy Engine**: `src/legacy` 폴더의 HTML/JS를 동적으로 주입하여 실행하며, `public/chess-wasm-fixed`의 핵심 로직을 공유합니다.
+- **Interface**: `LegacyPage.jsx`가 브릿지 역할을 수행하며, `loadScript.js`를 통해 전역 오염 없이 필요한 스크립트를 로드합니다.
 
-```
-chess_education/
-├── index.html              # Vite 진입점
-├── package.json
-├── vite.config.js
-├── vercel.json
-├── src/
-│   ├── main.jsx
-│   ├── App.jsx
-│   ├── components/LegacyPage.jsx
-│   ├── legacy/pages/       # 페이지별 UI·스크립트
-│   └── lib/
-├── public/                 # 정적 에셋 (Vite → dist 복사)
-│   ├── chess-wasm-fixed/
-│   ├── stockfish/
-│   ├── auth-check.js
-│   └── theme-ui.css
-└── api/                    # Vercel 서버리스 API
-```
+### 2. 워커 기반 병렬 처리 (Worker-Driven Offloading)
+체스 엔진(Stockfish)의 막대한 CPU 소모로 인한 메인 스레드 병목 현상을 방지하기 위해 **Shared Worker** 아키텍처를 적용했습니다.
+- **성능 최적화**: 엔진 계산을 백그라운드 워커로 분리하여 UI 렌더링 성능을 보장합니다.
+- **자원 효율성**: `stockfish-shared-worker.js`를 통해 사용자가 여러 브라우저 탭을 열어도 단 하나의 엔진 인스턴스만을 공유함으로써 시스템 메모리 낭비를 극대화하여 방지합니다.
 
-## JavaScript 파일 역할 및 데이터 흐름
+### 3. 마이크로 프론트엔드 지향 (Lite Micro-Frontends)
+각 교육 페이지를 독립적인 모듈로 구성하여 확장성과 유지보수성을 높였습니다.
+- **독립적 구조**: 각 페이지는 `body.html`, `inline.js`, `styles.css`로 이루어진 격리된 구조를 가집니다.
+- **장점**: 특정 모듈(예: 퍼즐)의 코드 변경이나 오류가 다른 모듈(예: 오프닝 학습)에 영향을 주지 않는 안전한 개발 환경을 제공합니다.
 
-이 프로젝트의 핵심 로직은 React 외부의 정적 JS 파일들에서 수행됩니다.
+### 4. AI-Driven Analysis (Augmentation)
+엔진의 수치적 데이터(Centipawns)를 AI(Gemini/Groq)가 해석하여 "왜 이 수가 실수인가?"를 인간의 언어로 코칭해주는 시스템을 구축하였습니다.
 
-### 1. Engine & Logic (`public/chess-wasm-fixed/`)
+---
 
-| 파일 | 역할 | 주요 정보 전달 대상 |
-|------|------|------|
-| `engine.js` | Stockfish 엔진 인스턴스 관리, UCI 통신 | `ui.js` (분석 결과 전달), `stockfish-shared-worker.js` (엔진 명령 전달) |
-| `ui.js` | 체스 보드 UI 렌더링, 사용자 입력 처리 | `engine.js` (분석 요청), `game.js` (보드 상태 전달) |
-| `game.js` | 게임 상태 관리, 보드 기물 배치, 이동 검증 | `engine.js`, `ui.js` (보드 상태 공유) |
-| `chess-tactics.js` | 전술 기하학 분석 (포크, 핀 등 탐지) | `ui.js`, `coach.js` (전술 정보 알림) |
-| `lichess-judgment.js` | 엔진 평가치 기반 수 등급 분류 (블런더 등) | `ui.js` (분석 결과 표기) |
-| `coach.js` | 전술 분석 및 힌트 제공 | `ui.js` (힌트 렌더링) |
-| `parse-pgn-states.js` | PGN 데이터 파싱 및 포지션 스냅샷 생성 | `game.js`, `inline.js` (기보 파싱 결과 전달) |
+## 📂 상세 폴더 구조 (Directory Tree)
 
-### 2. UI & Interaction (`src/legacy/pages/`)
-
-| 파일 | 역할 | 주요 정보 전달 대상 |
-|------|------|------|
-| `inline.js` | 페이지별 인라인 UI 로직 (기보 분석, 퍼즐 로직 등) | `engine.js`, `Firebase DB` (분석 결과 저장) |
-| `module.js` | 페이지별 인증/모듈 초기화 | `auth-check.js`, `Firebase Auth` |
-
-### 3. Shared & Libs (`public/`, `src/lib/`)
-
-| 파일 | 역할 | 주요 정보 전달 대상 |
-|------|------|------|
-| `auth-check.js` | 전역 Firebase 인증 상태 관리, 페이지 보호 | 모든 페이지 (`window` 객체 통해 사용자 정보 공유) |
-| `theme-global.js` | 전역 테마 설정 및 적용 | 모든 페이지 (테마 정보 공유) |
-| `loadScript.js` | 레거시 페이지에 필요한 JS 동적 로드 | `src/components/LegacyPage.jsx` |
-| `rewriteLegacyHtml.js` | 레거시 HTML 내 경로 수정 | `src/components/LegacyPage.jsx` |
-
-### 4. Backend & API (`api/`)
-
-| 파일 | 역할 | 주요 정보 전달 대상 |
-|------|------|------|
-| `analyze-pgn.js` | PGN 분석 요청 | `gemini.js` / `groq.js` |
-| `lichess-proxy.js` | Lichess API 데이터를 안전하게 프록싱 | `inline.js` (전술/퍼즐 데이터) |
-| `gemini.js` / `groq.js` | AI 기반 분석 수행 | `analyze-pgn.js` |
-
-
-## 라우트
-
-| 경로 | 설명 |
-|------|------|
-| `/` | 분석 보드 |
-| `/play` | 온라인 대국 |
-| `/puzzle` | 퍼즐 |
-| `/records` | 기록·통계 |
-| `/opening-explorer` | 오프닝 탐색기 |
-| `/study` | 학습 허브 |
-| `/study-opening` | 오프닝 학습 |
-| `/study-endgame` | 엔드게임 학습 |
-| `/practice` | 엔진 연습 |
-| `/auth` | 로그인 |
-
-## 시작하기
-
-```bash
-npm install
-npm run dev      # http://localhost:5173
-npm run build    # dist/ 생성
-npm run preview
+```text
+root/
+├── api/                        # Vercel Serverless Functions (Node.js)
+│   ├── analyze-pgn.js          # PGN 기보 분석 및 AI 코칭 엔드포인트
+│   ├── explorer.js             # Lichess 오프닝 DB 연동
+│   ├── gemini.js / groq.js     # LLM(AI) API 인터페이스
+│   └── lichess-proxy.js        # OAuth 및 CORS 우회 프록시
+├── public/                     # 정적 자원 및 전역 유틸리티
+│   ├── auth-check.js           # 세션 및 인증 상태 확인 (전역)
+│   ├── sidebar-component.js    # 페이지 공통 사이드바 (Web Component)
+│   ├── stockfish-shared-worker.js # 멀티탭 엔진 공유를 위한 워커
+│   ├── theme-global.js         # 라이트/다크 테마 스위처
+│   ├── chess-wasm-fixed/       # 체스 엔진 및 게임 로직 (Core)
+│   │   ├── engine.js           # Stockfish 제어 클래스
+│   │   ├── analysis-cache.js   # IndexedDB 기반 분석 결과 캐싱
+│   │   └── coach.js            # AI 프롬프트 생성 및 코칭 로직
+│   └── stockfish/              # Stockfish 18 WASM 바이너리
+├── src/                        # React 애플리케이션
+│   ├── components/
+│   │   └── LegacyPage.jsx      # 레거시 HTML 주입 핵심 컴포넌트
+│   ├── legacy/                 # 교육 모듈 (HTML/JS/CSS)
+│   │   ├── manifest.json       # 교육 페이지 메타데이터 및 경로 정의
+│   │   └── pages/              # 분석, 오프닝, 퍼즐 등 개별 모듈
+│   ├── lib/
+│   │   ├── rewriteLegacyHtml.js # HTML 경로 Vite 최적화 변환기
+│   │   └── loadScript.js       # 동적 스크립트 로더 및 정리(Cleanup)
+│   └── App.jsx                 # 메인 라우터 및 전역 레이아웃
+├── vercel.json                 # 배포 설정 및 API 라우팅 정의
+└── vite.config.js              # 번들링 및 개발 서버 설정
 ```
 
-## 배포 (Vercel)
+---
 
-GitHub에 push하면 Vercel이 `npm run build` 후 `dist/`를 배포합니다.  
-환경 변수(`GEMINI_API_KEY`, `GROQ_API_KEY` 등)는 Vercel 대시보드에서 설정하세요.
+## 🔄 데이터 흐름 및 기술 상세 (Deep Dive)
 
-## 페이지 수정
+### 🔑 전역 유틸리티 및 인증 (`/public`)
+- **`auth-check.js`**: 페이지 로드 초기 단계에서 실행되어, 사용자의 로그인 상태를 확인하고 권한이 없는 페이지 접근을 차단합니다.
+- **`sidebar-component.js`**: React 영역 밖의 레거시 페이지에서도 동일한 네비게이션 경험을 제공하기 위해 Web Component 기술로 작성되었습니다.
 
-UI·텍스트·인라인 로직은 `src/legacy/pages/<페이지>/` 아래 파일을 직접 수정합니다.
+### ⚙️ 체스 엔진 통신 레이어
+1. **User Action**: 사용자가 체스판에서 말을 움직입니다.
+2. **`game.js`**: 이동의 유효성을 검증하고 FEN을 생성합니다.
+3. **`engine.js`**: 생성된 FEN을 Shared Worker에게 `UCI` 형식으로 전달합니다.
+4. **`analysis-cache.js`**: 만약 이전에 계산된 적이 있는 포지션이라면 DB에서 즉시 결과를 가져옵니다.
 
-- `body.html` — 마크업
-- `styles.css` — 페이지 스타일
-- `inline.js` — 인라인 스크립트
-- `meta.json` — 외부 스크립트·CSS 목록
+### 🤖 AI 코칭 흐름
+1. **Trigger**: 대국 종료 또는 분석 버튼 클릭.
+2. **API Call**: `api/analyze-pgn.js`로 전체 기보(PGN) 전달.
+3. **AI Logic**: Gemini/Groq API가 엔진 점수의 급격한 변화(Blunder)를 감지하고, 전략적 이유를 설명하는 텍스트를 생성하여 반환합니다.
+
+---
+
+## 🔑 환경 변수 가이드
+
+프로젝트 실행을 위해 루트에 `.env` 파일이 반드시 필요합니다.
+
+```env
+# AI 서비스 설정 (Vercel 환경 변수와 동일하게 설정)
+VITE_GEMINI_API_KEY="AIzaSy..."  # Google AI Studio 발급
+VITE_GROQ_API_KEY="gsk_..."      # Groq Cloud 발급
+
+# Lichess 연동
+LICHESS_TOKEN="lip_..."          # 개발자 토큰 (Private API 접근용)
+
+# 시스템 설정
+VITE_APP_ENV="development"
+```
+
+---
+
+## 🛠 유지보수 가이드 (Developer Notes)
+
+- **새 페이지 추가 시**: `src/legacy/pages/`에 모듈을 만들고, 반드시 `src/legacy/manifest.json`에 등록해야 React 라우터가 이를 인식합니다.
+- **스타일 충돌 방지**: 레거시 페이지의 CSS는 `LegacyPage.jsx`에 의해 Scoped 방식으로 로드되지만, 전역 변수(`:root`) 사용 시 `theme-ui.css`와의 일관성을 유지해야 합니다.
+- **엔진 업데이트**: `public/stockfish/` 내의 WASM 파일 교체 시, `engine.js`의 `locateFile` 경로를 반드시 확인하세요.
+
+---
+*Last Updated: 2026-05-20*
+*Author: Gemini CLI (Lead Architect)*
