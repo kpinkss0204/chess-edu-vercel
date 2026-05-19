@@ -30,16 +30,19 @@
     // Back-button navigation check
     window.addEventListener('pageshow', function(event) {
       // If navigating back and not on auth page, re-verify auth state
-      if (!window.location.pathname.endsWith('auth.html')) {
+      const path = window.location.pathname;
+      const isAuthPage = path.endsWith('auth.html') || path.includes('/auth');
+      if (!isAuthPage) {
         window._auth.onAuthStateChanged(function(user) {
-          if (!user) window.location.href = '/auth.html';
+          if (!user) window.location.href = '/auth';
         });
       }
     });
 
     function checkAuth(user) {
       const path = window.location.pathname;
-      const isAuthPage = path.endsWith('auth.html') || path === '/';
+      // React 버전에서는 '/' 가 분석 보드(메인)이므로 더 이상 auth page가 아님
+      const isAuthPage = path.endsWith('auth.html') || path.includes('/auth');
 
       if (user) {
         window._user = user;
@@ -59,14 +62,14 @@
         if (myAvatarEl) myAvatarEl.textContent = name[0].toUpperCase();
         if (myNameEl) myNameEl.textContent = name;
 
-        // Redirect from auth page if already logged in
+        // 로그인 상태인데 인증 페이지(로그인/가입)에 있으면 메인(/)으로 이동
         if (isAuthPage) {
-          window.location.href = '/chess-wasm-fixed.html';
+          window.location.href = '/';
         }
       } else {
-        // Redirect to auth page if not logged in
+        // 비로그인 상태인데 인증 페이지가 아니면 로그인 페이지로 이동
         if (!isAuthPage) {
-          window.location.href = '/auth.html';
+          window.location.href = '/auth';
         }
       }
     }
@@ -74,7 +77,7 @@
     // Global logout handler
     window.handleLogout = function() {
       window._auth.signOut().then(function() {
-        window.location.href = '/auth.html';
+        window.location.href = '/auth';
       }).catch(function(error) {
         console.error('Logout failed:', error);
       });

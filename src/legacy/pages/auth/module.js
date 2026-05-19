@@ -58,7 +58,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/fireba
   onAuthStateChanged(auth, (user) => {
     if (user) {
       // 로그인 성공 → 체스 분석 보드로 자동 이동
-      window.location.href = 'https://chess-education.vercel.app/chess-wasm-fixed.html';
+      window.location.href = '/';
     } else {
       showAuthForms();
     }

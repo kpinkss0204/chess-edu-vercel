@@ -1761,7 +1761,7 @@ function openInAnalysis() {
     try { localStorage.setItem('chess_puzzle_analyze_fen', fen); } catch(e) {}
 
     // URL에도 fen 파라미터 포함 (이중 안전장치)
-    var url = 'chess-wasm-fixed.html?fen=' + encodeURIComponent(fen);
+    var url = '/?fen=' + encodeURIComponent(fen);
     var a = document.createElement('a');
     a.href = url;
     a.target = '_blank';
