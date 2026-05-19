@@ -391,46 +391,58 @@
         const stBefore = states[i - 1];
         const stAfter = states[i];
 
-        if (CT && move && stBefore && stAfter) {
-          const prevSnap = CT.snapshotFromState(stBefore);
-          const afterSnap = CT.snapshotFromState(stAfter);
+        // ── 전술 분석: 판정이 있을 때만 (블런더/실수/부정확)
+        if (CT && move && stBefore && stAfter && bad) {
+          const prevFen = CT.snapshotFromState(stBefore);
+          const afterFen = CT.snapshotFromState(stAfter);
           const pt = stBefore.board[move.from[0]][move.from[1]]?.[1] || 'P';
           const moveNum = Math.ceil(i / 2);
           const plyIdx = i - 1;
 
-          const playedT = CT.detectAfterMove(prevSnap, afterSnap, move, mover);
+          try {
+            // 판정이 있을 때만 ChessGrammar API로 분석
+            const playedT = await CT.detectTacticsIfBlunder(cpBefore, cpAfter, mover, afterFen);
+            
+            if (playedT) {
+              if (isMe) {
+                applyFoundTactics(result, playedT, true, pt, moveNum, san, plyIdx);
+              } else if (playedT.fork) {
+                applyFoundTactics(result, playedT, false, pt, moveNum, san, plyIdx);
+              }
 
-          if (isMe) {
-            applyFoundTactics(result, playedT, true, pt, moveNum, san, plyIdx);
-          } else if (playedT.fork) {
-            applyFoundTactics(result, playedT, false, pt, moveNum, san, plyIdx);
-          }
+              if (playedT.checkmate && isMe) result.checkmates++;
 
-          if (playedT.checkmate && isMe) result.checkmates++;
-
-          if (isMe && bestUci && playedUci && bestUci !== playedUci) {
-            const bestMv = uciToMoveFromState(bestUci, stBefore);
-            if (bestMv) {
-              const bestAfterSnap = CT.applyMoveSnapshot(prevSnap, bestMv);
-              const bestT = CT.detectAfterMove(prevSnap, bestAfterSnap, bestMv, mover);
-              const miss = {
-                fork: bestT.fork && !playedT.fork,
-                absPin: bestT.absPin && !playedT.absPin,
-                relPin: bestT.relPin && !playedT.relPin,
-                trap: bestT.trap && !playedT.trap,
-                decoy: bestT.decoy && !playedT.decoy,
-                skewer: bestT.skewer && !playedT.skewer && !playedT.fork,
-                discovered: bestT.discovered && !playedT.discovered && !playedT.fork && !playedT.skewer,
-              };
-              const ptB = stBefore.board[bestMv.from[0]][bestMv.from[1]]?.[1] || pt;
-              if (miss.fork) applyMissedTactics(result, { fork: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
-              if (miss.absPin) applyMissedTactics(result, { absPin: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
-              if (miss.relPin) applyMissedTactics(result, { relPin: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
-              if (miss.trap) applyMissedTactics(result, { trap: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
-              if (miss.decoy) applyMissedTactics(result, { decoy: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
-              if (miss.skewer) applyMissedTactics(result, { skewer: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
-              if (miss.discovered) applyMissedTactics(result, { discovered: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
+              // 최선의 수와 비교하여 놓친 전술 확인
+              if (isMe && bestUci && playedUci && bestUci !== playedUci) {
+                const bestMv = uciToMoveFromState(bestUci, stBefore);
+                if (bestMv) {
+                  const bestAfterFen = CT.applyMoveSnapshot(prevFen, bestMv);
+                  const bestT = await CT.detectTacticsIfBlunder(cpBefore, cpAfter, mover, bestAfterFen);
+                  
+                  if (bestT) {
+                    const miss = {
+                      fork: bestT.fork && !playedT.fork,
+                      absPin: bestT.absPin && !playedT.absPin,
+                      relPin: bestT.relPin && !playedT.relPin,
+                      trap: bestT.trap && !playedT.trap,
+                      decoy: bestT.decoy && !playedT.decoy,
+                      skewer: bestT.skewer && !playedT.skewer && !playedT.fork,
+                      discovered: bestT.discovered && !playedT.discovered && !playedT.fork && !playedT.skewer,
+                    };
+                    const ptB = stBefore.board[bestMv.from[0]][bestMv.from[1]]?.[1] || pt;
+                    if (miss.fork) applyMissedTactics(result, { fork: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
+                    if (miss.absPin) applyMissedTactics(result, { absPin: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
+                    if (miss.relPin) applyMissedTactics(result, { relPin: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
+                    if (miss.trap) applyMissedTactics(result, { trap: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
+                    if (miss.decoy) applyMissedTactics(result, { decoy: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
+                    if (miss.skewer) applyMissedTactics(result, { skewer: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
+                    if (miss.discovered) applyMissedTactics(result, { discovered: true }, ptB, moveNum, san, plyIdx, bestUci, missedRef);
+                  }
+                }
+              }
             }
+          } catch (e) {
+            console.warn('[analyzeGame] 포지션', i, '전술 분석 실패:', e.message);
           }
         } else if (san.includes('#') && isMe) {
           result.checkmates++;
