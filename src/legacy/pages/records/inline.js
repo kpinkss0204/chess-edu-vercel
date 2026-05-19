@@ -400,9 +400,9 @@
           const plyIdx = i - 1;
 
           try {
-            // 판정이 있을 때만 ChessGrammar API로 분석
-            const playedT = await CT.detectTacticsIfBlunder(cpBefore, cpAfter, mover, afterFen);
-            
+            const wf = await CT.analyzeMoveWorkflow(cpBefore, cpAfter, mover, afterFen);
+            const playedT = wf && wf.tactics ? wf.tactics : null;
+
             if (playedT) {
               if (isMe) {
                 applyFoundTactics(result, playedT, true, pt, moveNum, san, plyIdx);
@@ -417,7 +417,7 @@
                 const bestMv = uciToMoveFromState(bestUci, stBefore);
                 if (bestMv) {
                   const bestAfterFen = CT.applyMoveSnapshot(prevFen, bestMv);
-                  const bestT = await CT.detectTacticsIfBlunder(cpBefore, cpAfter, mover, bestAfterFen);
+                  const bestT = await CT.detectTactics(bestAfterFen);
                   
                   if (bestT) {
                     const miss = {

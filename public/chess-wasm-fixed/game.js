@@ -203,7 +203,9 @@ class ChessGame {
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
-    analyzePosition(true);  // 수 이동: 강제 재분석
+    
+    analyzePosition(true);
+
     // 위협/최선수 패널 리셋 (새 수에 맞게 재분석 대기)
     const tpanel = document.getElementById('threat-panel');
     if (tpanel && tpanel.style.display !== 'none') {
@@ -335,7 +337,13 @@ class ChessGame {
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
-    analyzePosition(true);  // 기보 이동: 항상 강제 재분석
+    
+    analyzePosition(true);
+    if (typeof tryTriggerTacticsForCurrentMove === 'function') {
+      const currentFen = boardToFen(this.board, this.turn, this.castling, this.enPassant, this.halfMove, this.fullMove);
+      setTimeout(function () { tryTriggerTacticsForCurrentMove(currentFen); }, 600);
+    }
+
     // 패널 리셋
     lastThreatFen = '';
     lastBestExplainFen = '';
@@ -371,6 +379,11 @@ class ChessGame {
     this.renderMoveList();
     this.updateStatus();
     analyzePosition(true);
+    if (typeof ChessTactics !== 'undefined' && ChessTactics.resetAnalysisState) {
+      ChessTactics.resetAnalysisState();
+    }
+    if (typeof resetAutoGameAnalysisCache === 'function') resetAutoGameAnalysisCache();
+    if (typeof notifyGamePositionChanged === 'function') notifyGamePositionChanged();
     return true;
   }
 
@@ -387,6 +400,9 @@ class ChessGame {
     this.renderMoveList();
     this.updateStatus();
     analyzePosition(true);
+    if (typeof ChessTactics !== 'undefined' && ChessTactics.resetAnalysisState) {
+      ChessTactics.resetAnalysisState();
+    }
     showToast('보드가 초기화되었습니다');
   }
 
@@ -2245,6 +2261,10 @@ class ChessGame {
 
     this.goToStart();
     setTimeout(()=>this.goToEnd(),50);
+    setTimeout(function () {
+      if (typeof resetAutoGameAnalysisCache === 'function') resetAutoGameAnalysisCache();
+      if (typeof notifyGamePositionChanged === 'function') notifyGamePositionChanged();
+    }, 800);
     } finally {
       _soundMuted = false;  // 파싱 완료 후 사운드 복원
     }

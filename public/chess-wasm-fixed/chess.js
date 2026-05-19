@@ -497,10 +497,9 @@ const ANN_LABEL = {
 };
 
 // ── 수 분류 전체 업데이트 ────────────────────────────────────
-// 주석: 이제 수동 '분석하기' 버튼을 통해서만 주석이 달리도록 합니다.
-// 자동 실시간 주석은 성능 및 시각적 노이즈 방지를 위해 비활성화합니다.
+// 실시간 주석: engine.js + chess-tactics 자동 분석이 annotation 설정
 function updateMoveAnnotations() {
-  return; 
+  return;
   /* 
   if (!game || !game.history || !evalCache) return;
 

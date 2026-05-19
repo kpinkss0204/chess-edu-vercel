@@ -428,6 +428,247 @@
     return arr.slice(0, n);
   }
 
+  /** PGN 문자열 → SAN 배열 */
+  function parseSanMoves(pgnMoves) {
+    if (!pgnMoves) return [];
+    return pgnMoves
+      .replace(/\{[^}]*\}/g, ' ')
+      .replace(/\d+\.\s*/g, ' ')
+      .split(/\s+/)
+      .filter(m => m && !/^(1-0|0-1|1\/2|\*|\[)/.test(m));
+  }
+
+  const OPENING_PREFIXES = [
+    { name: '루이 로페즈', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5'] },
+    { name: '이탈리안 게임', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'] },
+    { name: '스코치 게임', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'd4'] },
+    { name: '비엔나 게임', moves: ['e4', 'e5', 'Nc3'] },
+    { name: '루이 폴센', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Nf6'] },
+    { name: '투 나이트 디펜스', moves: ['e4', 'e5', 'Nf3', 'Nc6'] },
+    { name: '스페인 4기사', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O', 'Be7'] },
+    { name: '퀸즈 갬빗', moves: ['d4', 'd5', 'c4'] },
+    { name: '킹스 인디안', moves: ['d4', 'Nf6', 'c4', 'g6'] },
+    { name: '님조-인디안', moves: ['d4', 'Nf6', 'c4', 'e6'] },
+    { name: '카탈루냐', moves: ['d4', 'Nf6', 'c4', 'e6', 'g3'] },
+    { name: '런던 시스템', moves: ['d4', 'd5', 'Bf4'] },
+    { name: '콜 시스템', moves: ['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6', 'e3'] },
+    { name: '카로-칸', moves: ['e4', 'c6'] },
+    { name: '시실리안', moves: ['e4', 'c5'] },
+    { name: '프렌치', moves: ['e4', 'e6'] },
+    { name: '스칸디나비안', moves: ['e4', 'd5'] },
+  ];
+
+  function detectOpening(sanMoves) {
+    if (!sanMoves.length) return null;
+    let best = null;
+    for (const o of OPENING_PREFIXES) {
+      if (sanMoves.length < o.moves.length) continue;
+      const ok = o.moves.every((m, i) => sanMoves[i] === m);
+      if (ok && (!best || o.moves.length > best.moves.length)) best = o;
+    }
+    if (!best) return null;
+    const played = sanMoves.slice(0, Math.min(sanMoves.length, 14)).join(' ');
+    const variant = describeOpeningVariant(best.name, sanMoves);
+    return {
+      name: best.name,
+      variant,
+      moveCount: sanMoves.length,
+      playedLine: played,
+    };
+  }
+
+  function describeOpeningVariant(name, moves) {
+    if (name !== '이탈리안 게임') return '';
+    if (moves.includes('Bc5') && moves.includes('c3')) return '기우코 피아니시모(Giuoco Pianissimo) 계열';
+    if (moves.includes('Bc5')) return '기우코 피아노(Giuoco Piano) 계열';
+    if (moves.includes('Nf6')) return '투 나이트 변형 진입 가능';
+    if (moves.includes('d3')) return 'd3(느린 전개) 변형';
+    return '';
+  }
+
+  function findKing(board, color) {
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const c = board[r][f];
+        if (c && c[0] === color && c[1] === 'K') return { r, f, sq: idxToSq(r, f) };
+      }
+    }
+    return null;
+  }
+
+  function summarizeDevelopment(state) {
+    const { board, castling } = state;
+    const out = { w: [], b: [] };
+    for (const color of ['w', 'b']) {
+      const kr = color === 'w' ? 7 : 0;
+      let minorsDeveloped = 0;
+      let rooksConnected = false;
+      const king = findKing(board, color);
+      let castled = false;
+      if (king) {
+        castled = (color === 'w' && king.f >= 6 && king.r === 7) || (color === 'b' && king.f >= 6 && king.r === 0);
+      }
+      for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const c = board[r][f];
+          if (!c || c[0] !== color) continue;
+          if (c[1] === 'N' || c[1] === 'B') {
+            if (!(color === 'w' && r === 7 && (f === 1 || f === 6 || f === 2 || f === 5)) &&
+                !(color === 'b' && r === 0 && (f === 1 || f === 6 || f === 2 || f === 5))) {
+              minorsDeveloped++;
+            }
+          }
+        }
+      }
+      const notes = [];
+      const ck = color === 'w' ? 'wK' : 'bK';
+      const cq = color === 'w' ? 'wQ' : 'bQ';
+      if (castled) notes.push('캐슬 완료');
+      else if (castling[ck] || castling[cq]) notes.push('아직 캐슬 전');
+      else notes.push('캐슬 권리 없음');
+      notes.push(`마이너 기물 ${minorsDeveloped}개 전개`);
+      out[color] = notes.join(', ');
+    }
+    return out;
+  }
+
+  function summarizeCenter(board) {
+    const center = ['d4', 'd5', 'e4', 'e5', 'c4', 'c5', 'f4', 'f5'];
+    const occ = { w: [], b: [] };
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const sq = idxToSq(r, f);
+        if (!center.includes(sq)) continue;
+        const c = board[r][f];
+        if (!c) continue;
+        const label = c[1] === 'P' ? `폰(${sq})` : `${PIECE_KR[c[1]]}(${sq})`;
+        occ[c[0]].push(label);
+      }
+    }
+    const lines = [];
+    if (occ.w.length) lines.push(`백 중앙·근중앙: ${occ.w.join(', ')}`);
+    if (occ.b.length) lines.push(`흑 중앙·근중앙: ${occ.b.join(', ')}`);
+    return lines;
+  }
+
+  function inferStrategicThemes(state, sanMoves, opening) {
+    const themes = [];
+    const { board, turn } = state;
+    const dev = summarizeDevelopment(state);
+
+    if (opening && opening.name === '이탈리안 게임') {
+      themes.push('이탈리안 전형: c3·d4로 중앙 확장, Bc4–Bc5 대각 압력, 킹사이드 캐슬 후 d4 돌파가 흔한 계획');
+    }
+    if (sanMoves.includes('d4') && sanMoves.includes('e4')) {
+      themes.push('백이 e4-d4 폰 센터 — d5(또는 …exd4) 돌파·공간 우위 노림');
+    }
+    if (sanMoves.includes('d6') && sanMoves.includes('e5')) {
+      themes.push('흑이 e5-d6 견고한 센터 — …d5 카운터 또는 킹사이드 전개 여지');
+    }
+
+    const whiteKing = findKing(board, 'w');
+    const blackKing = findKing(board, 'b');
+    if (whiteKing && whiteKing.f >= 6) themes.push('백 킹 킹사이드 안전(캐슬 완료 또는 준비됨)');
+    if (blackKing && blackKing.f >= 6) themes.push('흑 킹 킹사이드 안전');
+
+    if (dev.w.includes('전개') && dev.b.includes('전개')) {
+      themes.push(`전개 비교 — 백: ${dev.w} / 흑: ${dev.b}`);
+    }
+
+    const toMove = COLOR_KR[turn];
+    themes.push(`지금 차례: ${toMove} — ${toMove}의 다음 목표(전개 완성·중앙 확장·상대 약점 공략)를 중심으로 설명할 것`);
+
+    return pickTop(themes, 5);
+  }
+
+  function formatRecentMoves(recentMoves, lastMoveSan, lastMoveAnnotation) {
+    const lines = [];
+    if (recentMoves && recentMoves.length) {
+      const parts = recentMoves.map(h => {
+        const who = COLOR_KR[h.turn] || '';
+        const ann = h.annotation ? ` [${h.annotation}]` : '';
+        return `${who} ${h.san}${ann}`;
+      });
+      lines.push(`최근 ${parts.length}수: ${parts.join(' → ')}`);
+    }
+    if (lastMoveSan) {
+      const ann = lastMoveAnnotation ? ` (${lastMoveAnnotation})` : '';
+      lines.push(`직전 수: ${lastMoveSan}${ann}`);
+    }
+    return lines;
+  }
+
+  /**
+   * 해설용 내러티브 컨텍스트 (오프닝·전개·전략 테마)
+   */
+  function buildGameNarrative(opts) {
+    const sanMoves = parseSanMoves(opts.pgnMoves || '');
+    const state = parseFenState(opts.fen);
+    const opening = detectOpening(sanMoves);
+    const narrative = {
+      phase: opts.phase || '미들게임',
+      moveCount: opts.moveCount || sanMoves.length,
+      opening,
+      sanMoves,
+      recentLines: formatRecentMoves(opts.recentMoves, opts.lastMoveSan, opts.lastMoveAnnotation),
+      development: state ? summarizeDevelopment(state) : { w: '', b: '' },
+      center: state ? summarizeCenter(state.board) : [],
+      strategicThemes: state ? inferStrategicThemes(state, sanMoves, opening) : [],
+      material: null,
+    };
+
+    if (state) {
+      let wMat = 0, bMat = 0;
+      for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const c = state.board[r][f];
+          if (!c || c[1] === 'K') continue;
+          const v = PIECE_VAL[c[1]] || 0;
+          if (c[0] === 'w') wMat += v; else bMat += v;
+        }
+      }
+      if (wMat !== bMat) {
+        narrative.material = wMat > bMat
+          ? `기물: 백이 ${wMat - bMat}점 앞섬(폰=1,나이트/비숍=3,룩=5,퀸=9)`
+          : `기물: 흑이 ${bMat - wMat}점 앞섬`;
+      } else {
+        narrative.material = '기물: 동점';
+      }
+    }
+    return narrative;
+  }
+
+  function formatGameNarrativeForPrompt(narrative) {
+    if (!narrative) return '';
+    const lines = [];
+    lines.push('[국면 내러티브 — 오프닝·전개·계획의 뼈대. 아래 내용을 해설 도입·포지션 상황에 자연스럽게 녹일 것]');
+    lines.push(`게임 단계: ${narrative.phase} (${narrative.moveCount}수 진행)`);
+
+    if (narrative.opening) {
+      let op = `오프닝: ${narrative.opening.name}`;
+      if (narrative.opening.variant) op += ` — ${narrative.opening.variant}`;
+      lines.push(op);
+      lines.push(`시작 수순: ${narrative.opening.playedLine}`);
+    } else if (narrative.sanMoves.length >= 4) {
+      lines.push(`수순 앞부분: ${narrative.sanMoves.slice(0, 10).join(' ')}`);
+    }
+
+    narrative.recentLines.forEach(l => lines.push(l));
+
+    if (narrative.development.w) lines.push(`백 전개: ${narrative.development.w}`);
+    if (narrative.development.b) lines.push(`흑 전개: ${narrative.development.b}`);
+    narrative.center.forEach(l => lines.push(l));
+    if (narrative.material) lines.push(narrative.material);
+
+    if (narrative.strategicThemes.length) {
+      lines.push('전략 테마(코드 추정 — 브리프·엔진과 맞으면 해설에 반영):');
+      narrative.strategicThemes.forEach(t => lines.push(`  • ${t}`));
+    }
+
+    lines.push('말투: "경기는 ~", "지금 ~", "~라고 볼 수 있겠어요", "~거든요" 등 흐름 있는 구어체 해설.');
+    return lines.join('\n');
+  }
+
   /**
    * @param {object} opts
    * @param {string} opts.fen
@@ -435,6 +676,12 @@
    * @param {string[]} [opts.pv1Uci]
    * @param {string[]} [opts.pv2Uci]
    * @param {string[]} [opts.positionInsights]
+   * @param {string} [opts.pgnMoves]
+   * @param {object[]} [opts.recentMoves]
+   * @param {string} [opts.lastMoveSan]
+   * @param {string} [opts.lastMoveAnnotation]
+   * @param {string} [opts.phase]
+   * @param {number} [opts.moveCount]
    */
   function buildPositionBrief(opts) {
     const fen = opts.fen;
@@ -457,7 +704,10 @@
       weaknesses: [],
       strengths: [],
       verifiedFacts: [],
+      narrative: null,
     };
+
+    brief.narrative = buildGameNarrative(opts);
 
     if (!state) return brief;
 
@@ -515,7 +765,14 @@
     [...brief.threats, ...brief.weaknesses, ...brief.ideas].forEach(x => {
       if (x.text) brief.verifiedFacts.push(x.text);
     });
-    brief.verifiedFacts = [...new Set(brief.verifiedFacts)].slice(0, 20);
+    if (brief.narrative) {
+      if (brief.narrative.opening) {
+        brief.verifiedFacts.push(`오프닝: ${brief.narrative.opening.name}`);
+      }
+      brief.narrative.recentLines.forEach(l => brief.verifiedFacts.push(l));
+      brief.narrative.strategicThemes.forEach(t => brief.verifiedFacts.push(t));
+    }
+    brief.verifiedFacts = [...new Set(brief.verifiedFacts)].slice(0, 28);
 
     return brief;
   }
@@ -523,6 +780,11 @@
   function formatPositionBriefForPrompt(brief, ctx) {
     const lines = [];
     lines.push('[검증된 분석 브리프 — 아래 사실만 해설에 사용. 브리프에 없는 위협·기물·수를 만들어내지 말 것]');
+
+    if (brief.narrative) {
+      lines.push('');
+      lines.push(formatGameNarrativeForPrompt(brief.narrative));
+    }
 
     if (brief.mateIn1.length) {
       lines.push('');
@@ -639,6 +901,8 @@
   }
 
   global.buildPositionBrief = buildPositionBrief;
+  global.buildGameNarrative = buildGameNarrative;
   global.formatPositionBriefForPrompt = formatPositionBriefForPrompt;
+  global.formatGameNarrativeForPrompt = formatGameNarrativeForPrompt;
   global.debugPositionBriefToConsole = debugPositionBriefToConsole;
 })(typeof window !== 'undefined' ? window : globalThis);

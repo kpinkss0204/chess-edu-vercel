@@ -1210,23 +1210,45 @@
 const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH : 18;
 
     let _sfAnalysisBusy = false;
+    let _autoGameAnalysisTimer = null;
+    let _lastAutoAnalyzedPgnKey = '';
 
-    async function analyzeCurrentGameWithSF() {
+    function resetAutoGameAnalysisCache() {
+      _lastAutoAnalyzedPgnKey = '';
+    }
+    window.resetAutoGameAnalysisCache = resetAutoGameAnalysisCache;
+
+    function scheduleAutoGameAnalysis() {
+      if (_autoGameAnalysisTimer) clearTimeout(_autoGameAnalysisTimer);
+      _autoGameAnalysisTimer = setTimeout(function () { runAutoGameAnalysisIfNeeded(); }, 1200);
+    }
+    window.scheduleAutoGameAnalysis = scheduleAutoGameAnalysis;
+
+    async function runAutoGameAnalysisIfNeeded() {
+      if (!game || !game.history || game.history.length < 2) return;
+      const pgn = typeof game.generatePgn === 'function' ? game.generatePgn() : '';
+      const key = pgn + '|' + (document.getElementById('sf-color-select')?.value || 'w');
+      if (key === _lastAutoAnalyzedPgnKey || _sfAnalysisBusy) return;
+      await analyzeCurrentGameWithSF({ silent: true });
+    }
+
+    async function analyzeCurrentGameWithSF(opts) {
+      opts = opts || {};
       if (_sfAnalysisBusy) return;
       if (!game || !game.history || game.history.length < 2) {
-        if (typeof showToast === 'function') showToast('수가 너무 짧습니다 (최소 2수 이상).');
+        if (!opts.silent && typeof showToast === 'function') showToast('수가 너무 짧습니다 (최소 2수 이상).');
         return;
       }
       if (typeof stockfishEvalStates !== 'function' || typeof parsePgnToStates !== 'function') {
-        if (typeof showToast === 'function') showToast('분석 모듈을 불러올 수 없습니다.');
+        if (!opts.silent && typeof showToast === 'function') showToast('분석 모듈을 불러올 수 없습니다.');
         return;
       }
 
       const myColor = document.getElementById('sf-color-select')?.value || 'w';
       const statusEl = document.getElementById('sf-analysis-status');
       const resultEl = document.getElementById('sf-analysis-result');
-      const btn = document.getElementById('sf-analyze-btn');
       const depthBadge = document.getElementById('sf-analysis-depth-badge');
+      const CT = typeof ChessTactics !== 'undefined' ? ChessTactics : null;
 
       function setStatus(html) {
         if (!statusEl) return;
@@ -1235,7 +1257,6 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
       }
 
       _sfAnalysisBusy = true;
-      if (btn) btn.disabled = true;
       if (resultEl) resultEl.style.display = 'none';
       if (depthBadge) depthBadge.textContent = '';
 
@@ -1244,12 +1265,11 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
       if (states.length < 2) {
         setStatus('<span style="color:#e07070">❌ 기보를 해석할 수 없습니다.</span>');
         _sfAnalysisBusy = false;
-        if (btn) btn.disabled = false;
         return;
       }
       const total = states.length;
 
-      setStatus(`<span style="color:var(--text-secondary)">⏳ Stockfish 분석 중… (0 / ${total})</span>`);
+      setStatus(`<span style="color:var(--text-secondary)">⏳ [1단계] Stockfish 수 평가… (0 / ${total})</span>`);
 
       const { evalRows, error } = await stockfishEvalStates(states, {
         depth: SF_ANA_DEPTH,
@@ -1265,7 +1285,6 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
       if (error) {
         setStatus(`<span style="color:#e07070">❌ Stockfish Worker 초기화 실패: ${error.message}</span>`);
         _sfAnalysisBusy = false;
-        if (btn) btn.disabled = false;
         return;
       }
 
@@ -1274,17 +1293,37 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
       const myBlunders = j.myBlunders, myMistakes = j.myMistakes, myInaccuracies = j.myInaccuracies;
       const oppBlunders = j.oppBlunders, oppMistakes = j.oppMistakes, oppInaccuracies = j.oppInaccuracies;
 
+      let grammarCalls = 0;
       for (const row of j.byPly) {
         if (game.history[row.plyIndex]) {
           game.history[row.plyIndex].annotation = row.cls || null;
+          game.history[row.plyIndex].tactics = null;
         }
       }
 
-      // 렌더링 업데이트
+      if (CT && typeof CT.analyzeMoveWorkflow === 'function') {
+        setStatus('<span style="color:var(--text-secondary)">⏳ [2단계] 실수 수 전술 분석 (ChessGrammar)…</span>');
+        for (let i = 1; i < states.length; i++) {
+          const bad = lichessCpAdviceJudgment(evalRows[i - 1].cpw, evalRows[i].cpw, states[i - 1].turn);
+          if (!bad) continue;
+          const afterFen = CT.snapshotFromState(states[i]);
+          if (!afterFen) continue;
+          try {
+            const wf = await CT.analyzeMoveWorkflow(evalRows[i - 1].cpw, evalRows[i].cpw, states[i - 1].turn, afterFen);
+            if (wf && wf.grammarCalled) grammarCalls++;
+            if (game.history[i - 1]) game.history[i - 1].tactics = wf ? wf.tactics : null;
+          } catch (e) { console.warn('[analyze] Grammar', i, e.message); }
+        }
+      }
+
       if (typeof game.renderMoveList === 'function') game.renderMoveList();
 
-      // 결과 표시
-      setStatus(`<span style="color:var(--accent-green-bright)">✅ 분석 완료 — 깊이 ${SF_ANA_DEPTH}</span>`);
+      _lastAutoAnalyzedPgnKey = pgn + '|' + myColor;
+
+      setStatus(
+        `<span style="color:var(--accent-green-bright)">✅ 자동 분석 완료 — 깊이 ${SF_ANA_DEPTH}` +
+        (grammarCalls ? ` · Grammar ${grammarCalls}수` : '') + `</span>`
+      );
       if (depthBadge) depthBadge.textContent = `깊이 ${SF_ANA_DEPTH}`;
 
       const STAT_COLOR = { blunder: '#cc3333', mistake: '#e08c3a', inaccuracy: '#f6c94a' };
@@ -1322,8 +1361,19 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
       }
 
       _sfAnalysisBusy = false;
-      if (btn) btn.disabled = false;
     }
+
+    window.analyzeCurrentGameWithSF = analyzeCurrentGameWithSF;
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const colorSel = document.getElementById('sf-color-select');
+      if (colorSel) {
+        colorSel.addEventListener('change', function () {
+          _lastAutoAnalyzedPgnKey = '';
+          scheduleAutoGameAnalysis();
+        });
+      }
+    });
 
 /* --- script block --- */
 

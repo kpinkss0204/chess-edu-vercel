@@ -203,7 +203,13 @@ function buildChessContext() {
   // 포지션 구조 인사이트 추출 (FEN 기반 정제 분석)
   const positionInsights = extractPositionInsights(fen);
 
-  // 구조화 브리프: 위협/아이디어/엔진 수순 인과를 코드로 검증 후 AI에 전달
+  const recentMoves = game.history.slice(-8).map(h => ({
+    san: h.san,
+    turn: h.turn,
+    annotation: h.annotation || null,
+  }));
+
+  // 구조화 브리프: 위협/아이디어/엔진 수순 인과 + 오프닝·전개 내러티브
   let positionBrief = null;
   if (typeof buildPositionBrief === 'function') {
     const pv1Uci = pv1 && pv1.moves ? pv1.moves : (pv1 && pv1.pv ? pv1.pv : []);
@@ -214,6 +220,12 @@ function buildChessContext() {
       pv1Uci: Array.isArray(pv1Uci) ? pv1Uci : [],
       pv2Uci: Array.isArray(pv2Uci) ? pv2Uci : [],
       positionInsights,
+      pgnMoves: pgnMoves.trim(),
+      recentMoves,
+      lastMoveSan,
+      lastMoveAnnotation,
+      phase,
+      moveCount,
     });
   }
 
@@ -1240,6 +1252,22 @@ async function askCoach() {
 // 프롬프트 빌더 — 체스인사이드 스타일 해설 요청
 // ══════════════════════════════════════════════════════
 
+/** UCI 엔진 라인 → SAN (프롬프트용) */
+function engineLineSan(ctx, pv, maxLen) {
+  if (!pv || !pv.moves || !pv.moves.length || typeof uciMovesToSan !== 'function') return null;
+  const parts = ctx.fen.trim().split(/\s+/);
+  const board = parseFenBoard(parts[0]);
+  if (!board) return null;
+  const sanList = uciMovesToSan(
+    pv.moves.slice(0, maxLen || 8),
+    board,
+    parts[1] || 'w',
+    parseFenCastling(parts[2] || '-'),
+    parseFenEP(parts[3] || '-')
+  );
+  return sanList.length ? sanList.join(' ') : null;
+}
+
 function buildCommentaryPrompt(ctx) {
   const lines = [];
 
@@ -1251,17 +1279,13 @@ function buildCommentaryPrompt(ctx) {
   const livePv2 = pvDataToUse && pvDataToUse[2];
   const livePv3 = pvDataToUse && pvDataToUse[3];
 
-  const liveBestLine = livePv1 && livePv1.moves ? livePv1.moves.slice(0, 8).join(' ') : ctx.bestLine;
-  console.log('[Debug Prompt] liveBestLine:', liveBestLine);
-  
-  if (!liveBestLine) {
-    console.warn('[Debug Prompt] WARNING: No engine lines found for prompt!');
-  }
-  
-  const liveLine2    = livePv2 && livePv2.moves ? livePv2.moves.slice(0, 6).join(' ') : ctx.line2;
-  const liveLine3    = livePv3 && livePv3.moves ? livePv3.moves.slice(0, 6).join(' ') : ctx.line3;
-  const liveBestMove = livePv1 && livePv1.moves && livePv1.moves[0] ? livePv1.moves[0] : ctx.bestMove;
-  console.log('[Debug Prompt] liveBestMove:', liveBestMove);
+  const liveBestLineSan = engineLineSan(ctx, livePv1, 8) || ctx.bestLine;
+  const liveLine2San    = engineLineSan(ctx, livePv2, 6) || ctx.line2;
+  const liveLine3San    = engineLineSan(ctx, livePv3, 6) || ctx.line3;
+  const liveBestLine    = liveBestLineSan;
+  const liveLine2       = liveLine2San;
+  const liveLine3       = liveLine3San;
+  const liveBestMove    = liveBestLineSan ? liveBestLineSan.split(/\s+/)[0] : (livePv1 && livePv1.moves && livePv1.moves[0] ? livePv1.moves[0] : ctx.bestMove);
 
   lines.push(`[포지션 데이터]`);
   lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수 | 차례: ${ctx.turn === 'w' ? '백(White)' : '흑(Black)'}`);
@@ -1316,8 +1340,10 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`- **최선수 분석**: [검증된 분석 브리프]의 "엔진 1순위 수순"만 사용. 각 수마다 브리프에 적힌 인과(포획·체크·포크·메이트)를 "~하기 때문에" 형태로 설명. 브리프에 없는 수·기물 추가 금지.`);
   lines.push(`- **위협 & 아이디어**: 브리프의 "1~3수 메이트"·"전술적 위협"만 사용. 메이트는 브리프에 적힌 수순·패턴만 인용.`);
   lines.push(`- **약점 분석**: 브리프의 "구조적 약점"(밝은/어두운 칸, 폰 구조)을 장기적 이유와 함께 설명.`);
+  lines.push(`- **포지션 상황**에서는 [국면 내러티브]의 오프닝 이름·최근 수순·전개 상태를 2~4문장으로 먼저 짚을 것 (예: "경기는 e4 e5 이후 나이트 전개로 이탈리안 게임에 들어갔고…").`);
+  lines.push(`- 변형·계획(d4 확장, 캐슬, …)은 내러티브·브리프에 있는 것만 언급. 없는 오프닝 이론·DB 통계는 지어내지 말 것.`);
   lines.push(`- 섹션 헤더는 **헤더명** 형태로 단독 줄에 쓸 것.`);
-  lines.push(`- 위 system prompt의 말투 예시를 그대로 따를 것.`);
+  lines.push(`- 위 system prompt의 말투 예시를 그대로 따를 것. 전체 900~1300자, 문단마다 2~5문장.`);
 
   return lines.join('\n');
 }
@@ -1337,9 +1363,13 @@ function buildCoachPrompt(ctx, question) {
     lines.push(`방금 둔 수: ${ctx.lastMoveSan}${ann}`);
   }
 
-  if (ctx.bestLine) lines.push(`[엔진 1순위 라인] ${ctx.bestLine}`);
-  if (ctx.line2)    lines.push(`[엔진 2순위 라인] ${ctx.line2}`);
-  if (ctx.line3)    lines.push(`[엔진 3순위 라인] ${ctx.line3}`);
+  const pv1 = ctx.pvData && ctx.pvData[1];
+  const bestSan = engineLineSan(ctx, pv1, 8) || ctx.bestLine;
+  const line2San = engineLineSan(ctx, ctx.pvData && ctx.pvData[2], 6) || ctx.line2;
+  const line3San = engineLineSan(ctx, ctx.pvData && ctx.pvData[3], 6) || ctx.line3;
+  if (bestSan) lines.push(`[엔진 1순위 라인 SAN] ${bestSan}`);
+  if (line2San) lines.push(`[엔진 2순위 라인 SAN] ${line2San}`);
+  if (line3San) lines.push(`[엔진 3순위 라인 SAN] ${line3San}`);
 
   // 사용자 화살표 (후보수 / 수순) 포함
   if (ctx.candidateMoves && ctx.candidateMoves.length > 0) {
@@ -1377,6 +1407,7 @@ function buildCoachPrompt(ctx, question) {
   lines.push(``);
   lines.push(`체스인사이드 해설 스타일(관찰→이유→결과)로, 한국어로만 답변해주세요.`);
   lines.push(`수치(cp, 점수, 승률)는 쓰지 말고, 수 표기(e4, Nf3 등)는 영문 그대로 쓰세요.`);
+  lines.push(`오프닝·전개 맥락이 [국면 내러티브]에 있으면 질문 답변에도 반드시 반영할 것.`);
 
   return lines.join('\n');
 }
@@ -1432,6 +1463,17 @@ async function callCommentaryAPI(ctx) {
 지금 당장 결정적인 전술이 있는 국면은 아니고, 양쪽 다 자원을 모으면서 적절한 타이밍을 재는 상황이라고 보면 되겠습니다. 백이 먼저 확실한 전략 방향을 정하는 게 중요하겠어요.
 
 ───────────────────────────────────────
+【예시 D — 오프닝 맥락이 있는 이탈리안 (목표 말투)】
+**포지션 상황**
+경기는 e4 e5 이후 나이트 전개로 이탈리안 게임에 들어갔고요, 흑이 …Bc5·…d6까지 이어지면서 무난한 기우코 피아니시모 형태가 됐습니다. 백은 아직 d4를 서두르기보다 나이트 전개를 마무리한 뒤 중앙을 푸는 쪽을 노리고 있어요.
+
+**최선수 분석**
+컴퓨터는 여기서 백이 O-O를 추천하는데요, 백이 O-O를 두면 킹을 안전히 피한 뒤 Re1·d4 확장으로 이어가기 쉬워집니다. 흑이 …h6로 Bg5를 막으면, 백은 d3·c3 준비를 이어가며 d4 돌파를 노릴 수 있겠어요.
+
+**이후 수순**
+백이 O-O, 흑이 …h6, 백이 Re1을 두면 e4·d4 폰 센터를 바탕으로 킹사이드에서 압박을 키우는 그림이 자연스럽습니다. 흑이 …d5로 카운터를 치려 한다면 백은 exd5 이후 활동성을 이어가면 됩니다.
+
+───────────────────────────────────────
 
 【당신이 이미 알고 있는 체스 지식 — 해설에 자연스럽게 활용할 것】
 
@@ -1481,14 +1523,15 @@ async function callCommentaryAPI(ctx) {
 6. 포지션 인사이트에서 [전술 패턴], [폰 구조], [기물 가치], [전장 판단], [마이너리티 공격], [예방 전진] 등이 보이면 해당 내용을 해설에 자연스럽게 녹여서 쓸 것
 7. "이 수", "해당 수", "기물의 발전을 돕는다", "상대를 약화시킨다", "승리의 기회를 높입니다" 금지
 8. cp/점수/승률 수치 금지
-9. 전체 500~700자, 각 섹션 2~4문장
-10. 한국어로만 출력. 체스 수 표기(e4, Nf3 등)는 영문 그대로.
-11. 【수 설명 주어 규칙 — 절대 위반 금지】 모든 수에 대해 **누가(백/흑)** 두는지 주어를 반드시 명시할 것. 엔진 수순을 설명할 때 "백이 A를 두면, 흑은 B로 응수하고, 백은 C를 두어..."와 같이 **모든 수에 대해 주어를 써야 한다**. 주어 생략 및 양쪽 수를 반대편이 두는 것처럼 서술하는 것은 엄격히 금지.
-12. 【이후 수순 섹션 규칙】 수순에 등장하는 각 수에 대해 "누가(백/흑) 무엇을(수 표기) 두면, 왜(구체적 결과)"를 반드시 써야 한다. 수를 나열만 하거나 결과 없이 "X로 막는다", "Y를 노린다"처럼 막연하게 쓰는 것은 금지. 구체적으로 어떤 칸/기물/위협이 발생하는지 서술할 것.
-13. 【킹 위협 서술 규칙】 특정 수가 킹을 위협한다고 쓰려면, 구체적으로 어떤 칸으로 침투하는지 또는 어떤 체크/메이트 위협이 생기는지 반드시 함께 써야 한다. "킹을 노린다"는 단독 표현은 금지.`;
+9. 전체 900~1300자. 각 섹션 3~5문장. 한 문단이 끊기지 않고 이어지게 쓸 것 ("~고요", "~거든요", "~라고 볼 수 있겠어요").
+10. 【오프닝·스토리텔링】 [국면 내러티브]에 오프닝 이름·수순이 있으면 **포지션 상황** 첫 문단에서 "경기는 … 이후 … 오프닝으로 들어갔고"처럼 맥락을 잡을 것. 직전 수·최근 수순을 자연스럽게 연결.
+11. 한국어로만 출력. 체스 수 표기(e4, Nf3 등)는 영문 그대로.
+12. 【수 설명 주어 규칙 — 절대 위반 금지】 모든 수에 대해 **누가(백/흑)** 두는지 주어를 반드시 명시할 것. 엔진 수순을 설명할 때 "백이 A를 두면, 흑은 B로 응수하고, 백은 C를 두어..."와 같이 **모든 수에 대해 주어를 써야 한다**. 주어 생략 및 양쪽 수를 반대편이 두는 것처럼 서술하는 것은 엄격히 금지.
+13. 【이후 수순 섹션 규칙】 수순에 등장하는 각 수에 대해 "누가(백/흑) 무엇을(수 표기) 두면, 왜(구체적 결과)"를 반드시 써야 한다. 수를 나열만 하거나 결과 없이 "X로 막는다", "Y를 노린다"처럼 막연하게 쓰는 것은 금지. 구체적으로 어떤 칸/기물/위협이 발생하는지 서술할 것.
+14. 【킹 위협 서술 규칙】 특정 수가 킹을 위협한다고 쓰려면, 구체적으로 어떤 칸으로 침투하는지 또는 어떤 체크/메이트 위협이 생기는지 반드시 함께 써야 한다. "킹을 노린다"는 단독 표현은 금지.`;
 
   const prompt = buildCommentaryPrompt(ctx);
-  return callGroqAPIWithSystemTemp(SYSTEM, prompt, 1000, 0.28);
+  return callGroqAPIWithSystemTemp(SYSTEM, prompt, 2000, 0.32);
 }
 
 // 공통 Groq 호출 (system 없이 — 수동 질문용)
@@ -1498,7 +1541,7 @@ Always respond ONLY in Korean (한국어). Chess move notation (e4, Nf3, O-O) st
 Never output Japanese, Chinese, Arabic, or any non-Korean script.
 Never output numerical evaluation scores. Never output placeholders like <<_0>>.`;
 
-  return callGroqAPIWithSystem(SYSTEM, userContent, 800);
+  return callGroqAPIWithSystem(SYSTEM, userContent, 1200);
 }
 
 async function callGroqAPIWithSystem(systemPrompt, userContent, maxTokens = 800) {
@@ -1904,7 +1947,8 @@ async function runBestMoveExplain(focusIdx) {
   bestExplainLoading  = true;
   lastBestExplainFen  = fenKey;
   bestExplainFocusIdx = focusIdx ?? 0;
-  bestExplainMoves    = pv.moves.slice(0, 6);
+  const sanLine = engineLineSan(ctx, pv, 6);
+  bestExplainMoves    = sanLine ? sanLine.split(/\s+/).filter(Boolean) : pv.moves.slice(0, 6);
 
   const panel = document.getElementById('best-explain-panel');
   panel.style.display = 'block';
@@ -1961,54 +2005,65 @@ function renderBestSeqBar(moves, activeIdx, ctx) {
 }
 
 async function callBestExplainAPI(ctx, moves, focusIdx) {
-  const EXPLAIN_SYSTEM = `You are a Korean chess coach. Output ONLY in Korean (한국어).
-Chess move notation (Nf3, e4, O-O) stays in English algebraic form.
+  const EXPLAIN_SYSTEM = `당신은 "체스인사이드" 스타일 한국어 체스 해설자입니다.
 
-CRITICAL: Use ONLY the moves provided in the engine line. Never invent or hallucinate moves.
+【목표】엔진 최선수 한 수가 **왜** 좋은지, 포지션 맥락(오프닝·전개·계획)과 연결해 구체적으로 설명합니다.
 
-The user wants to understand WHY a specific move is good. Give CONCRETE reasons based on what actually happens in this position — not generic chess advice.
+【절대 규칙】
+- [검증된 분석 브리프]·[국면 내러티브]·제공된 엔진 SAN 수순만 사용. 없는 수·기물·오프닝 통계 창작 금지.
+- 모든 수에 "백이 …" / "흑이 …" 주어 명시. 차례 착각 금지.
+- 말투: "~고요", "~거든요", "~라고 볼 수 있겠어요", "~인 모습이었고요"
+- cp/승률 수치 금지
 
-【주어 규칙 — 절대 위반 금지】엔진 수순은 백과 흑이 번갈아 둔다. 사용자 데이터에 "차례(turn)"가 명시되어 있으면, 수순의 1·3·5번째 수는 그 차례의 색이 두고, 2·4·6번째 수는 상대가 둔다. 설명할 때 반드시 "백이 X를 두면" / "흑이 Y로 응수하면" 형태로 주어를 밝힐 것. 한 쪽 수를 반대편이 두는 것처럼 쓰는 것은 엄격히 금지.
+【출력 형식】
+**[수 표기]이/가 좋은 이유**
+(1문단) 오프닝·직전 수 맥락 1~2문장
+(2문단) 해당 수의 전술·전략 이유 3~4문장 — 포크·핀·d4 확장·캐슬 등 브리프에 있는 것만
+(3문단, 선택) 이후 2~3수 엔진 라인을 "백이 … 흑은 …" 형태로 짧게
 
-For each reason, answer one of these questions using actual moves from the data:
-- What specific threat does this move escape? (예: "Qb2 침투 위협을 피합니다")
-- What specific threat does this move create? (예: "Bxd5 포크를 위협합니다")
-- What piece/square does it support and why does that matter? (예: "a7 룩이 d7 침투를 준비할 수 있게 됩니다")
-- What tactical idea does it enable? (예: "흑 퀸이 b2를 잡으려 해도 이제 룩으로 막을 수 있습니다")
+전체 450~750자. 불릿(•) 대신 문단형 해설.`;
 
-BANNED phrases (never use): "기물의 발전을 방해합니다", "중앙을 장악할 수 있습니다", "상대방을 약화시킵니다", "기물 교환으로 물량을 줄입니다", "폰 구조를 강화합니다", "킹을 노린다(구체적 칸/위협 없이)", "킹의 안전을 위협한다(구체적 설명 없이)"
-
-Output format:
-Line 1: "[수 표기]이/가 좋은 이유:" (예: "Qa1이 좋은 이유:")
-Then 3-4 bullets, each starting with "• ", one concrete sentence each.
-Total under 300 characters.`;
-
-  const focusMove = moves[focusIdx] || moves[0];
-  const seq       = moves.slice(0, 5).join(' ');
+  const pv1 = ctx.pvData && ctx.pvData[1];
+  const seqSan = engineLineSan(ctx, pv1, 6) || moves.slice(0, 6).join(' ');
+  const seqParts = seqSan.split(/\s+/).filter(Boolean);
+  const focusMove = seqParts[focusIdx] || moves[focusIdx] || moves[0];
 
   const firstTurnKr  = ctx.turn === 'w' ? '백' : '흑';
   const secondTurnKr = ctx.turn === 'w' ? '흑' : '백';
   const userMsg = [
-    `현재 차례: ${firstTurnKr}. 수순에서 1·3·5번째 수는 ${firstTurnKr}이 두고, 2·4·6번째 수는 ${secondTurnKr}이 둡니다.`,
-    `엔진 최선 수순: ${seq}`,
-    `그 중 ${focusIdx + 1}번째 수인 "${focusMove}"이/가 왜 좋은지 설명해주세요.`,
-    ctx.lastMoveSan ? `직전 수: ${ctx.lastMoveSan}` : '',
-    ctx.threatData?.prob ? `상대의 위협: ${ctx.threatData.prob}` : '',
-    ctx.threatData?.idea ? `현재 계획: ${ctx.threatData.idea}` : '',
-    `FEN: ${ctx.fen}`,
-    `반드시 구체적인 위협명/칸/기물을 이용해 이유를 설명하세요. "기물 발전", "중앙 장악", "킹을 노린다(구체적 설명 없이)" 같은 막연한 표현 금지.`,
-  ].filter(Boolean).join('\n');
+    `현재 차례: ${firstTurnKr}. 엔진 수순에서 홀수 번째 수=${firstTurnKr}, 짝수 번째 수=${secondTurnKr}.`,
+    `엔진 최선 수순(SAN): ${seqSan}`,
+    `설명 대상: ${focusIdx + 1}번째 수 "${focusMove}"`,
+    ctx.lastMoveSan ? `직전 수: ${ctx.lastMoveSan}${ctx.lastMoveAnnotation ? ' (' + ctx.lastMoveAnnotation + ')' : ''}` : '',
+    ctx.pgnMoves ? `전체 기보: ${ctx.pgnMoves}` : '',
+    ctx.phase ? `단계: ${ctx.phase}` : '',
+  ];
+
+  if (ctx.positionBrief && typeof formatPositionBriefForPrompt === 'function') {
+    userMsg.push('');
+    userMsg.push(formatPositionBriefForPrompt(ctx.positionBrief, ctx));
+  }
+
+  if (ctx.threatData) {
+    userMsg.push('');
+    userMsg.push('[위협 분석]');
+    if (ctx.threatData.idea) userMsg.push(`핵심 계획: ${ctx.threatData.idea}`);
+    if (ctx.threatData.prob) userMsg.push(`문제점: ${ctx.threatData.prob}`);
+    if (ctx.threatData.sol) userMsg.push(`최선책: ${ctx.threatData.sol}`);
+  }
+
+  userMsg.push(`FEN: ${ctx.fen}`);
 
   const response = await fetch('/api/groq', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
-      max_tokens: 400,
-      temperature: 0.25,
+      max_tokens: 900,
+      temperature: 0.28,
       messages: [
         { role: 'system', content: EXPLAIN_SYSTEM },
-        { role: 'user',   content: userMsg },
+        { role: 'user',   content: userMsg.filter(Boolean).join('\n') },
       ],
     }),
   });
@@ -2027,18 +2082,19 @@ function renderBestExplain(text, focusMove, moves, activeIdx, ctx) {
   const escaped = text
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // 이유 줄 파싱 (• / - / 숫자. 로 시작하는 줄)
   const lines = escaped.split('\n').map(l => l.trim()).filter(Boolean);
   const reasonLines = [];
   for (const line of lines) {
+    if (/^\*\*/.test(line)) continue;
     if (line.startsWith('•') || line.startsWith('-') || line.startsWith('·') || line.match(/^\d+\./)) {
       const txt = line.replace(/^[•\-·]\s*/, '').replace(/^\d+\.\s*/, '');
       if (txt) reasonLines.push(txt);
+    } else if (line.length > 12) {
+      reasonLines.push(line);
     }
   }
-  // 이유가 없으면 모든 줄을 이유로
   if (reasonLines.length === 0) {
-    lines.forEach(l => { if (l) reasonLines.push(l); });
+    lines.forEach(l => { if (l && !/^\*\*/.test(l)) reasonLines.push(l); });
   }
 
   // 기물 아이콘 결정 (focusIdx 기준 차례 계산)

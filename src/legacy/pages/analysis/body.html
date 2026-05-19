@@ -446,7 +446,7 @@
             <span id="sf-analysis-depth-badge" style="font-size:9px;color:var(--text-muted);"></span>
           </div>
           <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;">
-            현재 기보를 로컬 Stockfish로 분석합니다. 분석 완료 후 기보 목록에 수 분류 배지가 표시됩니다.
+            PGN·FEN 입력 또는 수를 둘 때마다 Stockfish로 자동 분석합니다. 블런더·실수·부정확일 때만 ChessGrammar API로 전술을 분석합니다.
           </div>
           <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
             <select id="sf-color-select"
@@ -454,10 +454,6 @@
               <option value="w">내가 백</option>
               <option value="b">내가 흑</option>
             </select>
-            <button onclick="analyzeCurrentGameWithSF()" id="sf-analyze-btn"
-              style="flex:1;padding:8px 12px;background:rgba(127,166,80,0.15);border:1px solid rgba(127,166,80,0.4);border-radius:8px;color:var(--accent-green-bright);font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:var(--font-main);white-space:nowrap;">
-              🎯 분석하기
-            </button>
           </div>
           <div id="sf-analysis-status"
             style="display:none;font-size:11px;line-height:1.6;padding:8px 10px;border-radius:8px;background:var(--bg-card);border:1px solid var(--border);">

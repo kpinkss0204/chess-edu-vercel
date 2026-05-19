@@ -15,6 +15,7 @@
     "chess-wasm-fixed/engine.js",
     "chess-wasm-fixed/parse-pgn-states.js",
     "chess-wasm-fixed/lichess-judgment.js",
+    "chess-wasm-fixed/chess-tactics.js",
     "chess-wasm-fixed/game.js",
     "chess-wasm-fixed/position-brief.js",
     "chess-wasm-fixed/coach.js",

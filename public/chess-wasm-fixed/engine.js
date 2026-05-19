@@ -628,6 +628,7 @@ function handleMainWorkerMessage(e) {
             mateIn, pvs: slimPvs, turn: pendingTurn,
           };
           updateMoveAnnotations();
+          tryTriggerTacticsForCurrentMove(savedFen);
         }
       }
     }
@@ -834,6 +835,93 @@ function reanalyzeWithSettings() {
   lastAnalyzedFen = '';   // FEN 캐시 무효화
   analyzePosition(true);
 }
+
+// ── chess-tactics: 현재 수 자동 평가 + 조건부 Grammar API ─────────────
+const MIN_TACTICS_EVAL_DEPTH = 14;
+
+function notifyGamePositionChanged() {
+  if (typeof scheduleAutoGameAnalysis === 'function') {
+    scheduleAutoGameAnalysis();
+  }
+}
+
+function updateTacticsStatusPanel(result, histEntry) {
+  const statusEl = document.getElementById('sf-analysis-status');
+  const resultEl = document.getElementById('sf-analysis-result');
+  if (!statusEl) return;
+
+  if (!result || !result.judgment) {
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = '<span style="color:var(--text-muted)">최근 수: 양호 — 전술 API 미호출</span>';
+    return;
+  }
+
+  const san = histEntry && histEntry.san ? histEntry.san : '';
+  const moverKr = histEntry && histEntry.turn === 'b' ? '흑' : '백';
+  const labels = { blunder: '블런더 ??', mistake: '실수 ?', inaccuracy: '부정확 ?!' };
+  const colors = { blunder: '#cc3333', mistake: '#e08c3a', inaccuracy: '#f6c94a' };
+  const label = labels[result.judgment] || result.judgment;
+  const color = colors[result.judgment] || 'var(--text-secondary)';
+
+  let html = `<span style="color:${color};font-weight:700;">${moverKr} ${san} — ${label}</span>`;
+  if (result.tactics && typeof ChessTactics !== 'undefined' && ChessTactics.formatTacticsSummary) {
+    const sum = ChessTactics.formatTacticsSummary(result.tactics);
+    if (sum) {
+      html += `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary)">전술: ${sum}</div>`;
+    }
+  }
+  statusEl.style.display = 'block';
+  statusEl.innerHTML = html;
+
+  if (resultEl && result.tactics) {
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `<div style="font-size:11px;color:var(--text-muted)">ChessGrammar 감지 — ${ChessTactics.formatTacticsSummary(result.tactics)}</div>`;
+  }
+}
+
+function tryTriggerTacticsForCurrentMove(fenOptional) {
+  const CT = typeof ChessTactics !== 'undefined' ? ChessTactics : null;
+  if (!CT || typeof CT.scheduleAutoAnalyzeMove !== 'function') return;
+  if (!game || game.historyIndex < 0 || !game.history.length) return;
+
+  const h = game.history[game.historyIndex];
+  if (!h || !h.fenBefore) return;
+
+  const fenAfter = h.fenAfter || fenOptional;
+  if (!fenAfter) return;
+
+  const cacheB = evalCache[normFen(h.fenBefore)];
+  const cacheA = evalCache[normFen(fenAfter)];
+  if (!cacheB || cacheA == null) return;
+  if (cacheB.depth < MIN_TACTICS_EVAL_DEPTH || cacheA.depth < MIN_TACTICS_EVAL_DEPTH) return;
+
+  const moveKey = normFen(h.fenBefore) + '>' + normFen(fenAfter);
+
+  CT.scheduleAutoAnalyzeMove({
+    cpBeforeWhite: cacheB.cp,
+    cpAfterWhite: cacheA.cp,
+    mover: h.turn,
+    fenAfter,
+    fenBefore: h.fenBefore,
+    moveKey,
+    plyIndex: game.historyIndex,
+    san: h.san,
+  }, function (result) {
+    if (!result) return;
+    if (game.history[game.historyIndex] === h) {
+      if (result.judgment) {
+        h.annotation = result.judgment;
+        h.tactics = result.tactics || null;
+      }
+      if (typeof game.renderMoveList === 'function') game.renderMoveList();
+    }
+    updateTacticsStatusPanel(result, h);
+  });
+}
+
+global.tryTriggerTacticsForCurrentMove = tryTriggerTacticsForCurrentMove;
+global.notifyGamePositionChanged = notifyGamePositionChanged;
+global.updateTacticsStatusPanel = updateTacticsStatusPanel;
 
 // 엔진라인 탐색 중 특정 FEN 분석 (게임 보드 상태와 무관)
 function _analyzeSpecificFen(fen) {
@@ -1076,6 +1164,7 @@ function handleBgResult({ fen, turn, pvs }) {
 
   // 실시간 배지 업데이트
   updateMoveAnnotations();
+  tryTriggerTacticsForCurrentMove(fen);
 
   // 위협 분석 자동 트리거: 패널 열려있고 depth 충분하고 FEN 바뀐 경우에만
   if (pv1.depth >= 16 && fen !== lastThreatFen && coachApiKey && !threatLoading) {
