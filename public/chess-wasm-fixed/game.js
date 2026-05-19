@@ -2205,7 +2205,8 @@ class ChessGame {
     if (openingMatch)document.getElementById('info-opening').textContent = openingMatch[1];
 
     this.reset();
-    if (!global._pendingTacticAnalysis && typeof AnalysisCache !== 'undefined') {
+    const root = typeof window !== 'undefined' ? window : globalThis;
+    if (!root._pendingTacticAnalysis && typeof AnalysisCache !== 'undefined') {
       AnalysisCache.clearGameAnalysisCache(this);
     }
 

@@ -920,9 +920,10 @@ function tryTriggerTacticsForCurrentMove(fenOptional) {
   });
 }
 
-global.tryTriggerTacticsForCurrentMove = tryTriggerTacticsForCurrentMove;
-global.notifyGamePositionChanged = notifyGamePositionChanged;
-global.updateTacticsStatusPanel = updateTacticsStatusPanel;
+const _root = typeof window !== 'undefined' ? window : globalThis;
+_root.tryTriggerTacticsForCurrentMove = tryTriggerTacticsForCurrentMove;
+_root.notifyGamePositionChanged = notifyGamePositionChanged;
+_root.updateTacticsStatusPanel = updateTacticsStatusPanel;
 
 // 엔진라인 탐색 중 특정 FEN 분석 (게임 보드 상태와 무관)
 function _analyzeSpecificFen(fen) {
