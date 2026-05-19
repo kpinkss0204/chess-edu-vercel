@@ -1,0 +1,1839 @@
+var _toastTimer = null;
+function showToast(msg){
+  var el = document.getElementById('toast'); if(!el) return;
+  el.textContent = msg; el.style.opacity = '1';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(()=>{ el.style.opacity='0'; }, 2800);
+}
+
+/* ═══════════════════════════════════════════════
+   체스 보드 렌더러
+   ═══════════════════════════════════════════════ */
+
+// 리체스 cburnett 기물 SVG URL
+const PIECE_BASE = 'https://lichess1.org/assets/piece/cburnett/';
+const PIECE_FILE = {
+  K:'wK',Q:'wQ',R:'wR',B:'wB',N:'wN',P:'wP',
+  k:'bK',q:'bQ',r:'bR',b:'bB',n:'bN',p:'bP'
+};
+
+function fenToMatrix(fen){
+  const rows = fen.split(' ')[0].split('/');
+  return rows.map(row => {
+    const cells = [];
+    for(const ch of row){
+      if(isNaN(ch)) cells.push(ch);
+      else for(let i=0;i<+ch;i++) cells.push('');
+    }
+    return cells;
+  });
+}
+
+function renderBoard(fen, fromSq, toSq){
+  const mat = fenToMatrix(fen);
+  const board = document.getElementById('om-board');
+  board.innerHTML = '';
+  const files = ['a','b','c','d','e','f','g','h'];
+
+  for(let r=0;r<8;r++){
+    for(let f=0;f<8;f++){
+      const div = document.createElement('div');
+      const light = (r+f)%2===0;
+      div.className = 'sq ' + (light?'lt':'dk');
+      const sqName = files[f]+(8-r);
+      if(sqName===fromSq) div.classList.add('hl-f');
+      if(sqName===toSq)   div.classList.add('hl-t');
+      const p = mat[r][f];
+      if(p && PIECE_FILE[p]){
+        const img = document.createElement('img');
+        img.src = PIECE_BASE + PIECE_FILE[p] + '.svg';
+        img.className = 'piece-img';
+        img.alt = p;
+        div.appendChild(img);
+      }
+      board.appendChild(div);
+    }
+  }
+
+  // 좌표
+  const ranksEl = document.getElementById('om-ranks');
+  const filesEl = document.getElementById('om-files');
+  ranksEl.innerHTML = '';
+  filesEl.innerHTML = '';
+  for(let i=8;i>=1;i--){
+    const d=document.createElement('div'); d.className='rk'; d.textContent=i; ranksEl.appendChild(d);
+  }
+  files.forEach(f=>{
+    const d=document.createElement('div'); d.className='fl'; d.textContent=f; filesEl.appendChild(d);
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   오프닝 학습 데이터
+   ═══════════════════════════════════════════════ */
+/*
+  step 구조:
+  {
+    fen: FEN 문자열,
+    move: 표시용 수 표기,
+    from: 출발 칸 (e.g.'e2'), to: 도착 칸,
+    commentary: [{ type:'good'|'bad'|'info'|'tip', ico:'', lbl:'', txt:'', alts:[{type,move,txt}] }]
+  }
+*/
+const STUDIES = {
+
+  /* ══════════════════════════════
+     이탈리안 게임
+     ══════════════════════════════ */
+  italian:{
+    title:'이탈리안 게임',
+    sub:'1.e4 e5 2.Nf3 Nc6 3.Bc4 — 주코토·에반스 갬빗·클래시컬',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'이탈리안 게임은 가장 오래된 오프닝 중 하나입니다. <span class="mn">1.e4 e5 2.Nf3 Nc6 3.Bc4</span>로 진행되며, 비숍이 흑의 f7 약점을 노리는 것이 핵심입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3',
+        move:'1. e4', from:'e2', to:'e4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'왜 좋은가',
+          txt:'<span class="mn">1.e4</span> — 중앙의 가장 중요한 칸을 폰으로 장악합니다. d5·f5 칸을 통제하고, f1 비숍과 d1 퀸의 대각선이 열립니다.',
+          alts:[
+            {type:'tip', move:'1.d4', txt:'클로즈드 게임으로 이어지는 좋은 수지만, 이탈리안으로 가려면 1.e4가 필요합니다.'},
+            {type:'bad', move:'1.e3', txt:'너무 소극적입니다. 비숍의 길을 열지만 중앙 영향력이 약해 추천하지 않습니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6',
+        move:'1... e5', from:'e7', to:'e5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'흑의 최선',
+          txt:'<span class="mn">1...e5</span> — 흑도 중앙을 대칭 점령합니다. d8 퀸과 f8 비숍의 대각선이 열리고, 균형 잡힌 오픈 게임이 시작됩니다.',
+          alts:[
+            {type:'tip', move:'1...c5', txt:'시칠리아 디펜스 — 비대칭 구조를 선택하는 날카로운 응수입니다.'},
+            {type:'tip', move:'1...e6', txt:'프렌치 디펜스 — 견고하지만 c8 비숍이 갇히는 단점이 있습니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+        move:'2. Nf3', from:'g1', to:'f3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'왜 좋은가',
+          txt:'<span class="mn">2.Nf3</span> — 나이트를 최적의 칸 f3에 전개하면서 e5 폰을 공격합니다. 빠른 전개와 압박을 동시에 달성하는 이상적인 수입니다.',
+          alts:[
+            {type:'bad', move:'2.Qh5?', txt:'퀸을 너무 일찍 내보내는 실수! 흑이 Nc6으로 퀸을 몰면 템포를 잃습니다. Scholar\'s Mate를 노리는 수지만 제대로 막히면 불리해집니다.'},
+            {type:'tip', move:'2.Nc3', txt:'나이트를 c3으로 올리는 것도 좋지만, Nf3이 e5를 직접 공격해 더 능동적입니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq -',
+        move:'2... Nc6', from:'b8', to:'c6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'흑의 자연스러운 전개',
+          txt:'<span class="mn">2...Nc6</span> — 나이트가 e5를 방어하면서 자연스럽게 전개됩니다. 중앙을 지지하고 동시에 d4 진격을 방해합니다.',
+          alts:[
+            {type:'tip', move:'2...Nf6', txt:'페트로프 디펜스(러시안 게임) — 견고하지만 수동적인 수로 이탈리안과 다른 오프닝이 됩니다.'},
+            {type:'bad', move:'2...d6?', txt:'방어적이지만 느립니다. 백이 중앙에서 강력한 우위를 가져갑니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq -',
+        move:'3. Bc4', from:'f1', to:'c4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'이탈리안의 핵심 — f7 압박',
+            txt:'<span class="mn">3.Bc4</span> — 이탈리안 게임의 정의적인 수! 비숍이 f7을 직접 겨냥합니다. f7은 킹이 유일하게 지키는 약점으로, 흑이 반드시 조심해야 합니다.',
+            alts:[
+              {type:'tip', move:'3.Bb5', txt:'루이 로페즈(스패니시)로 전환됩니다. 더 복잡하고 이론이 방대합니다.'},
+              {type:'bad', move:'3.d3?', txt:'너무 소극적입니다. 비숍이 c1에 갇히고 공격적 잠재력을 낭비합니다.'}
+            ]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'f7이 왜 약점인가?',
+            txt:'f7 칸은 초기에 킹이 유일하게 방어합니다. Nf3+Bc4 조합은 이 약점을 동시에 공략해 조기에 f7을 노리는 전술(2기사 어택 등)로 이어질 수 있습니다.',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'r1bqk1nr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq -',
+        move:'3... Bc5', from:'f8', to:'c5',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'주코토 변형 (Giuoco Piano)',
+            txt:'<span class="mn">3...Bc5</span> — 흑도 맞불을 놓습니다! 비숍이 f2를 겨냥하며 균형 잡힌 구조가 됩니다. 이것이 주코토(Giuoco Piano, "조용한 게임") 변형입니다.',
+            alts:[
+              {type:'tip', move:'3...Nf6', txt:'2기사 디펜스 — 나이트를 전개해 e4를 공격합니다. 주코토보다 더 복잡한 전술 게임으로 이어집니다.'},
+              {type:'bad', move:'3...d6?', txt:'방어적이지만 비숍과 퀸을 가두는 수입니다. 발전이 늦어집니다.'}
+            ]
+          },
+          {
+            type:'info', ico:'💡', lbl:'여기서 갈리는 세 가지 길',
+            txt:'• <span class="mn">4.c3</span> — 주코토 피아노: d4 중앙 진격 준비, 포지셔널<br>• <span class="mn">4.b4</span> — 에반스 갬빗: 폰 희생으로 강력한 공격! 날카로운 전술<br>• <span class="mn">4.Nc3</span> — 3기사/4기사 변형: 빠른 전개 중심',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'r1bqk1nr/pppp1ppp/2n5/4p3/1PB1P3/5N2/P1PP1PPP/RNBQK2R b KQkq b3',
+        move:'4. b4!? (에반스 갬빗)', from:'b2', to:'b4',
+        commentary:[
+          {
+            type:'good', ico:'⚔️', lbl:'에반스 갬빗 — 19세기 최고의 갬빗',
+            txt:'<span class="mn">4.b4</span> — 에반스 갬빗! b4 폰을 희생해 흑의 비숍을 b4로 유인합니다. 흑이 잡으면 백은 c3으로 강력한 중앙을 구축하고 d4로 비숍을 몰아냅니다.',
+            alts:[
+              {type:'tip', move:'4.c3', txt:'주코토 피아노 — 안정적으로 d4 진격을 준비합니다. 에반스보다 포지셔널입니다.'}
+            ]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'갬빗 수락 후 전개',
+            txt:'흑이 <span class="mn">4...Bxb4</span>로 잡으면: <span class="mn">5.c3 Ba5 6.d4 exd4 7.0-0</span>으로 백은 폰 하나를 희생하는 대신 빠른 캐슬링과 강력한 중앙·활성화된 기물을 얻습니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     루이 로페즈
+     ══════════════════════════════ */
+  ruy:{
+    title:'루이 로페즈 (스패니시)',
+    sub:'1.e4 e5 2.Nf3 Nc6 3.Bb5 — 베를린·마샬·클로즈드',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'루이 로페즈는 체스 역사상 가장 깊이 연구된 오프닝입니다. 16세기 스페인 사제 루이 로페즈가 분석했습니다. 단순해 보이지만 수십 가지 주요 변형이 있습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+        move:'2. Nf3', from:'g1', to:'f3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'2.Nf3 — 전개와 압박',
+          txt:'<span class="mn">2.Nf3</span> — 나이트를 최적 칸에 전개하며 e5 폰을 공격합니다. 흑이 반응해야 하므로 백이 주도권을 잡습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq -',
+        move:'3. Bb5', from:'f1', to:'b5',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'루이 로페즈의 아이디어',
+            txt:'<span class="mn">3.Bb5</span> — 이탈리안의 Bc4와 달리 비숍이 b5로 갑니다. c6 나이트를 핀(pin)해 e5 폰의 지지자를 위협합니다.',
+            alts:[
+              {type:'tip', move:'3.Bc4', txt:'이탈리안 게임으로 전환됩니다. 좋은 수지만 루이 로페즈와는 다른 전략입니다.'},
+              {type:'tip', move:'3.d4', txt:'스코치 게임으로 전환됩니다. 중앙을 즉시 열어버립니다.'}
+            ]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'핀(Pin)의 위력',
+            txt:'Bb5의 핵심: c6 나이트가 움직이면 e5 폰이 무방비가 됩니다. 하지만 백이 즉시 Nxe5는 불가능합니다 — 흑이 Qd4로 나이트와 비숍을 동시에 공격하기 때문입니다. 이것이 장기적 압박입니다.',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'r1bqkbnr/1ppp1ppp/p1n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq -',
+        move:'3... a6', from:'a7', to:'a6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'모팔 디펜스 — 가장 인기 있는 응수',
+          txt:'<span class="mn">3...a6</span> (모팔/Morphy 디펜스) — 비숍을 당장 몰아내어 핀을 해제합니다. 가장 많이 두어지는 응수로 매우 유연합니다.',
+          alts:[
+            {type:'tip', move:'3...Nf6', txt:'베를린 디펜스 — 현대 탑레벨에서 자주 나오는 견고한 수. 엔드게임에서 흑이 좋은 구조를 가집니다.'},
+            {type:'tip', move:'3...Bc5', txt:'클래시컬 디펜스 — 비숍을 전개하며 맞불을 놓습니다.'},
+            {type:'bad', move:'3...Nxe4??', txt:'폰을 잡으면 큰 실수! 4.0-0 Re1 d5 5.Nxe5로 흑이 큰 어려움에 빠집니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'r1bqkbnr/1ppp1ppp/p1n5/4p3/B3P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq -',
+        move:'4. Ba4', from:'b5', to:'a4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'비숍 후퇴 — 압박 유지',
+          txt:'<span class="mn">4.Ba4</span> — 비숍이 a4로 후퇴하면서도 c6 나이트에 대한 압박을 유지합니다. 잡히지 않으면서 장기적 위협을 지속합니다.',
+          alts:[
+            {type:'tip', move:'4.Bxc6', txt:'익스체인지 변형 — 흑의 더블드 폰을 만들지만 흑의 비숍 쌍을 허용합니다. 포지셔널 게임으로 이어집니다.'},
+            {type:'bad', move:'4.Bc4?', txt:'비숍이 이탈리안 포지션으로 가면 첫 세 수를 낭비한 셈입니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'r1bqkb1r/1ppp1ppp/p1n2n2/4p3/B3P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq -',
+        move:'4... Nf6', from:'g8', to:'f6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'오픈 루이 로페즈',
+          txt:'<span class="mn">4...Nf6</span> — e4 폰을 공격하면서 나이트를 전개합니다. 이제 <span class="mn">5.0-0</span> 이후 흑이 <span class="mn">5...Nxe4</span>를 시도하면 복잡한 오픈 루이 로페즈가 시작됩니다.',
+          alts:[
+            {type:'tip', move:'4...Be7', txt:'클로즈드 루이 로페즈 — 더 안정적이고 단계적인 플레이. 4...Be7 5.0-0 b5 6.Bb3 d6으로 진행됩니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'r1bqkb1r/1ppp1ppp/p1n2n2/4p3/B3P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq -',
+        move:'5. 0-0', from:'e1', to:'g1',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'캐슬링 — 킹 안전 최우선',
+            txt:'<span class="mn">5.0-0</span> — 킹을 안전하게 캐슬링합니다. 이제 흑이 <span class="mn">5...Nxe4</span>를 시도하면 <span class="mn">6.Re1</span>로 나이트를 공격해 폰을 되찾을 수 있습니다.',
+            alts:[]
+          },
+          {
+            type:'info', ico:'💡', lbl:'이후 주요 변형 분기',
+            txt:'• <span class="mn">5...Nxe4</span> — 오픈 변형: 날카롭고 전술적<br>• <span class="mn">5...Be7</span> — 클로즈드 변형: 안정적이고 포지셔널<br>• <span class="mn">5...b5 6.Bb3 d6</span> — 마샬 어택 준비',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     스코치 게임
+     ══════════════════════════════ */
+  scotch:{
+    title:'스코치 게임',
+    sub:'1.e4 e5 2.Nf3 Nc6 3.d4 — 스코치 갬빗·클래시컬',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'스코치 게임은 1800년대 스코틀랜드 체스 선수들이 자주 사용해 이 이름이 붙었습니다. 가리 카스파로프가 1990년대에 부활시켜 현대에도 자주 두어집니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq -',
+        move:'3. d4', from:'d2', to:'d4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'즉시 중앙 개방',
+          txt:'<span class="mn">3.d4</span> — 이탈리안(3.Bc4)이나 루이 로페즈(3.Bb5)와 달리 즉시 중앙을 열어버립니다. e5×d4 교환 후 빠른 기물 전개와 활성화를 노립니다.',
+          alts:[
+            {type:'tip', move:'3.Bc4', txt:'이탈리안 게임 — 중앙을 아직 열지 않고 f7을 겨냥합니다.'},
+            {type:'tip', move:'3.Bb5', txt:'루이 로페즈 — c6 나이트를 핀해 장기적 압박을 가합니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'r1bqkbnr/pppp1ppp/2n5/8/3pP3/5N2/PPP2PPP/RNBQKB1R w KQkq -',
+        move:'3... exd4', from:'e5', to:'d4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'중앙 교환',
+          txt:'<span class="mn">3...exd4</span> — 흑이 폰을 교환합니다. 백이 Nxd4로 되찾으면 나이트가 강력한 중앙 d4에 자리 잡습니다.',
+          alts:[
+            {type:'bad', move:'3...d6?', txt:'폰 교환을 거부하는 수지만 d4 폰이 그대로 남아 백이 강력한 중앙을 갖게 됩니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'r1bqkbnr/pppp1ppp/2n5/8/3NP3/8/PPP2PPP/RNBQKB1R b KQkq -',
+        move:'4. Nxd4', from:'f3', to:'d4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'나이트 d4 진출',
+            txt:'<span class="mn">4.Nxd4</span> — 나이트가 강력한 중앙 d4를 장악합니다. 백은 공간 우위와 기물 활성화 잠재력을 가집니다.',
+            alts:[
+              {type:'tip', move:'4.Bc4', txt:'스코치 갬빗 — d4 폰을 되찾지 않고 비숍을 전개하는 공격적 선택입니다.'}
+            ]
+          }
+        ]
+      },
+      {
+        fen:'r1bqkbnr/pppp1ppp/2n5/8/3NP3/8/PPP2PPP/RNBQKB1R b KQkq -',
+        move:'4... Nf6', from:'g8', to:'f6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'나이트 전개와 e4 공격',
+          txt:'<span class="mn">4...Nf6</span> — 나이트를 전개하며 e4를 공격합니다. 백은 이제 Nxc6(더블드 폰 유도) 또는 Nc3으로 방어해야 합니다.',
+          alts:[
+            {type:'tip', move:'4...Bc5', txt:'클래시컬 변형 — 비숍을 전개해 d4 나이트를 압박합니다.'},
+            {type:'tip', move:'4...Qh4?!', txt:'로코코 변형이지만 퀸을 너무 일찍 내보내는 것은 일반적으로 좋지 않습니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'r1bqkb1r/pppp1ppp/2n2n2/8/3NP3/2N5/PPP2PPP/R1BQKB1R b KQkq -',
+        move:'5. Nc3', from:'b1', to:'c3',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'나이트 전개와 방어',
+            txt:'<span class="mn">5.Nc3</span> — e4 폰을 방어하면서 나이트를 전개합니다. 이제 양측이 기물을 빠르게 전개하며 중앙 쟁탈이 시작됩니다.',
+            alts:[]
+          },
+          {
+            type:'info', ico:'💡', lbl:'이후 주요 전략',
+            txt:'스코치의 핵심은 백이 빠른 전개와 공간 우위를 활용하는 것입니다. 흑은 폰 구조는 약간 열세이지만 활성화된 기물로 반격합니다. Nxc6 교환이 더블드 폰을 만드는 핵심 아이디어입니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     시칠리아 디펜스
+     ══════════════════════════════ */
+  sicilian:{
+    title:'시칠리아 디펜스',
+    sub:'1.e4 c5 — 나이도르프·드래곤·클라센트',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'시칠리아 디펜스는 통계적으로 흑이 가장 높은 승률을 보이는 1.e4 응수입니다. 비대칭 구조로 양측 모두 각자의 날개에서 공격합니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6',
+        move:'1... c5', from:'c7', to:'c5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'왜 c5인가?',
+          txt:'<span class="mn">1...c5</span> — d4 칸을 통제하지만 d5는 통제하지 않습니다. 비대칭 구조로 흑은 퀸사이드, 백은 킹사이드에서 공격하는 역동적 게임이 됩니다.',
+          alts:[
+            {type:'tip', move:'1...e5', txt:'오픈 게임으로 이탈리안, 루이 로페즈 등으로 이어집니다. 더 대칭적입니다.'},
+            {type:'tip', move:'1...e6', txt:'프렌치 디펜스 — 견고하지만 c8 비숍이 갇힐 수 있습니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+        move:'2. Nf3', from:'g1', to:'f3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'2.Nf3 — 유연한 전개',
+          txt:'<span class="mn">2.Nf3</span> — 나이트를 전개하고 d4 진격을 준비합니다. 알라핀(2.c3)이나 그랑 프리 어택(2.Nc3)보다 주류적인 응수입니다.',
+          alts:[
+            {type:'tip', move:'2.c3', txt:'알라핀 변형 — d4를 확실히 준비합니다. 이론이 적어 초보자에게 유용합니다.'},
+            {type:'tip', move:'2.Nc3', txt:'열린 시칠리아와 다른 변형으로 이어질 수 있습니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pp1ppppp/8/2p5/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq d3',
+        move:'3. d4', from:'d2', to:'d4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'중앙 개방 — 시칠리아의 핵심',
+          txt:'<span class="mn">3.d4</span> — 중앙을 열어 c5 폰과 교환합니다. 이후 Nxd4로 나이트가 강력한 d4를 장악합니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pp1ppppp/8/8/3NP3/8/PPP2PPP/RNBQKB1R b KQkq -',
+        move:'4. Nxd4', from:'f3', to:'d4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'나이트 d4 — 강력한 중앙',
+            txt:'<span class="mn">4.Nxd4</span> — 나이트가 d4에 자리 잡습니다. 백은 강력한 중앙과 공간 우위를 가지며, 여기서 흑의 선택에 따라 수십 가지 변형이 갈립니다.',
+            alts:[]
+          },
+          {
+            type:'info', ico:'💡', lbl:'주요 변형 분기점',
+            txt:'• <span class="mn">4...Nf6 5.Nc3 a6</span> — 나이도르프 변형 (가장 인기)<br>• <span class="mn">4...Nf6 5.Nc3 g6</span> — 드래곤 변형 (공격적)<br>• <span class="mn">4...e6 5.Nc3</span> — 클라센트/슈베닝겐<br>• <span class="mn">4...Nc6</span> — 클래시컬',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkb1r/pp2pppp/3p1n2/2p5/3NP3/2N5/PPP2PPP/R1BQKB1R w KQkq -',
+        move:'4... Nf6 5.Nc3 d6 (나이도르프 준비)', from:'b8', to:'c6',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'나이도르프 변형으로',
+            txt:'흑이 <span class="mn">4...Nf6</span> 후 <span class="mn">5...a6</span>를 두면 나이도르프 변형이 됩니다. a6는 b5를 차단하고, 퀸사이드 공격을 위한 발판입니다. 카스파로프가 가장 즐겨 사용한 변형입니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'🐉', lbl:'드래곤 변형',
+            txt:'<span class="mn">4...Nf6 5.Nc3 g6</span> — 드래곤 변형! 킹사이드 피안케토로 g7 비숍이 강력한 대각선을 지배합니다. 유고슬라비아 어택(9.Bc4 0-0 0-0-0)이 가장 날카로운 응수입니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     프렌치 디펜스
+     ══════════════════════════════ */
+  french:{
+    title:'프렌치 디펜스',
+    sub:'1.e4 e6 — 아드반스·타라시·클래시컬',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'프렌치 디펜스는 견고하면서도 반격 기회가 있는 오프닝입니다. 흑이 d4 진격에 맞서 폰 체인을 구축하고, 이후 c5나 f6 등으로 반격합니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        move:'1... e6', from:'e7', to:'e6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'프렌치의 첫 수',
+          txt:'<span class="mn">1...e6</span> — d5로 중앙에 도전할 준비를 합니다. 1...e5보다 신중하지만 c8 비숍이 e6 폰에 갇히는 단점이 있습니다. 이것이 프렌치의 핵심 트레이드오프입니다.',
+          alts:[
+            {type:'bad', move:'1...e5', txt:'오픈 게임으로 이탈리안, 루이 로페즈 등이 됩니다. 프렌치와 다른 방향입니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/4p3/3p4/3PP3/8/PPP2PPP/RNBQKBNR w KQkq d6',
+        move:'2... d5', from:'d7', to:'d5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'중앙 도전',
+          txt:'<span class="mn">2...d5</span> — 중앙에 도전합니다. 백의 e4 폰을 공격하며 흑이 동등한 중앙 통제를 원합니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/ppp2ppp/4p3/3pP3/3P4/8/PPP2PPP/RNBQKBNR b KQkq -',
+        move:'3. e5 (아드반스 변형)', from:'e4', to:'e5',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'아드반스 변형',
+            txt:'<span class="mn">3.e5</span> — 폰을 앞으로 밀어 공간을 차지합니다. 흑의 나이트가 f6로 가지 못하게 막고 킹사이드 공격을 준비합니다.',
+            alts:[
+              {type:'tip', move:'3.Nc3', txt:'클래시컬 변형 — 나이트를 전개하며 dxe4를 허용합니다. 복잡한 이론이 있습니다.'},
+              {type:'tip', move:'3.exd5', txt:'교환 변형 — 대칭 구조가 되어 무난하지만 이점을 주기 어렵습니다.'}
+            ]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkbnr/ppp2ppp/4p3/3pP3/3P4/8/PPP2PPP/RNBQKBNR b KQkq -',
+        move:'3... c5', from:'c7', to:'c5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'흑의 반격',
+          txt:'<span class="mn">3...c5</span> — 아드반스 변형의 핵심 반격! d4 폰을 공격하며 흑이 폰 체인에 맞서 즉시 반격합니다. 이후 Nc6으로 나이트를 전개합니다.',
+          alts:[
+            {type:'tip', move:'3...Nf6', txt:'나이트를 전개하는 수지만 4.Bd3 후 e5의 지지가 강화됩니다.'},
+            {type:'tip', move:'3...b6', txt:'퀸사이드에서 c5를 준비하는 우회적인 방법입니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'r1bqkbnr/pp3ppp/2n1p3/2ppP3/3P4/2N5/PPP2PPP/R1BQKBNR w KQkq -',
+        move:'4.Nc3 Nc6', from:'b8', to:'c6',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'공격의 균형',
+            txt:'흑이 c5와 Nc6으로 d4 폰을 동시에 압박합니다. 백의 폰 체인(e5-d4)은 공간을 장악하지만, 흑은 c5 공격으로 이 체인의 뿌리를 흔들려 합니다.',
+            alts:[]
+          },
+          {
+            type:'info', ico:'💡', lbl:'프렌치의 핵심 트레이드오프',
+            txt:'✅ 흑의 장점: 견고한 폰 구조, d5 포지션, 반격 기회<br>❌ 흑의 단점: c8 비숍이 e6 폰에 갇힘 — 이것이 "나쁜 비숍" 문제입니다. 흑은 이 비숍을 활성화하는 것이 관건입니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     카로-칸 디펜스
+     ══════════════════════════════ */
+  caro:{
+    title:'카로-칸 디펜스',
+    sub:'1.e4 c6 — 아드반스·클래시컬·판노프',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'카로-칸은 프렌치와 비슷하지만 c8 비숍 문제를 해결합니다. 1.e4 c6으로 2...d5를 준비하며, 이후 비숍이 자유롭게 전개될 수 있습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        move:'1... c6', from:'c7', to:'c6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'카로-칸의 아이디어',
+          txt:'<span class="mn">1...c6</span> — d5를 준비합니다. 프렌치(1...e6)와 달리 c8 비숍이 갇히지 않습니다. 더 견고하고 구조적으로 탄탄합니다.',
+          alts:[
+            {type:'tip', move:'1...e6', txt:'프렌치 디펜스 — 비슷하지만 c8 비숍이 e6에 갇히는 단점이 있습니다.'},
+            {type:'tip', move:'1...c5', txt:'시칠리아 디펜스로 전환됩니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pp1ppppp/2p5/3p4/3PP3/8/PPP2PPP/RNBQKBNR w KQkq d6',
+        move:'2... d5', from:'d7', to:'d5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'중앙 도전',
+          txt:'<span class="mn">2...d5</span> — c6 폰의 지지를 받아 d5를 견고하게 유지합니다. 프렌치의 2...d5와 유사하지만 c 폰이 d5를 지키므로 구조가 더 탄탄합니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pp2pppp/2p5/3pP3/3P4/8/PPP2PPP/RNBQKBNR b KQkq -',
+        move:'3. e5 (아드반스)', from:'e4', to:'e5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'아드반스 변형',
+          txt:'<span class="mn">3.e5</span> — 공간을 차지합니다. 흑의 나이트는 f6 대신 e7이나 h6으로 가야 합니다. 흑은 c5나 f6으로 반격을 준비합니다.',
+          alts:[
+            {type:'tip', move:'3.Nc3', txt:'클래시컬 변형 — 3...dxe4 4.Nxe4로 이어집니다.'},
+            {type:'tip', move:'3.exd5', txt:'교환 변형 — 3...cxd5로 대칭적 이소 폰 구조가 됩니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pp2pppp/2p5/3pP3/3P4/8/PPP2PPP/RNBQKBNR b KQkq -',
+        move:'3... Bf5', from:'c8', to:'f5',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'카로-칸의 핵심 장점',
+            txt:'<span class="mn">3...Bf5</span> — 비숍이 자유롭게 f5로 전개됩니다! 이것이 카로-칸이 프렌치보다 구조적으로 우월한 이유입니다. 비숍이 활성화되어 엔드게임에서도 강력합니다.',
+            alts:[]
+          },
+          {
+            type:'info', ico:'💡', lbl:'카로-칸 vs 프렌치 비교',
+            txt:'프렌치: c8 비숍이 e6 폰에 갇힘 → 활성화 어려움<br>카로-칸: c8 비숍이 <span class="mn">3...Bf5</span>로 자유롭게 전개 → 구조적으로 우월<br>대신 카로-칸은 1수를 c6에 쓰므로 전개가 약간 느립니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     킹즈 갬빗
+     ══════════════════════════════ */
+  kingsGambit:{
+    title:'킹즈 갬빗',
+    sub:'1.e4 e5 2.f4 — 킹즈 갬빗 어셉티드·디클라인드',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'킹즈 갬빗은 중세부터 두어진 가장 오래된 오프닝 중 하나입니다. 폰을 희생해 중앙 지배와 빠른 공격을 추구합니다. 낭만주의 체스의 상징입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/4p3/4PP2/8/PPPP2PP/RNBQKBNR b KQkq f3',
+        move:'2. f4', from:'f2', to:'f4',
+        commentary:[
+          {
+            type:'good', ico:'⚔️', lbl:'킹즈 갬빗 — 폰 희생',
+            txt:'<span class="mn">2.f4</span> — e5 폰을 공격합니다. 흑이 잡으면 백은 f 파일을 열어 f1 비숍을 활성화하고 e4·d4 폰 센터를 형성합니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'⚠️', lbl:'킹즈 갬빗의 위험',
+            txt:'f 폰이 전진하면 g1 킹의 방어가 약해집니다. 빠르게 전개하고 킹사이드 캐슬링으로 보완해야 합니다. 현대 체스에서는 흑이 갬빗을 수락 후 견고하게 방어하면 다소 불리하다고 평가됩니다.',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/8/4Pp2/8/PPPP2PP/RNBQKBNR w KQkq -',
+        move:'2... exf4 (어셉티드)', from:'e5', to:'f4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'킹즈 갬빗 어셉티드 (KGA)',
+          txt:'<span class="mn">2...exf4</span> — 폰을 잡습니다! 흑이 폰 우위를 택합니다. 백은 빠른 전개와 공격으로 보상을 받아야 합니다.',
+          alts:[
+            {type:'tip', move:'2...Bc5', txt:'킹즈 갬빗 디클라인드(KGD) — 폰을 잡지 않고 f2를 반격합니다. 견고한 방어 선택입니다.'},
+            {type:'tip', move:'2...d5', txt:'페이 카운터 갬빗 — 흑이 역으로 공격합니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/8/4Pp2/5N2/PPPP2PP/RNBQKB1R b KQkq -',
+        move:'3. Nf3', from:'g1', to:'f3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'빠른 전개',
+          txt:'<span class="mn">3.Nf3</span> — 나이트를 전개하고 g4 퀸 진출을 방어합니다. 이후 Bc4나 d4로 중앙을 강화하고 빠른 캐슬링을 준비합니다.',
+          alts:[
+            {type:'bad', move:'3.Nc3?', txt:'나이트를 c3로 가는 수는 3...Qh4+를 허용해 불편합니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/8/2B1Pp2/5N2/PPPP2PP/RNBQK2R b KQkq -',
+        move:'4. Bc4', from:'f1', to:'c4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'비숍 전개 — f7 겨냥',
+            txt:'<span class="mn">4.Bc4</span> — 비숍이 f7을 겨냥합니다. 킹즈 갬빗에서 가장 고전적인 라인입니다. 이제 백은 0-0으로 캐슬링하고 d4로 중앙을 강화할 준비를 합니다.',
+            alts:[]
+          },
+          {
+            type:'info', ico:'💡', lbl:'갬빗 후 전략',
+            txt:'백은 폰 하나를 희생했지만 얻는 것이 있습니다:<br>✅ f 파일 개방 → 루크 활성화<br>✅ e4·d4 폰 센터 형성 가능<br>✅ 빠른 기물 전개로 공격 기회<br>흑은 f4 폰을 지키면서 반격해야 합니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     퀸즈 갬빗
+     ══════════════════════════════ */
+  qg:{
+    title:'퀸즈 갬빗',
+    sub:'1.d4 d5 2.c4 — QGA·QGD·슬라브',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'퀸즈 갬빗은 클로즈드 게임의 대표 오프닝입니다. "갬빗"이라 불리지만 실제로 폰을 잃지 않는 가짜 갬빗입니다. 포지셔널 이해가 핵심입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3',
+        move:'1. d4', from:'d2', to:'d4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'1.d4 — 클로즈드 게임',
+          txt:'<span class="mn">1.d4</span> — 퀸사이드에서 중앙을 점령합니다. 1.e4보다 역습이 적고 안정적인 게임을 유도합니다. c2 비숍의 길도 열립니다.',
+          alts:[{type:'tip', move:'1.e4', txt:'오픈 게임 — 더 전술적이고 날카롭습니다.'}]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6',
+        move:'1... d5', from:'d7', to:'d5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'대칭 중앙',
+          txt:'<span class="mn">1...d5</span> — 흑도 중앙을 점령합니다. 이 대칭적 응수가 퀸즈 갬빗으로 이어집니다.',
+          alts:[
+            {type:'tip', move:'1...Nf6', txt:'인디안 디펜스 계열 — 님조-인디안, 킹즈 인디안 등으로 이어집니다.'},
+            {type:'tip', move:'1...f5', txt:'더치 디펜스 — 킹사이드 공격을 준비합니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq c3',
+        move:'2. c4', from:'c2', to:'c4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'퀸즈 갬빗 — 가짜 갬빗',
+            txt:'<span class="mn">2.c4</span> — d5를 공격합니다. 흑이 dxc4로 잡아도 백은 반드시 되찾습니다. 진짜 갬빗이 아닙니다!',
+            alts:[]
+          },
+          {
+            type:'info', ico:'💡', lbl:'왜 갬빗이 아닌가?',
+            txt:'흑이 <span class="mn">2...dxc4</span>로 잡아도 백은 <span class="mn">3.e3 b5 4.a4</span>나 <span class="mn">3.Qa4+</span>로 폰을 반드시 되찾습니다. 그래서 퀸즈 갬빗은 "가짜 갬빗"입니다. 실제로는 중앙 지배를 위한 폰 이동입니다.',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkbnr/ppp1pppp/8/8/2pP4/8/PP2PPPP/RNBQKBNR w KQkq -',
+        move:'2... dxc4 (QGA)', from:'d5', to:'c4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'퀸즈 갬빗 어셉티드 (QGA)',
+          txt:'<span class="mn">2...dxc4</span> — 폰을 잡습니다! 흑이 c4 폰을 가지지만 중앙을 포기합니다. 백은 <span class="mn">3.e4</span>로 강력한 이중 센터를 형성합니다.',
+          alts:[
+            {type:'tip', move:'2...e6 (QGD)', txt:'퀸즈 갬빗 디클라인드 — 폰을 지키고 견고한 구조를 유지합니다. 더 인기 있는 응수입니다.'},
+            {type:'tip', move:'2...c6 (슬라브)', txt:'슬라브 디펜스 — c6으로 d5를 지키며 c8 비숍의 활로를 유지합니다. 현대에 매우 인기입니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/ppp2ppp/4p3/3p4/2PP4/8/PP2PPPP/RNBQKBNR w KQkq -',
+        move:'2... e6 (QGD)', from:'e7', to:'e6',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'퀸즈 갬빗 디클라인드 (QGD)',
+            txt:'<span class="mn">2...e6</span> — 폰을 지키면서 비숍과 나이트 전개를 준비합니다. 가장 인기 있는 응수로 타르타코워, 오르토독스, 닐젠 변형 등이 있습니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'⚠️', lbl:'QGD의 단점',
+            txt:'QGD에서도 c8 비숍이 e6 폰에 갇히는 문제가 생깁니다 (프렌치와 유사). 흑은 이 비숍을 활성화하는 것이 관건입니다. <span class="mn">Bd6</span>이나 <span class="mn">b6-Bb7</span>로 활성화를 시도합니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     킹즈 인디안 디펜스
+     ══════════════════════════════ */
+  kid:{
+    title:'킹즈 인디안 디펜스',
+    sub:'1.d4 Nf6 2.c4 g6 3.Nc3 Bg7 — 클래시컬·새마르',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'킹즈 인디안 디펜스(KID)는 20세기 중반 피셔·브론스타인·게르부르주키가 체계화했습니다. 흑이 중앙을 허용한 뒤 강력한 킹사이드 반격을 노리는 역동적인 오프닝입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppppppp/5n2/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq -',
+        move:'1... Nf6', from:'g8', to:'f6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'하이퍼모던 전개',
+          txt:'<span class="mn">1...Nf6</span> — 중앙을 직접 점령하지 않고 나이트를 전개합니다. d4를 직접 공격하면서 e4 진출도 방해합니다. 하이퍼모던 스타일의 시작입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppppp1p/5np1/8/2PP4/8/PP2PPPP/RNBQKBNR w KQkq -',
+        move:'2... g6', from:'g7', to:'g6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'킹사이드 피안케토 준비',
+          txt:'<span class="mn">2...g6</span> — Bg7 피안케토를 준비합니다. g7 비숍이 대각선을 장악하면 매우 강력한 기물이 됩니다.',
+          alts:[
+            {type:'tip', move:'2...e6', txt:'님조-인디안이나 퀸즈 인디안으로 이어집니다. KID와 다른 방향입니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqk2r/ppppppbp/5np2/8/2PPP3/2N5/PP3PPP/R1BQKBNR b KQkq e3',
+        move:'3.Nc3 Bg7 4.e4', from:'f1', to:'g7',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'백의 강력한 중앙',
+            txt:'백이 <span class="mn">3.Nc3 4.e4</span>로 이상적인 폰 센터(e4·d4)를 형성합니다. 흑의 g7 비숍이 이미 전개된 상황에서 e4까지 확보했습니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'KID의 핵심 아이디어',
+            txt:'흑은 중앙을 허용하는 대신 나중에 <span class="mn">...e5</span>나 <span class="mn">...c5</span>로 반격합니다. g7 비숍의 대각선이 열리면서 강력한 킹사이드 공격이 시작됩니다. KID는 "위험하게 두는" 오프닝입니다.',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqk2r/ppp1ppbp/3p1np2/8/2PPP3/2N2N2/PP3PPP/R1BQKB1R b KQkq -',
+        move:'4... d6 5.Nf3', from:'d7', to:'d6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'e5 반격 준비',
+          txt:'<span class="mn">4...d6</span> — e5 반격을 준비합니다. d6은 e5를 지지하고 킹사이드 공격을 위한 기반입니다. 이제 <span class="mn">5...0-0 6...e5</span>가 KID의 핵심 전략입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbq1rk1/ppp1ppbp/3p1np1/8/2PPP3/2N2N2/PP3PPP/R1BQKB1R w KQ -',
+        move:'5... 0-0', from:'e8', to:'g8',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'캐슬링 후 반격 시작',
+            txt:'<span class="mn">5...0-0</span> — 킹을 안전하게 캐슬링합니다. 이제 <span class="mn">6...e5</span>가 KID의 핵심 반격입니다. 백이 d5로 막으면 클래시컬 변형, 6.dxe5로 교환하면 다른 변형이 됩니다.',
+            alts:[]
+          },
+          {
+            type:'info', ico:'💡', lbl:'클래시컬 변형의 전형적 플랜',
+            txt:'백: 킹사이드 폰 전진(f4-f5), 나이트 진출, 킹사이드 공격<br>흑: <span class="mn">...e5</span> 후 나이트로 d4 공략, 역습<br>양측이 반대편 날개에서 동시에 공격하는 역동적이고 치열한 게임이 펼쳐집니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     런던 시스템
+     ══════════════════════════════ */
+  london:{
+    title:'런던 시스템',
+    sub:'1.d4 2.Nf3 3.Bf4 — 안정적이고 이론 부담 적음',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'런던 시스템은 암기해야 할 이론이 적고 안정적인 포지션을 만들어 초보자부터 그랜드마스터까지 폭넓게 사용됩니다. 패턴이 반복적이라 익히기 쉽습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3',
+        move:'1. d4', from:'d2', to:'d4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'1.d4',
+          txt:'<span class="mn">1.d4</span> — 중앙 점령. 런던 시스템은 이제 2.Nf3 3.Bf4 세팅을 향해 진행됩니다. 상대가 무엇을 두든 같은 구조를 만들 수 있어 유연합니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/3P4/5N2/PPP1PPPP/RNBQKB1R b KQkq -',
+        move:'2. Nf3', from:'g1', to:'f3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'나이트 전개',
+          txt:'<span class="mn">2.Nf3</span> — 나이트를 자연스럽게 전개합니다. 이제 3.Bf4로 비숍을 전개하는 것이 런던의 핵심입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/3P1B2/5N2/PPP1PPPP/RN1QKB1R b KQkq -',
+        move:'3. Bf4', from:'c1', to:'f4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'런던의 핵심 — Bf4',
+            txt:'<span class="mn">3.Bf4</span> — 런던 시스템의 정의적인 수! 비숍이 f4로 전개되어 e5·c7을 겨냥합니다. 이 비숍은 런던에서 가장 중요한 기물입니다.',
+            alts:[
+              {type:'tip', move:'3.Bg5', txt:'토론토 변형 — Bg5로 가는 것도 있지만 Bf4가 더 주류적입니다.'}
+            ]
+          },
+          {
+            type:'info', ico:'💡', lbl:'런던의 일관된 세팅',
+            txt:'런던의 기본 구조: d4+Nf3+Bf4+e3+Bd3+Nbd2+0-0<br>이 세팅은 상대가 무엇을 두든 거의 같은 방식으로 전개됩니다. 이론 암기가 거의 필요 없어 "아이디어"로 두는 오프닝입니다.',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkb1r/ppp1pppp/3p1n2/8/3P1B2/4PN2/PPP2PPP/RN1QKB1R b KQkq -',
+        move:'3...d6 4.e3', from:'e2', to:'e3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'e3 — 비숍 지지',
+          txt:'<span class="mn">4.e3</span> — Bf4 비숍을 지지하고 Bd3 전개를 준비합니다. 견고한 폰 구조를 만들면서 캐슬링을 준비합니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/ppp1pppp/3p1n2/8/3P1B2/3BPN2/PPP2PPP/RN1QK2R b KQkq -',
+        move:'5. Bd3', from:'f1', to:'d3',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'Bd3 — e4를 노리는 비숍',
+            txt:'<span class="mn">5.Bd3</span> — 비숍이 e4 칸 진출을 지원합니다. 이제 0-0으로 캐슬링 후 Ne5나 e4 중앙 진격을 노립니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'런던의 중기 계획',
+            txt:'✅ 백의 계획: e4 진격, Ne5 진출, h4-h5 킹사이드 공격<br>✅ 장점: 안정적, 이론 부담 없음, 비숍 쌍 활성화<br>❌ 단점: 결정적 이점을 주기 어렵고, 창의적인 상대에게 평등한 게임이 될 수 있음',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     님조-인디안 디펜스
+     ══════════════════════════════ */
+  nimzo:{
+    title:'님조-인디안 디펜스',
+    sub:'1.d4 Nf6 2.c4 e6 3.Nc3 Bb4 — 핀과 구조 압박',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'님조-인디안 디펜스는 아론 님조비치가 개발한 현대 클래식 오프닝입니다. 흑이 비숍으로 c3 나이트를 핀하며 더블드 폰을 유도하는 전략적 오프닝입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3',
+        move:'1. d4', from:'d2', to:'d4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'1.d4 — 클로즈드 게임 시작',
+          txt:'<span class="mn">1.d4</span> — e4보다 안정적인 중앙 장악입니다. 폰이 바로 공격받지 않아 포지셔널 플레이를 선호하는 플레이어에게 적합합니다.',
+          alts:[{type:'tip', move:'1.e4', txt:'오픈 게임으로 전환됩니다. 더 직접적인 전투가 이어집니다.'}]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppppppp/5n2/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq -',
+        move:'1... Nf6', from:'g8', to:'f6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'1...Nf6 — 최선의 응수',
+          txt:'<span class="mn">1...Nf6</span> — 나이트를 최적 칸에 전개하며 e4 진격을 방해합니다. 킹즈 인디안, 님조-인디안, 그륀펠트 등 다양한 오프닝으로 연결됩니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppppppp/5n2/8/2PP4/8/PP2PPPP/RNBQKBNR b KQkq c3',
+        move:'2. c4', from:'c2', to:'c4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'2.c4 — 퀸즈 갬빗 구조',
+          txt:'<span class="mn">2.c4</span> — d5 칸에 대한 영향력을 확보하고 넓은 중앙을 구축합니다. 이제 흑의 응수에 따라 다양한 인디안 디펜스로 분기됩니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppp1ppp/4pn2/8/2PP4/8/PP2PPPP/RNBQKBNR w KQkq -',
+        move:'2... e6', from:'e7', to:'e6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'2...e6 — 님조-인디안을 향해',
+          txt:'<span class="mn">2...e6</span> — 중앙을 지지하고 f8 비숍의 길을 엽니다. 이제 3.Nc3 Bb4가 되면 님조-인디안 디펜스가 됩니다.',
+          alts:[{type:'tip', move:'2...g6', txt:'킹즈 인디안 디펜스로 전환됩니다. 피안케토 전략입니다.'}]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppp1ppp/4pn2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq -',
+        move:'3. Nc3', from:'b1', to:'c3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'3.Nc3 — 님조-인디안 초대',
+          txt:'<span class="mn">3.Nc3</span> — 나이트를 자연스럽게 전개하며 중앙을 지원합니다. 이 수로 인해 흑이 Bb4 핀을 사용할 수 있습니다.',
+          alts:[{type:'tip', move:'3.Nf3', txt:'3.Nf3이면 님조-인디안을 피할 수 있습니다. 퀸즈 인디안이나 보고-인디안으로 이어집니다.'}]
+        }]
+      },
+      {
+        fen:'rnbqk2r/pppp1ppp/4pn2/8/1bPP4/2N5/PP2PPPP/R1BQKBNR w KQkq -',
+        move:'3... Bb4', from:'f8', to:'b4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'님조-인디안의 정의 — 핀!',
+            txt:'<span class="mn">3...Bb4</span> — 님조-인디안의 핵심 수! 비숍이 c3 나이트를 핀합니다. 백이 나이트로 d5를 지지하기 어려워지고, Bxc3으로 더블드 폰을 유도할 수 있습니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'흑의 전략적 아이디어',
+            txt:'✅ Bxc3+: 더블드 폰 강요로 백의 구조 약화<br>✅ d5로 중앙 장악 시도<br>✅ 비숍 쌍 포기 대신 백 폰 구조 영구 약화<br>❌ 비숍이 b4에서 활동이 제한될 수 있음',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqk2r/pppp1ppp/4pn2/8/1bPP4/2N5/PPQ1PPPP/R1B1KBNR b KQkq -',
+        move:'4. Qc2 (클래시컬)',  from:'d1', to:'c2',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'4.Qc2 — 클래시컬 변형',
+            txt:'<span class="mn">4.Qc2</span> — 가장 인기 있는 응수. 더블드 폰을 피하기 위해 미리 Bxc3을 막습니다. 흑이 Bxc3이어도 Qxc3으로 더블드 폰 없이 받을 수 있습니다.',
+            alts:[
+              {type:'tip', move:'4.e3', txt:'루빈스타인 변형 — 느리지만 견고한 중앙 구조를 만듭니다.'},
+              {type:'tip', move:'4.a3', txt:'사미쉬 변형 — 즉시 Bxc3+을 강요해 더블드 폰을 받아들이고 비숍 쌍으로 보상받습니다.'}
+            ]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     그륀펠트 디펜스
+     ══════════════════════════════ */
+  grunfeld:{
+    title:'그륀펠트 디펜스',
+    sub:'1.d4 Nf6 2.c4 g6 3.Nc3 d5 — 중앙 반격 전략',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'그륀펠트 디펜스는 에른스트 그륀펠트가 1922년 처음 선보인 혁명적 오프닝입니다. 흑이 백의 대규모 중앙을 허용한 뒤 d5로 즉시 반격하는 하이퍼모던 전략입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppppppp/5n2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq -',
+        move:'3. Nc3', from:'b1', to:'c3',
+        commentary:[{
+          type:'info', ico:'✅', lbl:'1.d4 Nf6 2.c4 후 3.Nc3',
+          txt:'<span class="mn">1.d4 Nf6 2.c4</span> 이후 <span class="mn">3.Nc3</span> — 백이 강력한 중앙 구조를 만듭니다. 이제 흑의 선택에 따라 다양한 인디안 디펜스로 분기됩니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppppp1p/6p1/8/2PP4/2N5/PP2PPPP/R1BQKBNR w KQkq -',
+        move:'3... g6', from:'g7', to:'g6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'3...g6 — 피안케토 준비',
+          txt:'<span class="mn">3...g6</span> — 킹사이드 피안케토를 준비합니다. 킹즈 인디안이면 ...d6, 그륀펠트라면 ...d5가 뒤따릅니다. 이 수 하나로 두 오프닝을 동시에 겨냥합니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppppp1p/6p1/8/2PPP3/2N5/PP3PPP/R1BQKBNR b KQkq e3',
+        move:'4. e4', from:'e2', to:'e4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'4.e4 — 중앙 최대화',
+          txt:'<span class="mn">4.e4</span> — 백이 c4·d4·e4로 거대한 중앙 폰 체인을 완성합니다. 이제 흑이 ...d5로 즉시 반격해야 그륀펠트가 됩니다.',
+          alts:[{type:'tip', move:'4.Nf3', txt:'4.Nf3이면 킹즈 인디안으로 이어집니다.'}]
+        }]
+      },
+      {
+        fen:'rnbqk2r/ppppppbp/6p1/3n4/2PPP3/2N5/PP3PPP/R1BQKBNR w KQkq -',
+        move:'4... Bg7 5. ...d5', from:'d7', to:'d5',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'그륀펠트의 핵심 — d5 반격!',
+            txt:'<span class="mn">4...Bg7</span> 이후 <span class="mn">...d5</span> — 그륀펠트의 정의적인 수! 흑이 중앙을 직접 공격합니다. 백의 e4나 c4를 공격해 중앙을 붕괴시키려 합니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'그륀펠트의 철학',
+            txt:'하이퍼모던 원칙: 중앙을 점령하는 대신 원거리에서 공격합니다.<br>✅ g7 비숍이 d4를 장기 압박<br>✅ d5로 중앙 구조 붕괴 시도<br>✅ 흑의 카운터어택이 매우 강력<br>❌ 백의 중앙이 강하면 흑이 수동적 방어에 빠질 수 있음',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqk2r/ppppppbp/6p1/3n4/2PPP3/2N5/PP3PPP/R1BQKBNR w KQkq -',
+        move:'5. cxd5', from:'c4', to:'d5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'중앙 긴장 해소',
+          txt:'<span class="mn">5.cxd5</span> — 폰을 교환해 중앙 긴장을 해소합니다. 이후 Nxd5로 나이트가 중앙으로 진출하며 백의 e4를 계속 공격합니다. 익스체인지 변형의 시작입니다.',
+          alts:[
+            {type:'tip', move:'5.Qb3', txt:'러시안 시스템 — d5를 유지하며 압박합니다.'},
+            {type:'tip', move:'5.e5', txt:'5.e5는 나이트를 몰아내지만 중앙이 과도하게 뻗어 역습 대상이 됩니다.'}
+          ]
+        }]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     베노니 디펜스
+     ══════════════════════════════ */
+  benoni:{
+    title:'베노니 디펜스',
+    sub:'1.d4 Nf6 2.c4 c5 — 비대칭 날카로운 카운터플레이',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'베노니 디펜스는 흑이 c5로 d4에 즉각 도전하는 매우 날카로운 오프닝입니다. 비대칭 폰 구조로 양측 모두 날카로운 전술이 펼쳐집니다. 가스파로프가 즐겨 사용했습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppppppp/5n2/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq -',
+        move:'1... Nf6', from:'g8', to:'f6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'1.d4 Nf6 — 인디안 디펜스 시작',
+          txt:'<span class="mn">1.d4 Nf6</span> — 나이트로 e4를 방해하며 유연한 대응을 준비합니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pp1ppppp/5n2/2p5/2PP4/8/PP2PPPP/RNBQKBNR w KQkq c6',
+        move:'2... c5', from:'c7', to:'c5',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'2...c5 — 베노니의 정의',
+            txt:'<span class="mn">2...c5</span> — 베노니의 핵심 수! d4를 즉시 공격합니다. 백이 d5로 전진하면 비대칭 구조가 만들어집니다.',
+            alts:[{type:'tip', move:'2...e6', txt:'2...e6이면 님조-인디안이나 퀸즈 인디안으로 이어집니다.'}]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkb1r/pp1ppppp/5n2/2pP4/2P5/8/PP2PPPP/RNBQKBNR b KQkq -',
+        move:'3. d5', from:'d4', to:'d5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'3.d5 — 공간 장악',
+          txt:'<span class="mn">3.d5</span> — 베노니 구조를 만드는 핵심 수. d5로 전진하면 흑의 e6 칸이 약해지고 백이 강력한 공간 우위를 갖습니다. 하지만 흑은 킹사이드 반격을 준비합니다.',
+          alts:[{type:'tip', move:'3.dxc5', txt:'3.dxc5는 폰을 잡지만 흑이 쉽게 되찾으며 활성화됩니다.'}]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pp1p1ppp/4pn2/2pP4/2P5/2N5/PP2PPPP/R1BQKBNR b KQkq -',
+        move:'3... e6', from:'e7', to:'e6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'3...e6 — 모던 베노니',
+          txt:'<span class="mn">3...e6</span> — 모던 베노니의 시작. 흑이 d5 폰에 도전합니다. 이후 exd5 cxd5로 비대칭 폰 구조가 완성되고 흑은 킹사이드 공격을, 백은 퀸사이드 공격을 추진합니다.',
+          alts:[{type:'tip', move:'3...g6', txt:'3...g6는 킹즈 인디안 스타일의 베노니입니다.'}]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pp3ppp/3p1n2/2pPp3/2P1P3/2N5/PP3PPP/R1BQKBNR w KQkq -',
+        move:'4. e4 — 4기사 변형', from:'e2', to:'e4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'4기사 중앙 — 최대 공간',
+            txt:'<span class="mn">4.e4</span> — 4기사 변형으로 백이 최대 공간을 차지합니다. c4·d5·e4의 강력한 폰 체인을 구축합니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'양쪽의 계획',
+            txt:'백의 계획: 퀸사이드 공격, c4-c5, Nb5 침투<br>흑의 계획: 킹사이드 공격, ...f5-f4, 나이트 e5 전진<br>결과: 날카로운 양날 게임! 양측 모두 기회가 풍부합니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     더치 디펜스
+     ══════════════════════════════ */
+  dutch:{
+    title:'더치 디펜스',
+    sub:'1.d4 f5 — 킹사이드 공격 의지',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'더치 디펜스는 흑이 첫 수부터 킹사이드 공격 의지를 보이는 야심찬 오프닝입니다. e5를 목표로 킹사이드 폰 다수를 형성합니다. 스톤월, 클래시컬, 레닌그라드 세 가지 주요 변형이 있습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/ppppp1pp/8/5p2/3P4/8/PPP1PPPP/RNBQKBNR w KQkq f6',
+        move:'1... f5', from:'f7', to:'f5',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'1...f5 — 더치의 선언',
+            txt:'<span class="mn">1...f5</span> — 더치 디펜스의 정의적인 수! e4를 막으며 킹사이드 공격을 준비합니다. 즉시 공격적인 플레이를 원하는 흑에게 최적입니다.',
+            alts:[
+              {type:'bad', move:'주의', txt:'흑의 킹이 다소 약해집니다. 백의 e4 돌파나 대각선 공격에 주의해야 합니다.'}
+            ]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkb1r/ppppp1pp/5n2/5p2/3PP3/8/PPP2PPP/RNBQKBNR b KQkq e3',
+        move:'2. g3 / e4 시도', from:'e2', to:'e4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'백의 핵심 반격 — e4 돌파',
+          txt:'<span class="mn">2.e4!?</span> — 스타운톤 갬빗! 즉시 e4로 중앙을 열어 더치 구조를 공격합니다. 흑이 fxe4 이후 백은 Nc3-f3으로 강력한 발전을 도모합니다.',
+          alts:[
+            {type:'tip', move:'2.g3', txt:'2.g3 — 피안케토로 대각선 압박을 준비합니다. 가장 포지셔널한 응수입니다.'},
+            {type:'tip', move:'2.Nf3', txt:'2.Nf3 — 자연스러운 전개로 상황을 지켜봅니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/ppppp1pp/5n2/8/3Pp3/2N5/PPP2PPP/R1BQKBNR w KQkq -',
+        move:'스톤월 변형 준비', from:'', to:'',
+        commentary:[
+          {
+            type:'info', ico:'💡', lbl:'세 가지 주요 시스템',
+            txt:'✅ <strong>스톤월</strong> (...d5, ...e6, ...c6): 견고한 방어 구조, 장기전 지향<br>✅ <strong>클래시컬</strong> (...e6, ...Be7, ...0-0): 균형 잡힌 전개<br>✅ <strong>레닌그라드</strong> (...g6, ...Bg7): 킹인디안 스타일, 역동적 플레이',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkb1r/ppppp1pp/5n2/3p1p2/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq -',
+        move:'스톤월: ...d5', from:'d7', to:'d5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'스톤월 구조 완성',
+          txt:'<span class="mn">...d5</span> — 스톤월의 핵심! f5+e6+d5+c6 폰 구조로 견고한 벽을 형성합니다. e4 칸에 나이트를 배치하는 것이 흑의 주된 계획입니다.',
+          alts:[]
+        }]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     잉글리시 오프닝
+     ══════════════════════════════ */
+  english:{
+    title:'잉글리시 오프닝',
+    sub:'1.c4 — 유연한 퀸사이드 플랑크',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'잉글리시 오프닝은 하워드 스타운톤이 발전시킨 유연한 플랑크 오프닝입니다. 직접적인 중앙 폰 전진 대신 c4로 d5를 간접 통제합니다. 시칠리아 디펜스와 구조가 유사합니다(색 반전).',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR b KQkq c3',
+        move:'1. c4', from:'c2', to:'c4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'1.c4 — 플랑크 전략',
+            txt:'<span class="mn">1.c4</span> — d5 칸을 간접 통제하면서 퀸사이드 압박을 시작합니다. d4를 두지 않아 상대가 예상된 이론에서 벗어나게 됩니다.',
+            alts:[{type:'tip', move:'1.e4', txt:'1.e4로 오픈 게임을 선택하면 더 직접적인 전투가 시작됩니다.'}]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/4p3/2P5/8/PP1PPPPP/RNBQKBNR w KQkq e6',
+        move:'1... e5', from:'e7', to:'e5',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'1...e5 — 대칭 잉글리시',
+          txt:'<span class="mn">1...e5</span> — 대칭 잉글리시. 흑도 중앙을 점령합니다. 이후 Nc3·Nf3·g3 등 유연한 전개가 이어집니다.',
+          alts:[
+            {type:'tip', move:'1...c5', txt:'1...c5는 시메트리컬 잉글리시. 완전히 대칭 구조로 복잡한 포지셔널 게임이 됩니다.'},
+            {type:'tip', move:'1...Nf6', txt:'1...Nf6는 인디안 스타일로 킹즈 인디안이나 님조로 전환 가능합니다.'}
+          ]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/4p3/2P5/2N5/PP1PPPPP/R1BQKBNR b KQkq -',
+        move:'2. Nc3', from:'b1', to:'c3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'2.Nc3 — 자연스러운 전개',
+          txt:'<span class="mn">2.Nc3</span> — 나이트를 중앙으로 전개하며 e4 칸을 지원합니다. 이제 백은 g3·Bg2로 피안케토하거나 Nf3·d4로 중앙을 열 수 있습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'r1bqkbnr/pppp1ppp/2n5/4p3/2P5/2N3P1/PP1PPP1P/R1BQKBNR b KQkq -',
+        move:'3. g3 — 피안케토', from:'g2', to:'g3',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'3.g3 — 비숍 피안케토 준비',
+            txt:'<span class="mn">3.g3</span> — 잉글리시의 가장 인기 있는 전개! g2 비숍이 긴 대각선을 장악하며 d5를 간접 통제합니다. 캐슬링 후 안전하고 견고한 포지션이 됩니다.',
+            alts:[{type:'tip', move:'3.Nf3', txt:'3.Nf3으로 빠른 전개를 선택할 수도 있습니다.'}]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'잉글리시의 장점',
+            txt:'✅ 이론 부담이 적어 유연한 게임<br>✅ 시칠리아 구조(색 반전)에 익숙하면 쉽게 적응<br>✅ 포지셔널 복잡성으로 전술만 아는 상대에게 유리<br>❌ 즉각적인 공격 기회 적음',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     레티 오프닝
+     ══════════════════════════════ */
+  reti:{
+    title:'레티 오프닝',
+    sub:'1.Nf3 — 유연한 하이퍼모던',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'레티 오프닝은 리하르트 레티가 1920년대 개발한 하이퍼모던 오프닝입니다. 중앙을 직접 점령하는 대신 Nf3으로 e5·d4를 간접 통제합니다. c4와 g3으로 이어지는 것이 전형적입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq -',
+        move:'1. Nf3', from:'g1', to:'f3',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'1.Nf3 — 최강의 첫 수',
+            txt:'<span class="mn">1.Nf3</span> — e5를 방해하며 나이트를 최적 칸에 배치합니다. 잉글리시, 카탈란, 킹즈 인디안 어택 등 다양한 시스템으로 전환 가능한 최대 유연성을 제공합니다.',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/4p3/8/5N2/PPPPPPPP/RNBQKB1R w KQkq e6',
+        move:'1... d5 or e5', from:'d7', to:'d5',
+        commentary:[{
+          type:'info', ico:'💡', lbl:'흑의 다양한 응수',
+          txt:'<span class="mn">1...d5</span>: 가장 직접적인 중앙 장악 — 레티의 전형적인 상대<br><span class="mn">1...Nf6</span>: 인디안 스타일로 킹즈 인디안이나 님조로 전환<br><span class="mn">1...c5</span>: 잉글리시 스타일로 전환',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/ppp1pppp/8/3p4/2P5/5N2/PP1PPPPP/RNBQKB1R b KQkq c3',
+        move:'2. c4', from:'c2', to:'c4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'2.c4 — 레티의 핵심',
+          txt:'<span class="mn">2.c4</span> — 레티 오프닝의 주요 수. d5를 c4로 측면에서 공격합니다. 흑이 d4로 전진하면 백은 e3으로 지지하며 포지셔널 게임을 추구합니다.',
+          alts:[{type:'tip', move:'2.g3', txt:'2.g3으로 피안케토를 선택하면 KIA(킹즈 인디안 어택) 구조가 됩니다.'}]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/ppp1pppp/8/3p4/2P5/5NP1/PP1PPP1P/RNBQKB1R b KQkq -',
+        move:'3. g3', from:'g2', to:'g3',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'3.g3 — 카탈란 구조로',
+            txt:'<span class="mn">3.g3</span> — 비숍 피안케토를 준비합니다. 이후 Bg2·0-0으로 견고한 포지션을 갖추고 d5를 장기 압박합니다. 카탈란 오프닝과 유사한 구조가 됩니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'레티의 유연성',
+            txt:'레티의 핵심 장점은 유연성입니다:<br>✅ c4+g3: 카탈란 스타일<br>✅ c4+Nc3: 잉글리시 스타일<br>✅ g3+d3: 킹즈 인디안 어택<br>어떤 시스템으로도 전환 가능합니다.',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     카탈란 오프닝
+     ══════════════════════════════ */
+  catalan:{
+    title:'카탈란 오프닝',
+    sub:'1.d4 Nf6 2.c4 e6 3.g3 — 피안케토 압박',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'카탈란 오프닝은 퀸즈 갬빗과 레티 오프닝을 결합한 포지셔널 마스터피스입니다. g2 비숍이 긴 대각선을 장악하며 장기적 압박을 가합니다. 크람니크, 카스파로프가 즐겨 사용했습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppppppp/5n2/8/2PP4/8/PP2PPPP/RNBQKBNR b KQkq -',
+        move:'1.d4 Nf6 2.c4', from:'c2', to:'c4',
+        commentary:[{
+          type:'info', ico:'✅', lbl:'퀸즈 갬빗 시작',
+          txt:'<span class="mn">1.d4 Nf6 2.c4</span> — 퀸즈 갬빗 구조에서 시작합니다. 이제 흑의 응수에 따라 님조, 킹즈 인디안, 카탈란 등 다양한 오프닝으로 분기됩니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppp1ppp/4pn2/8/2PP4/8/PP2PPPP/RNBQKBNR w KQkq -',
+        move:'2... e6', from:'e7', to:'e6',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'2...e6 — 카탈란으로',
+          txt:'<span class="mn">2...e6</span> — 중앙을 지지하며 f8 비숍의 길을 엽니다. 이제 3.g3으로 백이 카탈란을 선택할 수 있습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppp1ppp/4pn2/8/2PP4/6P1/PP2PP1P/RNBQKBNR b KQkq -',
+        move:'3. g3', from:'g2', to:'g3',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'3.g3 — 카탈란의 정의',
+            txt:'<span class="mn">3.g3</span> — 카탈란 오프닝의 핵심! g2 비숍 피안케토를 준비합니다. 비숍이 g2에 자리잡으면 d5 칸과 퀸사이드 전체를 장기 압박합니다.',
+            alts:[{type:'tip', move:'3.Nc3', txt:'3.Nc3이면 님조-인디안의 가능성을 허용합니다.'}]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkb1r/pppp1ppp/4pn2/8/2PP4/6P1/PP2PPBP/RNBQK1NR b KQkq -',
+        move:'4. Bg2', from:'f1', to:'g2',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'4.Bg2 — 카탈란 완성',
+            txt:'<span class="mn">4.Bg2</span> — 비숍이 g2에서 c8-h3 대각선 전체를 장악합니다. 특히 c6·d5·e4 칸에 압박을 줍니다. 이후 Nf3·0-0으로 안전하게 캐슬링합니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'오픈 vs 클로즈드 카탈란',
+            txt:'✅ <strong>오픈 카탈란</strong>: 흑이 dxc4로 폰을 잡음 — 백이 비숍으로 c4를 되찾으며 압박<br>✅ <strong>클로즈드 카탈란</strong>: 흑이 d5 유지 — 장기전 포지셔널 게임<br>양쪽 모두 백의 g2 비숍이 핵심입니다.',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqk2r/ppp2ppp/4pn2/3p4/2PP4/5NP1/PP2PPBP/RNBQK2R b KQkq -',
+        move:'5. Nf3', from:'g1', to:'f3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'5.Nf3 — 전개 완성',
+          txt:'<span class="mn">5.Nf3</span> — 나이트를 전개하고 0-0 캐슬링을 준비합니다. 백의 구조는 매우 안정적이며 장기적으로 c4·d4의 중앙 우위를 활용합니다.',
+          alts:[]
+        }]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     피르츠 디펜스
+     ══════════════════════════════ */
+  pirc:{
+    title:'피르츠 / 모던 디펜스',
+    sub:'1.e4 d6 / g6 — 하이퍼모던 반격',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'피르츠 디펜스(1.e4 d6)와 모던 디펜스(1.e4 g6)는 하이퍼모던 전략의 대표 오프닝입니다. 흑이 중앙을 허용한 뒤 킹인디안 스타일로 반격합니다. 바비 피셔도 즐겨 사용했습니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/ppp1pppp/3p4/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        move:'1... d6', from:'d7', to:'d6',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'1...d6 — 피르츠 디펜스',
+            txt:'<span class="mn">1...d6</span> — 중앙을 바로 장악하지 않고 방어적으로 대응합니다. 백의 중앙 구축을 허용하고 나중에 반격합니다.',
+            alts:[{type:'tip', move:'1...g6', txt:'1...g6는 모던 디펜스. 피안케토를 즉시 시작합니다.'}]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkbnr/ppp1pppp/3p4/8/3PP3/8/PPP2PPP/RNBQKBNR b KQkq d3',
+        move:'2. d4', from:'d2', to:'d4',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'2.d4 — 중앙 최대화',
+          txt:'<span class="mn">2.d4</span> — 백이 중앙에 e4+d4 폰을 구축합니다. 흑은 이 대규모 중앙을 나중에 무너뜨리는 것이 목표입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/ppp1pp1p/3p1np1/8/3PP3/2N5/PPP2PPP/R1BQKBNR w KQkq -',
+        move:'2... Nf6 3... g6', from:'g7', to:'g6',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'피르츠 핵심: Nf6 + g6',
+            txt:'<span class="mn">2...Nf6</span> 후 <span class="mn">3...g6</span> — 피르츠의 전형적인 구성. 나이트가 e4를 공격하며 동시에 킹사이드 피안케토를 준비합니다.',
+            alts:[]
+          }
+        ]
+      },
+      {
+        fen:'rnbqk2r/ppp1ppbp/3p1np1/8/3PPP2/2N5/PPP3PP/R1BQKBNR b KQkq f3',
+        move:'4. f4 (오스트리안 어택)', from:'f2', to:'f4',
+        commentary:[
+          {
+            type:'info', ico:'⚔️', lbl:'4.f4 — 오스트리안 어택',
+            txt:'<span class="mn">4.f4</span> — 백의 가장 공격적인 응수! e5·f5로 킹사이드 전진을 준비합니다. 흑은 빠른 카운터플레이(c5 또는 e5)로 대응해야 합니다.',
+            alts:[
+              {type:'tip', move:'4.Be3', txt:'4.Be3 — 클래시컬 변형. 안정적으로 전개하며 0-0 후 공격을 준비합니다.'},
+              {type:'tip', move:'4.Bg5', txt:'4.Bg5 — 150어택. 0-0-0 후 킹사이드 폰 전진으로 맹공격합니다.'}
+            ]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'흑의 전략',
+            txt:'✅ ...c5로 d4 공격 — 퀸즈 갬빗 스타일 반격<br>✅ ...e5로 중앙 긴장 만들기<br>✅ g7 비숍으로 d4를 장기 압박<br>❌ 백의 e5 진격에 주의해야 함',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  },
+
+  /* ══════════════════════════════
+     버드 오프닝
+     ══════════════════════════════ */
+  bird:{
+    title:'버드 오프닝',
+    sub:'1.f4 — 킹사이드 공격 의지',
+    steps:[
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        move:'시작', from:'', to:'',
+        commentary:[{
+          type:'info', ico:'📖', lbl:'오프닝 소개',
+          txt:'버드 오프닝은 헨리 버드(1829-1908)가 즐겨 사용한 비주류 오프닝입니다. f4로 킹사이드 공격을 선언하지만, 킹 안전이 다소 약해지는 양날의 전략입니다.',
+          alts:[]
+        }]
+      },
+      {
+        fen:'rnbqkbnr/pppppppp/8/8/5P2/8/PPPPP1PP/RNBQKBNR b KQkq f3',
+        move:'1. f4', from:'f2', to:'f4',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'1.f4 — 버드의 선언',
+            txt:'<span class="mn">1.f4</span> — 킹사이드 공격을 즉시 선언합니다. e5를 막고 킹사이드 폰 전진을 준비하지만, f2-f4로 백의 킹이 다소 약해집니다.',
+            alts:[{type:'bad', move:'위험', txt:'흑이 1...e5(프롬 갬빗)로 즉각 도전하면 날카로운 전술 게임이 됩니다!'}]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/4p3/5P2/8/PPPPP1PP/RNBQKBNR w KQkq e6',
+        move:'1... e5?! (프롬 갬빗)', from:'e7', to:'e5',
+        commentary:[
+          {
+            type:'bad', ico:'⚠️', lbl:'프롬 갬빗 — 위험한 도전',
+            txt:'<span class="mn">1...e5!?</span> — 프롬 갬빗! 흑이 폰을 희생하며 날카로운 공격을 시작합니다. 2.fxe5 d6 3.exd6 Bxd6으로 흑이 강력한 발전과 공격권을 얻습니다.',
+            alts:[{type:'tip', move:'1...d5', txt:'1...d5가 가장 자연스러운 응수입니다. 중앙을 장악하며 안정적인 게임을 추구합니다.'}]
+          }
+        ]
+      },
+      {
+        fen:'rnbqkbnr/pppp1ppp/8/4p3/5P2/5N2/PPPPP1PP/RNBQKB1R b KQkq -',
+        move:'2. Nf3', from:'g1', to:'f3',
+        commentary:[{
+          type:'good', ico:'✅', lbl:'2.Nf3 — 프롬 갬빗 방어',
+          txt:'<span class="mn">2.Nf3</span> — e5를 잡지 않고 나이트를 전개해 프롬 갬빗을 피합니다. 이후 e3·d4로 중앙을 지지하는 견고한 플레이가 가능합니다.',
+          alts:[{type:'bad', move:'2.fxe5??', txt:'프롬 갬빗을 받아들이면 날카로운 공격에 노출됩니다. 준비 없이는 피하는 것이 좋습니다.'}]
+        }]
+      },
+      {
+        fen:'rnbqkb1r/pppp1ppp/5n2/4p3/5P2/5N2/PPPPPBPP/RNBQK2R b KQkq -',
+        move:'3. e3 + Be2', from:'f1', to:'e2',
+        commentary:[
+          {
+            type:'good', ico:'✅', lbl:'포지셔널 플레이',
+            txt:'<span class="mn">3.e3·Be2</span> — 견고한 구조로 캐슬링을 준비합니다. 이후 d4로 중앙을 강화하거나 g4-g5 킹사이드 공격을 추진할 수 있습니다.',
+            alts:[]
+          },
+          {
+            type:'tip', ico:'💡', lbl:'버드의 전략',
+            txt:'✅ e5 칸 통제 후 Ne5 진출<br>✅ 킹사이드 폰 전진: f4-f5-g4<br>✅ 더치 디펜스와 유사한 구조(색 반전)<br>❌ 비주류라 상대가 기습으로 활용할 수 있음',
+            alts:[]
+          }
+        ]
+      }
+    ]
+  }
+};
+
+/* ═══════════════════════════════════════════════
+   모달 컨트롤러
+   ═══════════════════════════════════════════════ */
+let _study = null;
+let _step  = 0;
+
+function openStudy(key){
+  _study = STUDIES[key];
+  if(!_study){ showToast('학습 데이터를 준비 중입니다.'); return; }
+  _step = 0;
+  document.getElementById('om-title').textContent    = _study.title;
+  document.getElementById('om-subtitle').textContent = _study.sub;
+  _buildMoveList();
+  _renderStep(0);
+  document.getElementById('om-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeStudy(){
+  document.getElementById('om-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function omOverlayClick(e){
+  if(e.target === document.getElementById('om-overlay')) closeStudy();
+}
+
+function _buildMoveList(){
+  const el = document.getElementById('om-movelist');
+  el.innerHTML = '';
+  _study.steps.forEach((s, i) => {
+    const chip = document.createElement('button');
+    chip.className = 'mc' + (i===0 ? ' on' : '');
+    chip.textContent = s.move;
+    chip.onclick = () => _renderStep(i);
+    el.appendChild(chip);
+  });
+}
+
+function _renderStep(idx){
+  _step = idx;
+  const s = _study.steps[idx];
+
+  // 보드 렌더
+  renderBoard(s.fen, s.from, s.to);
+
+  // 칩 active
+  document.querySelectorAll('.mc').forEach((c, i) => c.classList.toggle('on', i===idx));
+
+  // 해설 렌더
+  const comm = document.getElementById('om-comm');
+  comm.innerHTML = '';
+  s.commentary.forEach(c => {
+    const box = document.createElement('div');
+    box.className = 'cb ' + c.type;
+    let altsHtml = '';
+    if(c.alts && c.alts.length){
+      altsHtml = '<div class="alts">';
+      c.alts.forEach(a => {
+        altsHtml += `<div class="alt"><span class="alt-badge ${a.type}">${a.move}</span><span class="alt-txt">${a.txt}</span></div>`;
+      });
+      altsHtml += '</div>';
+    }
+    box.innerHTML = `
+      <div class="cb-top"><span class="cb-ico">${c.ico}</span><span class="cb-lbl">${c.lbl}</span></div>
+      <div class="cb-txt">${c.txt}</div>
+      ${altsHtml}
+    `;
+    comm.appendChild(box);
+  });
+  comm.scrollTop = 0;
+
+  // 버튼·프로그레스
+  document.getElementById('om-btn-prev').disabled = idx === 0;
+  document.getElementById('om-btn-next').disabled = idx === _study.steps.length - 1;
+  document.getElementById('om-progress').textContent = `${idx + 1} / ${_study.steps.length}`;
+}
+
+function goStep(dir){
+  const next = _step + dir;
+  if(next >= 0 && next < _study.steps.length) _renderStep(next);
+}
+
+// 키보드 단축키
+document.addEventListener('keydown', e => {
+  if(!document.getElementById('om-overlay').classList.contains('open')) return;
+  if(e.key === 'ArrowRight' || e.key === 'ArrowDown') goStep(1);
+  if(e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goStep(-1);
+  if(e.key === 'Escape') closeStudy();
+});
+
+/* --- script block --- */
+
+// ══════════════════════════════════════════════════════
+//  우클릭 화살표 그리기
+// ══════════════════════════════════════════════════════
+(function() {
+  const ARROW_COLOR = 'rgba(255, 165, 0, 0.88)';
+  const ARROW_SW    = 14;
+  const MARKER_ID   = 'user-arrow-svg-head';
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  let _arrowStart = null;
+  let _userArrows = [];
+
+  function ensureSvg() {
+    // chess-wasm-fixed / study-opening 등 기존 SVG overlay 재사용
+    const existingSvg = document.getElementById('board-svg-overlay');
+    if (existingSvg && !document.getElementById('user-arrow-svg-arrows')) {
+      let defs = existingSvg.querySelector('defs');
+      if (!defs) { defs = document.createElementNS(SVG_NS,'defs'); existingSvg.prepend(defs); }
+      if (!document.getElementById(MARKER_ID)) {
+        const mk = document.createElementNS(SVG_NS, 'marker');
+        mk.setAttribute('id', MARKER_ID); mk.setAttribute('markerUnits', 'strokeWidth');
+        mk.setAttribute('markerWidth', '4'); mk.setAttribute('markerHeight', '4');
+        mk.setAttribute('refX', '2.5'); mk.setAttribute('refY', '2');
+        mk.setAttribute('orient', 'auto');
+        const mp = document.createElementNS(SVG_NS, 'path');
+        mp.setAttribute('d', 'M0,0 L4,2 L0,4 L1,2 Z');
+        mp.setAttribute('fill', ARROW_COLOR); mp.setAttribute('stroke', 'none');
+        mk.appendChild(mp); defs.appendChild(mk);
+      }
+      const g2 = document.createElementNS(SVG_NS, 'g');
+      g2.id = 'user-arrow-svg-arrows';
+      existingSvg.appendChild(g2);
+      return existingSvg;
+    }
+    if (existingSvg) return existingSvg;
+
+    let svg = document.getElementById('user-arrow-svg');
+    if (svg) return svg;
+
+    const board = document.getElementById('chessboard');
+    if (!board) return null;
+    let wrap = board.parentElement;
+    if (!wrap || getComputedStyle(wrap).position === 'static') wrap = board;
+
+    svg = document.createElementNS(SVG_NS, 'svg');
+    svg.id = 'user-arrow-svg';
+    svg.setAttribute('viewBox', '0 0 800 800');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.classList.add('board-arrow-overlay');
+
+    const defs = document.createElementNS(SVG_NS, 'defs');
+    const mk = document.createElementNS(SVG_NS, 'marker');
+    mk.setAttribute('id', MARKER_ID); mk.setAttribute('markerUnits', 'strokeWidth');
+    mk.setAttribute('markerWidth', '4'); mk.setAttribute('markerHeight', '4');
+    mk.setAttribute('refX', '2.5'); mk.setAttribute('refY', '2');
+    mk.setAttribute('orient', 'auto');
+    const mp = document.createElementNS(SVG_NS, 'path');
+    mp.setAttribute('d', 'M0,0 L4,2 L0,4 L1,2 Z');
+    mp.setAttribute('fill', ARROW_COLOR); mp.setAttribute('stroke', 'none');
+    mk.appendChild(mp); defs.appendChild(mk); svg.appendChild(defs);
+
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.id = 'user-arrow-svg-arrows';
+    svg.appendChild(g);
+    wrap.appendChild(svg);
+    if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+    return svg;
+  }
+
+  function sqCenter(col, row) { return { px: col * 100 + 50, py: row * 100 + 50 }; }
+
+  function makeArrow(fromCol, fromRow, toCol, toRow) {
+    const from = sqCenter(fromCol, fromRow);
+    const to   = sqCenter(toCol, toRow);
+    const dx = to.px - from.px, dy = to.py - from.py;
+    const len = Math.sqrt(dx*dx + dy*dy);
+    if (len < 1) return null;
+    const ux = dx/len, uy = dy/len;
+    const sw = ARROW_SW;
+    const sx = from.px + ux*sw*1.2, sy = from.py + uy*sw*1.2;
+    const ex = to.px   - ux*sw*2.5, ey = to.py   - uy*sw*2.5;
+    if (Math.sqrt((ex-sx)**2+(ey-sy)**2) < 5) return null;
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', sx.toFixed(2)); line.setAttribute('y1', sy.toFixed(2));
+    line.setAttribute('x2', ex.toFixed(2)); line.setAttribute('y2', ey.toFixed(2));
+    line.setAttribute('stroke', ARROW_COLOR);
+    line.setAttribute('stroke-width', sw);
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('marker-end', 'url(#' + MARKER_ID + ')');
+    return line;
+  }
+
+  function redrawArrows() {
+    const g = document.getElementById('user-arrow-svg-arrows');
+    if (!g) return;
+    g.innerHTML = '';
+    _userArrows.forEach(a => {
+      const el = makeArrow(a.fromCol, a.fromRow, a.toCol, a.toRow);
+      if (el) g.appendChild(el);
+    });
+  }
+
+  function getBoardSquare(e) {
+    const board = document.getElementById('chessboard');
+    if (!board) return null;
+    const rect = board.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null;
+    return {
+      col: Math.max(0, Math.min(7, Math.floor(x / rect.width  * 8))),
+      row: Math.max(0, Math.min(7, Math.floor(y / rect.height * 8)))
+    };
+  }
+
+  function attachEvents() {
+    const board = document.getElementById('chessboard');
+    if (!board) { setTimeout(attachEvents, 300); return; }
+    ensureSvg();
+
+    board.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      const sq = getBoardSquare(e);
+      if (sq) _arrowStart = sq;
+    });
+
+    board.addEventListener('mouseup', function(e) {
+      if (e.button !== 2) return;
+      if (!_arrowStart) return;
+      const sq = getBoardSquare(e);
+      ensureSvg();
+      if (sq) {
+        if (sq.col === _arrowStart.col && sq.row === _arrowStart.row) {
+          _userArrows = [];
+        } else {
+          const idx = _userArrows.findIndex(a =>
+            a.fromCol===_arrowStart.col && a.fromRow===_arrowStart.row &&
+            a.toCol===sq.col && a.toRow===sq.row
+          );
+          if (idx >= 0) _userArrows.splice(idx, 1);
+          else _userArrows.push({ fromCol:_arrowStart.col, fromRow:_arrowStart.row, toCol:sq.col, toRow:sq.row });
+        }
+        redrawArrows();
+      }
+      _arrowStart = null;
+    });
+
+    board.addEventListener('mousedown', function(e) {
+      if (e.button === 0) {
+        _userArrows = [];
+        redrawArrows();
+        _arrowStart = null;
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachEvents);
+  } else {
+    attachEvents();
+  }
+})();

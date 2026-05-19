@@ -1,0 +1,52 @@
+[
+  {
+    "id": "analysis",
+    "route": "/",
+    "file": "chess-wasm-fixed.html"
+  },
+  {
+    "id": "play",
+    "route": "/play",
+    "file": "play.html"
+  },
+  {
+    "id": "puzzle",
+    "route": "/puzzle",
+    "file": "puzzle.html"
+  },
+  {
+    "id": "records",
+    "route": "/records",
+    "file": "records.html"
+  },
+  {
+    "id": "opening-explorer",
+    "route": "/opening-explorer",
+    "file": "opening-explorer.html"
+  },
+  {
+    "id": "study",
+    "route": "/study",
+    "file": "study.html"
+  },
+  {
+    "id": "study-opening",
+    "route": "/study-opening",
+    "file": "study-opening.html"
+  },
+  {
+    "id": "study-endgame",
+    "route": "/study-endgame",
+    "file": "study-endgame.html"
+  },
+  {
+    "id": "practice",
+    "route": "/practice",
+    "file": "practice.html"
+  },
+  {
+    "id": "auth",
+    "route": "/auth",
+    "file": "auth.html"
+  }
+]

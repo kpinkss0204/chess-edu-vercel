@@ -1,0 +1,133 @@
+<!-- MAIN -->
+<div id="main">
+
+  <!-- 로비 -->
+  <div id="screen-lobby" style="display:flex;">
+    <div class="lobby-header">
+      <div class="lobby-icon">♟</div>
+      <div class="lobby-title">온라인 대국</div>
+      <div class="lobby-sub">랜덤 매칭 · 실시간 대국</div>
+    </div>
+    <div class="lobby-card">
+      <div class="lobby-card-title">시간 설정</div>
+      <div class="time-badge">
+        <div class="time-badge-icon">⏱</div>
+        <div class="time-badge-info">
+          <div class="time-badge-main">10분</div>
+          <div class="time-badge-sub">증가분 없음 · 래피드</div>
+        </div>
+      </div>
+      <button class="btn-find" onclick="startMatchmaking()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        대국 찾기
+      </button>
+    </div>
+  </div>
+
+  <!-- 매칭 대기 -->
+  <div id="screen-searching" style="display:none;flex-direction:column;align-items:center;gap:24px;">
+    <div class="search-spinner"></div>
+    <div style="text-align:center;">
+      <div class="search-title">상대방 찾는 중...</div>
+      <div class="search-elapsed" id="search-elapsed">0초 경과</div>
+    </div>
+    <button class="btn-cancel" onclick="cancelMatchmaking()">취소</button>
+  </div>
+
+  <!-- 대국 중 -->
+  <div id="screen-playing" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+
+    <!-- 상대방 바 -->
+    <div class="player-bar" style="width:100%;">
+      <div class="player-info-wrap">
+        <div class="p-avatar" id="opp-avatar-el">?</div>
+        <div>
+          <div class="p-name"  id="opp-name-el">상대방</div>
+          <div class="p-color" id="opp-color-el">—</div>
+        </div>
+      </div>
+      <div class="p-timer" id="opp-timer">10:00</div>
+    </div>
+
+    <!-- 보드 -->
+    <div id="play-board-wrap">
+      <div id="play-board"></div>
+      <div id="promo-modal"></div>
+      <!-- 화살표 SVG 오버레이 -->
+      <svg id="play-arrow-svg" class="board-arrow-overlay" viewBox="0 0 800 800" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="play-arrow-head" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto">
+            <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(255,165,0,0.92)" stroke="none"/>
+          </marker>
+        </defs>
+        <g id="play-arrow-layer"></g>
+      </svg>
+    </div>
+
+    <!-- 내 바 -->
+    <div class="player-bar my-bar" style="width:100%;">
+      <div class="player-info-wrap">
+        <div class="p-avatar me" id="my-avatar-el">?</div>
+        <div>
+          <div class="p-name"  id="my-name-el">나</div>
+          <div class="p-color" id="my-color-el">—</div>
+        </div>
+      </div>
+      <div class="p-timer active" id="my-timer">10:00</div>
+    </div>
+
+    <div class="play-actions">
+      <button class="btn-draw" id="btn-draw" onclick="offerDraw()">½ 무승부 제안</button>
+      <button class="btn-resign" onclick="resignGame()">⚑ 기권</button>
+    </div>
+
+  </div>
+
+  <!-- 무승부 제안 수신 바 -->
+  <div id="draw-offer-bar">
+    <div>상대방이 무승부를 제안했습니다</div>
+    <div class="draw-offer-btns">
+      <button class="draw-accept-btn" onclick="acceptDraw()">수락</button>
+      <button class="draw-decline-btn" onclick="declineDraw()">거절</button>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div id="screen-result" style="display:none;flex-direction:column;align-items:center;">
+    <div class="result-card">
+      <div class="result-emoji" id="result-emoji">🏆</div>
+      <div class="result-title" id="result-title">승리!</div>
+      <div class="result-reason" id="result-reason">체크메이트</div>
+      <div class="result-players">
+        <span id="result-white">백</span>
+        <span class="result-vs">vs</span>
+        <span id="result-black">흑</span>
+      </div>
+      <button class="btn-again" onclick="showScreen('lobby')">다시 찾기</button>
+      <a class="btn-analysis" href="/">분석 보드로 이동</a>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<button type="button" class="theme-fab-play" title="테마 변경" aria-label="테마 변경" onclick="toggleColorMode()">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 8.69V4H15.31L12 0.69L8.69 4H4V8.69L0.69 12L4 15.31V20H8.69L12 23.31L15.31 20H20V15.31L23.31 12L20 8.69ZM12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C15.31 6 18 8.69 18 12C18 15.31 15.31 18 12 18Z"/></svg>
+</button>
+
+
+
+
+
+<!-- 모바일 하단 내비게이션 -->
+<nav id="mobile-bottom-nav">
+  <a class="mob-nav-item" href="/"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z"/></svg></span><span>분석</span></a>
+  <a class="mob-nav-item active" href="/play.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></span><span>대국</span></a>
+  <a class="mob-nav-item" href="/puzzle.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg></span><span>퍼즐</span></a>
+  <a class="mob-nav-item" href="/opening-explorer.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></span><span>탐색기</span></a>
+  <a class="mob-nav-item" href="/records.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20ZM8 15V17H16V15H8ZM8 11V13H16V11H8Z"/></svg></span><span>기록</span></a>
+  <a class="mob-nav-item" href="/study.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg></span><span>학습</span></a>
+  <a class="mob-nav-item" href="/practice.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5v14h2v2h10v-2h2V5zm-2 12H7V7h10v10zM9 9h6v6H9V9z"/></svg></span><span>연습</span></a>
+  <a class="mob-nav-item" href="/records.html?tab=stats"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/></svg></span><span>통계</span></a>
+</nav>

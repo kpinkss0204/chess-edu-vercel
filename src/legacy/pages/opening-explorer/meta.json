@@ -1,0 +1,15 @@
+{
+  "id": "opening-explorer",
+  "file": "opening-explorer.html",
+  "title": "오프닝 탐색기 — Lichess 데이터베이스",
+  "linkCss": [
+    "theme-ui.css"
+  ],
+  "externalScripts": [
+    "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js",
+    "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js",
+    "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js",
+    "auth-check.js",
+    "theme-global.js"
+  ]
+}

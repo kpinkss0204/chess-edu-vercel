@@ -1,0 +1,16 @@
+{
+  "id": "puzzle",
+  "file": "puzzle.html",
+  "title": "체스 퍼즐 — 테마별 훈련",
+  "linkCss": [
+    "theme-ui.css"
+  ],
+  "externalScripts": [
+    "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js",
+    "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js",
+    "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js",
+    "auth-check.js",
+    "theme-global.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"
+  ]
+}

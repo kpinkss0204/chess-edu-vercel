@@ -1,0 +1,920 @@
+<!-- Engine Loading Overlay -->
+  <div id="engine-loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loading-text">Stockfish 18 WASM 로딩 중...<br><small
+        style="opacity:0.6;font-size:12px">처음 로드 시 잠시 시간이 걸립니다</small></div>
+  </div>
+
+  <!-- SIDEBAR -->
+
+  <div id="mobile-panel-backdrop" onclick="toggleMobilePanel(false)"></div>
+  <button id="mobile-panel-toggle" onclick="toggleMobilePanel()" title="분석 패널">
+    <svg id="mpanel-icon-open" width="24" height="24" viewBox="0 0 24 24" fill="white">
+      <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
+    </svg>
+    <svg id="mpanel-icon-close" width="24" height="24" viewBox="0 0 24 24" fill="white" style="display:none;">
+      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+    </svg>
+  </button>
+  <nav id="sidebar">
+    <a class="sidebar-logo" href="/" title="체스 홈" style="text-decoration:none;color:inherit;">♟</a>
+    <div class="sidebar-nav">
+      <div class="sidebar-item active" onclick="switchTab('analysis')" title="분석">
+        <div class="sidebar-icon">
+          <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z" />
+          </svg>
+        </div>
+        <span class="sidebar-label">분석</span>
+      </div>
+      <a class="sidebar-item" href="/play.html" title="온라인 대국" style="text-decoration:none;">
+        <div class="sidebar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+          </svg>
+        </div>
+        <span class="sidebar-label">대국</span>
+      </a>
+      <a class="sidebar-item" href="/puzzle.html" title="퍼즐 훈련" style="text-decoration:none;">
+        <div class="sidebar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z" />
+          </svg>
+        </div>
+        <span class="sidebar-label">퍼즐</span>
+      </a>
+      <a class="sidebar-item" href="/opening-explorer.html" title="오프닝 탐색기" style="text-decoration:none;">
+        <div class="sidebar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+          </svg>
+        </div>
+        <span class="sidebar-label">탐색기</span>
+      </a>
+      <div class="sidebar-divider"></div>
+      <a class="sidebar-item" href="/records.html" title="기록" style="text-decoration:none;">
+        <div class="sidebar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20ZM8 15V17H16V15H8ZM8 11V13H16V11H8Z" />
+          </svg>
+        </div>
+        <span class="sidebar-label">기록</span>
+      </a>
+      <a class="sidebar-item" href="/study.html" title="학습" style="text-decoration:none;">
+        <div class="sidebar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z" />
+          </svg>
+        </div>
+        <span class="sidebar-label">학습</span>
+      </a>
+      <a class="sidebar-item" href="/practice.html" title="엔진 연습" style="text-decoration:none;">
+        <div class="sidebar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 5h-2V3H7v2H5v14h2v2h10v-2h2V5zm-2 12H7V7h10v10zM9 9h6v6H9V9z" />
+          </svg>
+        </div>
+        <span class="sidebar-label">연습</span>
+      </a>
+      <a class="sidebar-item" href="/records.html?tab=stats" title="통계" style="text-decoration:none;">
+        <div class="sidebar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z" />
+          </svg>
+        </div>
+        <span class="sidebar-label">통계</span>
+      </a>
+    </div>
+    <div class="sidebar-footer">
+      <!-- 로그인 유저 표시 -->
+      <div class="sidebar-user" id="sidebar-user-info">
+        <div class="sidebar-avatar" id="sidebar-avatar-letter">?</div>
+        <div class="sidebar-username" id="sidebar-username">로딩중</div>
+      </div>
+      <div class="sidebar-item logout-btn" title="로그아웃" onclick="handleLogout()">
+        <div class="sidebar-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </div>
+        <span class="sidebar-label">로그아웃</span>
+      </div>
+      <div class="sidebar-item" title="테마 변경" onclick="toggleColorMode()">
+        <div class="sidebar-icon">
+          <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M20 8.69V4H15.31L12 0.69L8.69 4H4V8.69L0.69 12L4 15.31V20H8.69L12 23.31L15.31 20H20V15.31L23.31 12L20 8.69ZM12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C15.31 6 18 8.69 18 12C18 15.31 15.31 18 12 18Z" />
+          </svg>
+        </div>
+        <span class="sidebar-label">테마</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="board-area">
+      <div class="player-info" id="player-black">
+        <div class="player-avatar" id="avatar-black">
+          <img src="https://lichess1.org/assets/piece/cburnett/bP.svg" alt="흑">
+        </div>
+        <div class="player-details">
+          <span class="player-name" id="name-black">흑 (Black)</span>
+          <span class="player-rating" id="rating-black">?</span>
+          <div class="captured-pieces" id="captured-black"></div>
+        </div>
+        <div class="player-clock" id="clock-black">∞</div>
+      </div>
+
+      <div id="eval-container">
+        <div id="eval-bar-wrap">
+          <div id="eval-bar-black"></div>
+          <div id="eval-bar-fill" style="height:50%"></div>
+          <span id="eval-score-black">0.0</span>
+          <span id="eval-score-white">0.0</span>
+        </div>
+        <div id="board-wrap">
+          <div id="chessboard"></div>
+          <svg id="board-svg-overlay" viewBox="0 0 800 800" preserveAspectRatio="none"
+            xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <!-- 화살촉: strokeWidth 단위 → 브라우저 호환성 최대화 -->
+              <marker id="arr-threat" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2"
+                orient="auto">
+                <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(220,55,55,0.95)" stroke="none" />
+              </marker>
+              <marker id="arr-best" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2"
+                orient="auto">
+                <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(70,130,200,0.95)" stroke="none" />
+              </marker>
+              <marker id="arr-alt" markerUnits="strokeWidth" markerWidth="4" markerHeight="4" refX="2.5" refY="2"
+                orient="auto">
+                <path d="M0,0 L4,2 L0,4 L1,2 Z" fill="rgba(100,160,60,0.85)" stroke="none" />
+              </marker>
+            </defs>
+            <g id="svg-highlights"></g>
+            <g id="svg-arrows"></g>
+          </svg>
+        </div>
+      </div>
+
+      <div class="player-info" id="player-white">
+        <div class="player-avatar" id="avatar-white">
+          <img src="https://lichess1.org/assets/piece/cburnett/wP.svg" alt="백">
+        </div>
+        <div class="player-details">
+          <span class="player-name" id="name-white">백 (White)</span>
+          <span class="player-rating" id="rating-white">?</span>
+          <div class="captured-pieces" id="captured-white"></div>
+        </div>
+        <div class="player-clock active" id="clock-white">∞</div>
+      </div>
+
+      <div id="board-controls">
+        <button class="ctrl-btn" onclick="game.goToStart()" title="처음으로 (↓)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 6H8V18H6ZM9.5 12L18 18V6L9.5 12Z" />
+          </svg>
+        </button>
+        <button class="ctrl-btn" onclick="game.prevMove()" title="이전 수 (←)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M15.5 19L7 12L15.5 5V19Z" />
+          </svg>
+        </button>
+        <button class="ctrl-btn" onclick="game.nextMove()" title="다음 수 (→)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8.5 5L17 12L8.5 19V5Z" />
+          </svg>
+        </button>
+        <button class="ctrl-btn" onclick="game.goToEnd()" title="끝으로 (↑)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18 18H16V6H18ZM14.5 12L6 6V18L14.5 12Z" />
+          </svg>
+        </button>
+        <div class="ctrl-spacer"></div>
+        <div class="eval-score" id="eval-score" title="엔진 평가">0.0</div>
+        <!-- 위협 표시 버튼 -->
+        <button id="threat-overlay-btn" class="overlay-ctrl-btn" onclick="setOverlayMode('threat')"
+          title="위협 표시: 상대방 최강 위협을 보드에 표시">
+          🎯 위협
+        </button>
+        <!-- 최선수 표시 버튼 -->
+        <button id="best-overlay-btn" class="overlay-ctrl-btn" onclick="setOverlayMode('best')"
+          title="최선수 표시: 엔진 추천수를 보드에 표시">
+          💡 최선수
+        </button>
+        <!-- AI 코치 버튼 -->
+        <button id="coach-open-btn" onclick="toggleCoachPanel()" title="AI 코치 패널 열기/닫기">
+          🧠 AI 코치
+        </button>
+        <button class="ctrl-btn" onclick="game.flipBoard()" title="보드 뒤집기 (F)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9" />
+            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+            <polyline points="7 23 3 19 7 15" />
+            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+          </svg>
+        </button>
+        <button class="ctrl-btn" onclick="game.resetBoard()" title="초기화">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
+          </svg>
+        </button>
+      </div>
+    </div><!-- /#board-area -->
+
+    <!-- AI 코치 패널 — 보드와 기보 사이 중간 컬럼 -->
+    <div id="coach-panel">
+      <div id="coach-header" onclick="toggleCoachPanel()">
+        <div class="coach-logo">🧠</div>
+        <div style="flex:1;min-width:0;">
+          <div class="coach-title">AI 체스 코치</div>
+          <div class="coach-subtitle">Groq · Llama-3.3-70b</div>
+        </div>
+        <button id="coach-toggle-btn" title="닫기" onclick="event.stopPropagation();closeCoach()">✕</button>
+      </div>
+
+      <div id="coach-api-row">
+        <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">API Key</span>
+        <input type="password" id="coach-api-input" placeholder="Groq API 키 (gsk_...)" />
+        <button id="coach-save-key-btn" onclick="saveApiKey()">저장</button>
+        <span id="coach-key-status" style="font-size:11px;color:var(--text-muted);white-space:nowrap;"></span>
+      </div>
+
+      <div id="coach-debug-row" style="display:flex;flex-direction:column;gap:4px;padding:0 12px 8px;border-bottom:1px solid var(--border-color);">
+        <span style="font-size:10px;color:var(--text-muted);font-weight:600;">브리프 디버그 (로컬 분석만)</span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="coach-debug-fen" placeholder="FEN (비우면 현재 국면)" style="flex:1;font-size:11px;padding:6px 8px;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);" />
+          <button type="button" class="coach-preset-btn" onclick="debugCoachBrief()" title="F12 콘솔에 JSON 출력" style="white-space:nowrap;">🛠 콘솔</button>
+        </div>
+      </div>
+
+      <div id="coach-body">
+        <div id="coach-context-display" class="coach-context-line" style="display:none;"></div>
+
+        <!-- 미리 정의 질문 버튼 -->
+        <div id="coach-presets" style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
+          <div
+            style="font-size:10px;color:var(--text-muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:2px;">
+            빠른 질문</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;">
+            <button class="coach-preset-btn" onclick="setCoachQuestion('제가 표시한 후보수가 좋은 수인가요? 이유를 설명해 주세요.')">💡 내 후보수
+              평가</button>
+            <button class="coach-preset-btn" onclick="setCoachQuestion('현재 포지션에서 가장 중요한 위협과 계획은 무엇인가요?')">⚔️ 위협 &
+              계획</button>
+            <button class="coach-preset-btn" onclick="setCoachQuestion('방금 둔 수의 의도와 그것이 포지션에 미치는 영향을 설명해 주세요.')">↩️ 방금 수
+              해설</button>
+            <button class="coach-preset-btn" onclick="setCoachQuestion('제가 생각한 수순이 맞는지 확인해 주세요. 어떤 수순이 더 좋을까요?')">🔢 내
+              수순 검토</button>
+            <button class="coach-preset-btn" onclick="setCoachQuestion('현재 포지션에서 각 진영의 강점과 약점을 분석해 주세요.')">📊 강·약점
+              분석</button>
+            <button class="coach-preset-btn" onclick="setCoachQuestion('엔드게임으로 가는 것과 미들게임을 유지하는 것 중 어느 쪽이 유리한가요?')">🏁
+              전략 방향</button>
+          </div>
+        </div>
+
+        <div class="coach-question-row">
+          <textarea id="coach-input" placeholder="체스 코치에게 질문하세요..." rows="2"></textarea>
+          <button id="coach-ask-btn" onclick="askCoach()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+            질문
+          </button>
+        </div>
+
+        <div id="coach-response" style="display:none;"></div>
+      </div>
+    </div><!-- /#coach-panel -->
+
+    <div id="right-panel">
+      <div id="panel-tabs">
+        <button class="tab-btn active" onclick="switchTab('analysis')">분석</button>
+        <button class="tab-btn" onclick="switchTab('pgn')">PGN</button>
+        <button class="tab-btn" onclick="switchTab('settings')">설정</button>
+        <button class="tab-btn" id="tab-btn-coach-mobile" onclick="switchTab('coach-mobile')" style="display:none;">🧠
+          AI코치</button>
+      </div>
+
+      <div class="tab-panel active" id="tab-analysis">
+        <div id="analysis-panel">
+          <div class="analysis-header">
+            <div class="engine-badge">
+              <div class="engine-dot idle" id="engine-dot"></div>
+              <span id="engine-name">Stockfish 18 WASM</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <button id="threat-toggle" onclick="toggleThreatPanel()" title="최선수 찾기 패널" style="background:none;border:1px solid var(--border);border-radius:4px;
+                     color:var(--text-muted);cursor:pointer;font-size:10px;padding:2px 6px;
+                     transition:all 0.15s;white-space:nowrap;">
+                🔍 최선수 찾기
+              </button>
+              <button id="best-explain-toggle" onclick="toggleBestExplainPanel()" title="최선수 설명" style="background:none;border:1px solid var(--border-color);border-radius:4px;
+                     color:var(--text-muted);cursor:pointer;font-size:10px;padding:2px 6px;
+                     transition:all 0.15s;white-space:nowrap;">
+                📖 설명
+              </button>
+              <span class="depth-info" id="depth-info">로딩 중...</span>
+            </div>
+          </div>
+          <!-- 실시간 오프닝 표시 -->
+          <div id="opening-badge" class="hidden">
+            <span class="opening-book-icon">📖</span>
+            <span id="opening-eco"></span>
+            <span id="opening-name">오프닝</span>
+            <span class="opening-variation-row" id="opening-variation"></span>
+          </div>
+
+          <div class="top-moves" id="top-moves">
+            <div class="top-moves-empty" id="top-moves-empty">엔진 초기화 중...</div>
+          </div>
+
+          <!-- 최선수 찾기 패널 -->
+          <div id="threat-panel" style="display:none;">
+            <div class="threat-header">
+              <span class="threat-title">🔍 최선수 찾기</span>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <button class="threat-refresh-btn" onclick="runThreatAnalysis()" title="새로고침">↻</button>
+                <button class="threat-refresh-btn" id="threat-collapse-btn" onclick="toggleThreatCollapse()" title="접기/펼치기" style="font-size:11px;">▲</button>
+              </div>
+            </div>
+            <div id="threat-body">
+              <div id="threat-content">
+                <div class="threat-loading">분석 중...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 최선수 설명 패널 -->
+          <div id="best-explain-panel" style="display:none;">
+            <!-- 헤더: 라벨 + 수순 바 + 새로고침 -->
+            <div class="best-explain-header">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+                <span class="best-explain-header-label">Explaining the next best moves</span>
+                <button class="threat-refresh-btn" onclick="runBestMoveExplain()" title="새로고침">↻</button>
+              </div>
+              <div id="best-explain-seq" class="best-seq-bar"></div>
+            </div>
+            <!-- 설명 본문 -->
+            <div id="best-explain-content">
+              <div class="threat-loading">분석 중...</div>
+            </div>
+          </div>
+
+          <!-- AI 해설 (우측 고정 카드: 읽기 쉬운 위치) -->
+          <div id="coach-sidebar">
+            <div id="coach-sidebar-header">
+              <span id="coach-sidebar-title">AI 해설</span>
+              <div class="coach-sidebar-actions">
+                <button class="coach-mini-btn" onclick="openCoach()">아래 패널 열기</button>
+                <button class="coach-mini-btn"
+                  onclick="document.getElementById('coach-sidebar').style.display='none'">닫기</button>
+              </div>
+            </div>
+            <div id="coach-sidebar-body">
+              <div class="threat-loading">아직 해설이 없습니다. 아래에서 질문하거나 빠른 버튼을 눌러주세요.</div>
+            </div>
+          </div>
+
+          <div id="move-list-wrap">
+            <div class="move-list-header">
+              <span class="move-list-title">기보</span>
+              <span class="move-count" id="move-count">0 수</span>
+            </div>
+            <div id="move-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-pgn">
+        <div id="pgn-panel" style="display:flex;">
+          <span class="pgn-label">게임 정보</span>
+          <div class="game-info-list">
+            <div class="game-info-row"><span class="game-info-label">백</span><span class="game-info-value"
+                id="info-white">-</span></div>
+            <div class="game-info-row"><span class="game-info-label">흑</span><span class="game-info-value"
+                id="info-black">-</span></div>
+            <div class="game-info-row"><span class="game-info-label">날짜</span><span class="game-info-value"
+                id="info-date">-</span></div>
+            <div class="game-info-row"><span class="game-info-label">결과</span><span class="game-info-value"
+                id="info-result">*</span></div>
+            <div class="game-info-row"><span class="game-info-label">오프닝</span><span class="game-info-value"
+                id="info-opening">-</span></div>
+            <div class="game-info-row" style="margin-top:6px;">
+              <span class="game-info-label" style="color:var(--accent-green-bright);font-weight:700;">내 색상</span>
+              <select id="my-color-select"
+                style="background:var(--bg-tertiary);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:12px;padding:3px 8px;cursor:pointer;outline:none;">
+                <option value="w">⬜ 백 (White)</option>
+                <option value="b">⬛ 흑 (Black)</option>
+              </select>
+            </div>
+          </div>
+          <div class="pgn-divider"></div>
+          <span class="pgn-label">PGN 입력</span>
+          <textarea class="pgn-textarea" id="pgn-input"
+            placeholder="PGN을 여기에 붙여넣기 하세요...&#10;&#10;예시:&#10;1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. O-O Nf6"></textarea>
+          <div class="pgn-actions" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <button class="btn-primary" onclick="loadPGN()" style="flex:1;">불러오기</button>
+            <button class="btn-secondary" onclick="exportPGN()" style="flex:1;">내보내기</button>
+            <button class="btn-secondary" id="btn-save-pgn" onclick="savePGN()"
+              style="flex:1;background:var(--accent-green-dark);color:#fff;border-color:var(--accent-green);">저장</button>
+            <button class="btn-secondary" onclick="copyPGN()" title="PGN 복사"
+              style="width:36px;height:36px;padding:0;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:8px;"
+              id="btn-copy-pgn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M16 1H4C2.9 1 2 1.9 2 3V17H4V3H16V1ZM19 5H8C6.9 5 6 5.9 6 7V21C6 22.1 6.9 23 8 23H19C20.1 23 21 22.1 21 21V7C21 5.9 20.1 5 19 5ZM19 21H8V7H19V21Z" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- ── Stockfish 수 평가 ── -->
+          <div class="pgn-divider"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span class="pgn-label" style="margin-bottom:0;">🎯 Stockfish 수 평가</span>
+            <span id="sf-analysis-depth-badge" style="font-size:9px;color:var(--text-muted);"></span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;">
+            현재 기보를 로컬 Stockfish로 분석합니다. 분석 완료 후 기보 목록에 수 분류 배지가 표시됩니다.
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+            <select id="sf-color-select"
+              style="flex:1;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:12px;padding:5px 8px;outline:none;">
+              <option value="w">내가 백</option>
+              <option value="b">내가 흑</option>
+            </select>
+            <button onclick="analyzeCurrentGameWithSF()" id="sf-analyze-btn"
+              style="flex:1;padding:8px 12px;background:rgba(127,166,80,0.15);border:1px solid rgba(127,166,80,0.4);border-radius:8px;color:var(--accent-green-bright);font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:var(--font-main);white-space:nowrap;">
+              🎯 분석하기
+            </button>
+          </div>
+          <div id="sf-analysis-status"
+            style="display:none;font-size:11px;line-height:1.6;padding:8px 10px;border-radius:8px;background:var(--bg-card);border:1px solid var(--border);">
+          </div>
+          <div id="sf-analysis-result" style="display:none;margin-top:6px;"></div>
+          <div class="pgn-divider"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <span class="pgn-label" style="margin-bottom:0;">저장된 게임</span>
+            <button onclick="loadSavedGames()"
+              style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;"
+              onmouseover="this.style.color='var(--text-secondary)'" onmouseout="this.style.color='var(--text-muted)'">↻
+              새로고침</button>
+          </div>
+          <div id="saved-games-list">
+            <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">로딩 중...</div>
+          </div>
+          <div class="pgn-divider"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <span class="pgn-label" style="margin-bottom:0;">대국 기록 <span
+                style="font-size:9px;color:var(--text-muted);font-weight:400;">화살표 포함</span></span>
+            <button onclick="loadGameRecords()"
+              style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;"
+              onmouseover="this.style.color='var(--text-secondary)'" onmouseout="this.style.color='var(--text-muted)'">↻
+              새로고침</button>
+          </div>
+          <div id="game-records-list">
+            <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-settings">
+        <div id="settings-panel" style="display:flex;">
+          <div>
+            <div class="settings-section-title">보드</div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label">보드 테마</div>
+                <div class="theme-selector" style="margin-top:8px">
+                  <div class="theme-swatch selected" data-theme="classic" title="클래식" onclick="setTheme('classic')">
+                    <span style="background:#f0d9b5"></span><span style="background:#b58863"></span><span
+                      style="background:#b58863"></span><span style="background:#f0d9b5"></span>
+                  </div>
+                  <div class="theme-swatch" data-theme="green" title="녹색" onclick="setTheme('green')"><span
+                      style="background:#eeeed2"></span><span style="background:#769656"></span><span
+                      style="background:#769656"></span><span style="background:#eeeed2"></span></div>
+                  <div class="theme-swatch" data-theme="blue" title="파랑" onclick="setTheme('blue')"><span
+                      style="background:#dee3e6"></span><span style="background:#8ca2ad"></span><span
+                      style="background:#8ca2ad"></span><span style="background:#dee3e6"></span></div>
+                  <div class="theme-swatch" data-theme="purple" title="보라" onclick="setTheme('purple')"><span
+                      style="background:#e0d0f0"></span><span style="background:#9060b0"></span><span
+                      style="background:#9060b0"></span><span style="background:#e0d0f0"></span></div>
+                  <div class="theme-swatch" data-theme="dark" title="다크" onclick="setTheme('dark')"><span
+                      style="background:#4d4d4d"></span><span style="background:#1a1a1a"></span><span
+                      style="background:#1a1a1a"></span><span style="background:#4d4d4d"></span></div>
+                </div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label">기물 스타일</div>
+                <div class="piece-style-selector">
+                  <button class="piece-style-btn selected" onclick="setPieceStyle('cburnett',this)">Cburnett</button>
+                  <button class="piece-style-btn" onclick="setPieceStyle('merida',this)">Merida</button>
+                  <button class="piece-style-btn" onclick="setPieceStyle('alpha',this)">Alpha</button>
+                  <button class="piece-style-btn" onclick="setPieceStyle('neo',this)">Neo</button>
+                  <button class="piece-style-btn" onclick="setPieceStyle('california',this)">California</button>
+                </div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">좌표 표시</div>
+              <div class="toggle on" id="coord-toggle" onclick="toggleCoords(this)"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">마지막 수 강조</div>
+              <div class="toggle on" id="highlight-toggle" onclick="toggleHighlight(this)"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="settings-section-title">엔진 분석</div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label">분석 엔진</div>
+                <div class="settings-row-sub">⚡ Stockfish 18 WASM (서버 불필요)</div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label">분석 깊이</div>
+                <div class="settings-row-sub">⚡ 16부터 시작 → 시간 내 무제한 상승</div>
+              </div>
+              <span style="font-size:12px;color:var(--accent-green-bright);font-weight:700;">∞</span>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">최대 분석 시간</div>
+              <select class="select-input" id="time-select" onchange="setAnalysisTime(this.value)">
+
+                <option value="3000">3초</option>
+                <option value="5000">5초</option>
+                <option value="10000">10초</option>
+                <option value="15000" selected>15초 (권장)</option>
+                <option value="20000">20초</option>
+                <option value="30000">30초</option>
+                <option value="60000">60초</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">최선의 수 개수</div>
+              <select class="select-input" id="multipv-select" onchange="setMultiPV(this.value)">
+                <option value="1">1</option>
+                <option value="3" selected>3</option>
+                <option value="5">5</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">평가 바</div>
+              <div class="toggle on" id="evalbar-toggle" onclick="toggleEvalBar(this)"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">자동 분석</div>
+              <div class="toggle on" id="autoanalyze-toggle" onclick="toggleAutoAnalyze(this)"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 모바일 AI 코치 탭 패널 (모바일 전용) -->
+      <div class="tab-panel" id="tab-coach-mobile">
+        <div style="padding:12px;display:flex;flex-direction:column;gap:10px;height:100%;overflow-y:auto;">
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+            <div
+              style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#7fa650 0%,#5090d0 100%);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">
+              🧠</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--accent-green-bright);">AI 체스 코치</div>
+              <div style="font-size:11px;color:var(--text-muted);">Groq · Llama-3.3-70b</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">API Key</span>
+            <input type="password" id="coach-api-input-mobile" placeholder="Groq API 키 (gsk_...)"
+              style="flex:1;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:12px;padding:6px 10px;outline:none;font-family:monospace;min-width:0;" />
+            <button onclick="saveMobileApiKey()"
+              style="padding:6px 12px;border-radius:6px;border:none;background:var(--accent-green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">저장</button>
+            <span id="coach-key-status-mobile" style="font-size:11px;color:var(--text-muted);width:100%;"></span>
+          </div>
+          <div id="coach-context-display-mobile"
+            style="font-size:11px;color:var(--text-muted);background:var(--bg-tertiary);border-radius:6px;padding:6px 10px;display:none;">
+          </div>
+          <!-- 모바일 미리 정의 질문 -->
+          <div style="display:flex;flex-wrap:wrap;gap:5px;flex-shrink:0;">
+            <div
+              style="font-size:10px;color:var(--text-muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase;width:100%;margin-bottom:2px;">
+              빠른 질문</div>
+            <button class="coach-preset-btn" onclick="setCoachQuestionMobile('제가 표시한 후보수가 좋은 수인가요? 이유를 설명해 주세요.')">💡 내
+              후보수 평가</button>
+            <button class="coach-preset-btn" onclick="setCoachQuestionMobile('현재 포지션에서 가장 중요한 위협과 계획은 무엇인가요?')">⚔️ 위협 &
+              계획</button>
+            <button class="coach-preset-btn"
+              onclick="setCoachQuestionMobile('방금 둔 수의 의도와 그것이 포지션에 미치는 영향을 설명해 주세요.')">↩️ 방금 수 해설</button>
+            <button class="coach-preset-btn" onclick="setCoachQuestionMobile('제가 생각한 수순이 맞는지 확인해 주세요.')">🔢 내 수순
+              검토</button>
+            <button class="coach-preset-btn" onclick="setCoachQuestionMobile('현재 포지션에서 각 진영의 강점과 약점을 분석해 주세요.')">📊 강·약점
+              분석</button>
+          </div>
+          <div id="coach-response-mobile"
+            style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;color:var(--text-primary);min-height:100px;overflow-y:auto;word-break:break-word;display:none;">
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;margin-top:auto;">
+            <textarea id="coach-input-mobile" placeholder="체스 코치에게 질문하세요..." rows="2"
+              style="flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;padding:8px 12px;outline:none;font-family:var(--font-main);resize:none;min-height:40px;max-height:80px;transition:border-color 0.15s;line-height:1.5;"></textarea>
+            <button id="coach-ask-btn-mobile" onclick="askCoachMobile()"
+              style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent-green);color:#fff;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+              </svg>
+              질문
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="status-bar">
+        <div class="status-indicator">
+          <div class="status-dot"></div>
+          <span id="status-text">백의 차례</span>
+        </div>
+        <span>|</span>
+        <span id="move-count-bar">0 수</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Promotion Modal -->
+  <div id="promotion-modal">
+    <div class="promotion-box">
+      <div class="promotion-title">프로모션 기물 선택</div>
+      <div class="promotion-pieces" id="promo-pieces"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+
+  <!-- ===== 오프닝 데이터베이스 & 실시간 감지 ===== -->
+  
+
+  <!-- ===== 보드 오버레이: 위협(Null-Move) & 최선수 화살표 ===== -->
+  
+
+  
+
+
+  <style>
+    .mob-nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      flex: 1;
+      padding: 6px 4px;
+      color: var(--text-muted);
+      transition: color 0.15s;
+    }
+
+    .mob-nav-item span {
+      font-size: 9px;
+      line-height: 1;
+    }
+
+    .mob-nav-item:hover,
+    .mob-nav-item.active {
+      color: var(--accent-green-bright);
+    }
+
+    /* ========================================
+   반응형 공통: 모바일 하단 내비 + 사이드바
+   ======================================== */
+    #mobile-bottom-nav {
+      display: none;
+    }
+
+    .mob-nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      flex: 1;
+      padding: 6px 4px;
+      color: var(--text-muted);
+      transition: color 0.15s;
+      text-decoration: none;
+    }
+
+    .mob-nav-item span {
+      font-size: 9px;
+      line-height: 1;
+    }
+
+    .mob-nav-item:hover,
+    .mob-nav-item.active {
+      color: var(--accent-green-bright);
+    }
+
+    @media (max-width: 768px) {
+      #sidebar {
+        display: none !important;
+      }
+
+      #mobile-bottom-nav {
+        display: flex !important;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 56px;
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border);
+        z-index: 600;
+        align-items: center;
+        justify-content: space-around;
+        padding: 0 4px;
+      }
+    }
+
+    /* ====== analysis 반응형 (PC 창 크기 변화) ====== */
+    /* 우측 패널: 창 좁을 때 더 좁게 */
+    @media (max-width: 1100px) and (min-width: 769px) {
+      #right-panel {
+        width: 260px !important;
+      }
+
+      #coach-panel.open {
+        width: 260px !important;
+        min-width: 260px !important;
+      }
+    }
+
+    @media (max-width: 950px) and (min-width: 769px) {
+      #right-panel {
+        width: 220px !important;
+      }
+
+      #coach-panel.open {
+        width: 0 !important;
+        min-width: 0 !important;
+      }
+
+      #coach-panel {
+        display: none !important;
+      }
+    }
+
+    /* 보드: 항상 남은 공간에 꽉 차도록 CSS 변수 덮어씀 */
+    @media (min-width: 769px) {
+      :root {
+        --board-size: min(calc(100vh - 160px), calc(100vw - var(--sidebar-width) - 300px - 68px));
+      }
+
+      #chessboard,
+      .chessboard {
+        width: var(--board-size) !important;
+        height: var(--board-size) !important;
+      }
+
+      .player-info,
+      #eval-container,
+      #board-controls,
+      #board-controls-row {
+        width: var(--board-size) !important;
+        max-width: var(--board-size) !important;
+      }
+
+      #eval-bar-wrap {
+        height: var(--board-size) !important;
+      }
+    }
+
+    @media (max-width: 950px) and (min-width: 769px) {
+      :root {
+        --board-size: min(calc(100vh - 160px), calc(100vw - var(--sidebar-width) - 220px - 52px));
+      }
+    }
+
+    /* 모바일 */
+    @media (max-width: 768px) {
+      body {
+        padding-bottom: 56px;
+      }
+
+      #board-area {
+        padding: 8px;
+        padding-bottom: 64px;
+        align-items: center !important;
+      }
+
+      :root {
+        --board-size: min(calc(100vw - 16px), calc(100vh - 200px));
+      }
+
+      #chessboard,
+      .chessboard {
+        width: var(--board-size) !important;
+        height: var(--board-size) !important;
+      }
+
+      .player-info,
+      #eval-container,
+      #board-controls,
+      #board-controls-row {
+        width: var(--board-size) !important;
+        max-width: var(--board-size) !important;
+      }
+
+      #eval-bar-wrap {
+        height: var(--board-size) !important;
+      }
+
+      #right-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 56px;
+        width: min(320px, 90vw) !important;
+        z-index: 499;
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+      }
+
+      #right-panel.mobile-open {
+        transform: translateX(0);
+      }
+
+      #mobile-panel-toggle {
+        display: flex !important;
+        bottom: 72px;
+      }
+
+      #mobile-panel-backdrop.show {
+        display: block;
+      }
+
+      #coach-panel {
+        display: none !important;
+      }
+    }
+  </style>
+
+
+  <!-- 모바일 하단 내비게이션 -->
+  <nav id="mobile-bottom-nav">
+    <a class="mob-nav-item active" href="/"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24"
+          fill="currentColor">
+          <path
+            d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z" />
+        </svg></span><span>분석</span></a>
+    <a class="mob-nav-item" href="/play.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24"
+          fill="currentColor">
+          <path
+            d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+        </svg></span><span>대국</span></a>
+    <a class="mob-nav-item" href="/puzzle.html"><span class="mob-nav-icon"><svg width="20" height="20"
+          viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z" />
+        </svg></span><span>퍼즐</span></a>
+    <a class="mob-nav-item" href="/opening-explorer.html"><span class="mob-nav-icon"><svg width="20" height="20"
+          viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+        </svg></span><span>탐색기</span></a>
+    <a class="mob-nav-item" href="/records.html"><span class="mob-nav-icon"><svg width="20" height="20"
+          viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20ZM8 15V17H16V15H8ZM8 11V13H16V11H8Z" />
+        </svg></span><span>기록</span></a>
+    <a class="mob-nav-item" href="/study.html"><span class="mob-nav-icon"><svg width="20" height="20"
+          viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z" />
+        </svg></span><span>학습</span></a>
+    <a class="mob-nav-item" href="/practice.html"><span class="mob-nav-icon"><svg width="20" height="20"
+          viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 5h-2V3H7v2H5v14h2v2h10v-2h2V5zm-2 12H7V7h10v10zM9 9h6v6H9V9z" />
+        </svg></span><span>연습</span></a>
+    <a class="mob-nav-item" href="/records.html?tab=stats"><span class="mob-nav-icon"><svg width="20" height="20"
+          viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z" />
+        </svg></span><span>통계</span></a>
+  </nav>
+
+  
+  <!-- ===== Stockfish 수 평가 (records.html 과 동일 파이프라인) ===== -->

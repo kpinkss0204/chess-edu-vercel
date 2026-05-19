@@ -1,0 +1,20 @@
+{
+  "id": "records",
+  "file": "records.html",
+  "title": "Chess — 기보 기록",
+  "linkCss": [
+    "theme-ui.css"
+  ],
+  "externalScripts": [
+    "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js",
+    "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js",
+    "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js",
+    "theme-global.js",
+    "chess-wasm-fixed/chess.js",
+    "chess-wasm-fixed/engine.js",
+    "chess-wasm-fixed/parse-pgn-states.js",
+    "chess-wasm-fixed/lichess-judgment.js",
+    "chess-wasm-fixed/chess-tactics.js",
+    "auth-check.js"
+  ]
+}

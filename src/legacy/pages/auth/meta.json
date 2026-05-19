@@ -1,0 +1,11 @@
+{
+  "id": "auth",
+  "file": "auth.html",
+  "title": "체스 분석 보드 — 로그인",
+  "linkCss": [
+    "theme-ui.css"
+  ],
+  "externalScripts": [
+    "theme-global.js"
+  ]
+}

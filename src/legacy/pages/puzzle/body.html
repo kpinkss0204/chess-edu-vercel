@@ -1,0 +1,353 @@
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <a class="sidebar-logo" href="/" title="체스 홈">♟</a>
+  <div class="sidebar-nav">
+    <a class="sidebar-item" href="/" title="분석" style="text-decoration:none;">
+      <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z"/></svg></div>
+      <span class="sidebar-label">분석</span>
+    </a>
+    <a class="sidebar-item" href="/play.html" title="온라인 대국" style="text-decoration:none;">
+      <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></div>
+      <span class="sidebar-label">대국</span>
+    </a>
+    <a class="sidebar-item active" href="/puzzle.html" title="퍼즐 훈련" style="text-decoration:none;">
+      <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg></div>
+      <span class="sidebar-label">퍼즐</span>
+    </a>
+    <a class="sidebar-item" href="/opening-explorer.html" title="오프닝 탐색기" style="text-decoration:none;">
+      <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></div>
+      <span class="sidebar-label">탐색기</span>
+    </a>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item" href="/records.html" title="기록" style="text-decoration:none;">
+      <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20ZM8 15V17H16V15H8ZM8 11V13H16V11H8Z"/></svg></div>
+      <span class="sidebar-label">기록</span>
+    </a>
+    <a class="sidebar-item" href="/study.html" title="학습" style="text-decoration:none;">
+      <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg></div>
+      <span class="sidebar-label">학습</span>
+    </a>
+    <a class="sidebar-item" href="/practice.html" title="엔진 연습" style="text-decoration:none;">
+      <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5v14h2v2h10v-2h2V5zm-2 12H7V7h10v10zM9 9h6v6H9V9z"/></svg></div>
+      <span class="sidebar-label">연습</span>
+    </a>
+    <a class="sidebar-item" href="/records.html?tab=stats" title="통계" style="text-decoration:none;">
+      <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/></svg></div>
+      <span class="sidebar-label">통계</span>
+    </a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="sidebar-user" id="sidebar-user-info">
+      <div class="sidebar-avatar" id="sidebar-avatar-letter">?</div>
+      <div class="sidebar-username" id="sidebar-username">로딩중</div>
+    </div>
+    <div class="sidebar-item logout-btn" title="로그아웃" onclick="handleLogout()">
+      <div class="sidebar-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </div>
+      <span class="sidebar-label">로그아웃</span>
+    </div>
+    <div class="sidebar-item" title="테마 변경" onclick="toggleColorMode()">
+      <div class="sidebar-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20 8.69V4H15.31L12 0.69L8.69 4H4V8.69L0.69 12L4 15.31V20H8.69L12 23.31L15.31 20H20V15.31L23.31 12L20 8.69ZM12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C15.31 6 18 8.69 18 12C18 15.31 15.31 18 12 18Z"/></svg>
+      </div>
+      <span class="sidebar-label">테마</span>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- THEME LIST VIEW -->
+  <div id="theme-list-view">
+    <div id="puzzle-content">
+
+      <!-- TOP BAR -->
+      <div id="puzzle-topbar">
+        <h1><span class="puzzle-icon">🧩</span> 퍼즐 훈련</h1>
+        <div class="topbar-sep"></div>
+        <div id="puzzle-streak">
+          <span class="streak-fire">🔥</span>
+          <span class="streak-num" id="streak-count">0</span>
+          <span>연속</span>
+        </div>
+        <div id="puzzle-rating-display">
+          ⭐ 퍼즐 레이팅 <span class="rating-val" id="my-rating">1200</span>
+        </div>
+      </div>
+
+      <!-- SCROLL AREA -->
+      <div id="puzzle-scroll">
+
+        <!-- 내 기보 기반 퍼즐 -->
+        <div class="section-header" style="margin-top:8px;">
+          <h2>🎮 내 기보 기반 퍼즐</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge" id="game-puzzle-section-badge">불러오는 중…</div>
+        </div>
+        <div class="theme-grid" id="grid-game-puzzles">
+          <div class="theme-card" style="--card-accent:#e08030; cursor:default; opacity:0.6;">
+            <div class="theme-card-icon">⏳</div>
+            <div class="theme-card-name">분석 중...</div>
+            <div class="theme-card-desc">실제 기보에서 전술 포지션을 추출하고 있습니다</div>
+          </div>
+        </div>
+
+        <!-- 오늘의 퍼즐 -->
+        <div class="daily-puzzle-banner" onclick="openTheme('daily')">
+          <div class="daily-icon">📅</div>
+          <div class="daily-info">
+            <div class="daily-title">오늘의 퍼즐</div>
+            <div class="daily-sub">매일 새로운 퍼즐로 실력을 점검하세요. 완료 시 특별 보너스 포인트!</div>
+          </div>
+          <div class="daily-badge">오늘 도전!</div>
+        </div>
+
+        <!-- 통계 -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">총 풀이</div>
+            <div class="stat-value" id="stat-total">0</div>
+            <div class="stat-sub">개 퍼즐</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">정답률</div>
+            <div class="stat-value" id="stat-acc">—</div>
+            <div class="stat-sub">% 정확도</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">최장 연속</div>
+            <div class="stat-value" id="stat-streak">0</div>
+            <div class="stat-sub">연속 정답</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">오늘 완료</div>
+            <div class="stat-value" id="stat-today">0</div>
+            <div class="stat-sub">개</div>
+          </div>
+        </div>
+
+        <!-- 체크메이트 패턴 -->
+        <div class="section-header">
+          <h2>♟ 체크메이트 패턴</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge">6개 테마</div>
+        </div>
+        <div class="theme-grid" id="grid-mate"></div>
+
+        <!-- 전술 기술 -->
+        <div class="section-header">
+          <h2>⚔️ 전술 기술</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge">8개 테마</div>
+        </div>
+        <div class="theme-grid" id="grid-tactics"></div>
+
+        <!-- 오프닝 & 엔딩 -->
+        <div class="section-header">
+          <h2>📖 오프닝 & 엔딩</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge">6개 테마</div>
+        </div>
+        <div class="theme-grid" id="grid-phases"></div>
+
+        <!-- 포지셔널 -->
+        <div class="section-header">
+          <h2>🏰 포지셔널</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge">5개 테마</div>
+        </div>
+        <div class="theme-grid" id="grid-positional"></div>
+
+        <!-- 특수 상황 -->
+        <div class="section-header">
+          <h2>✨ 특수 상황</h2>
+          <div class="section-header-line"></div>
+          <div class="section-badge">4개 테마</div>
+        </div>
+        <div class="theme-grid" id="grid-special"></div>
+
+      </div><!-- /puzzle-scroll -->
+    </div><!-- /puzzle-content -->
+  </div><!-- /theme-list-view -->
+
+  <!-- PUZZLE BOARD VIEW -->
+  <div id="puzzle-board-view">
+    <div id="puzzle-board-col">
+      <div style="display:flex; align-items:center; gap:12px; width:min(480px, calc(100vw - 340px));">
+        <button id="back-to-themes-btn" onclick="exitPuzzleView()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          테마 목록
+        </button>
+        <div style="flex:1; height:1px; background:var(--border);"></div>
+        <div id="puzzle-nav-info" style="font-size:11px; color:var(--text-muted);">퍼즐 1 / 10</div>
+      </div>
+
+      <div id="puzzle-board-wrap">
+        <div id="puzzle-chessboard"></div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:10px; width:min(480px, calc(100vw - 340px));">
+        <div id="turn-indicator" style="
+          display:flex; align-items:center; gap:7px;
+          font-size:12px; color:var(--text-secondary);
+          background:var(--bg-card); border:1px solid var(--border);
+          border-radius:8px; padding:6px 12px;
+        ">
+          <div id="turn-dot" style="width:12px;height:12px;border-radius:50%;background:#fff;border:1px solid #ccc;"></div>
+          <span id="turn-text">백이 움직입니다</span>
+        </div>
+        <div style="flex:1;"></div>
+        <div id="eval-chip" style="
+          font-size:11px; color:var(--text-muted);
+          background:var(--bg-card); border:1px solid var(--border);
+          border-radius:8px; padding:6px 12px;
+          font-family:monospace;
+        ">레이팅: —</div>
+      </div>
+    </div>
+
+    <!-- SIDE PANEL -->
+    <div id="puzzle-side-panel">
+      <div id="psp-header">
+        <div class="psp-theme-tag" id="psp-theme-tag">🔀 테마</div>
+        <div class="psp-puzzle-title" id="psp-puzzle-title">퍼즐 제목</div>
+        <div class="psp-puzzle-meta">
+          <span id="psp-rating">레이팅: —</span>
+          <span>·</span>
+          <span id="psp-moves">수: —</span>
+        </div>
+      </div>
+
+      <div id="psp-body">
+        <div class="psp-instruction">
+          <span class="inst-icon">💡</span>
+          <div id="psp-instruction-text">최선의 수를 찾아보세요. 기물을 클릭한 후 이동할 칸을 클릭하세요.</div>
+        </div>
+
+        <div id="puzzle-feedback"></div>
+
+        <div>
+          <div class="move-history-label">진행된 수</div>
+          <div class="move-history-list" id="move-history-list">
+            <span style="font-size:11px;color:var(--text-muted);">아직 수가 없습니다</span>
+          </div>
+        </div>
+
+        <!-- 진행률 -->
+        <div>
+          <div class="move-history-label">세트 진행률</div>
+          <div class="puzzle-progress-wrap">
+            <div class="puzzle-progress-bar-bg">
+              <div class="puzzle-progress-bar-fill" id="progress-fill" style="width:0%"></div>
+            </div>
+            <div class="puzzle-progress-label" id="progress-label">0 / 10</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="psp-footer">
+        <div class="puzzle-action-row">
+          <button class="pz-btn" id="hint-btn" onclick="showHint()">💡 힌트</button>
+          <button class="pz-btn" id="solution-btn" onclick="showSolution()">👁 정답보기</button>
+          <button class="pz-btn" id="retry-btn" onclick="retryPuzzle()" style="display:none;">🔄 다시</button>
+        </div>
+        <div class="puzzle-action-row">
+          <button class="pz-btn" onclick="prevPuzzle()">← 이전</button>
+          <button class="pz-btn primary" id="next-puzzle-btn" onclick="nextPuzzle()">다음 퍼즐 →</button>
+        </div>
+        <div class="puzzle-action-row">
+          <button class="pz-btn" id="analyze-btn" onclick="openInAnalysis()" style="background:rgba(80,144,208,0.15);border-color:rgba(80,144,208,0.4);color:#7eb8e8;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z"/></svg>
+            분석으로 보기
+          </button>
+        </div>
+        <div id="psp-game-source" class="psp-game-source" style="display:none;">
+          <span class="src-icon">🎮</span>
+          <div class="src-text" id="psp-game-source-text">내 대국에서 생성된 퍼즐</div>
+        </div>
+        <div style="display:flex; justify-content:center; margin-top:2px;">
+          <a id="lichess-link" class="lichess-link-btn" href="#" target="_blank" style="display:none;">
+            ♟ Lichess에서 보기
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- 기보 기반 퍼즐 선택 모달 -->
+<div id="game-puzzle-modal-backdrop" onclick="closeGamePuzzleModal(event)">
+  <div id="game-puzzle-modal">
+    <div id="gpm-header">
+      <div id="gpm-header-icon">🎮</div>
+      <div id="gpm-header-title">내 기보 기반 퍼즐</div>
+      <button id="gpm-header-close" onclick="closeGamePuzzleModal()">✕</button>
+    </div>
+    <div id="gpm-body">
+      <div class="gp-loading" id="gpm-loading">
+        <div class="lichess-spinner"></div>
+        <div>기보에서 전술 포지션 분석 중…</div>
+      </div>
+    </div>
+    <div id="gpm-footer">
+      <button class="pz-btn" onclick="closeGamePuzzleModal()" style="flex:none;padding:11px 18px;">취소</button>
+      <button class="pz-btn primary" id="gpm-start-btn" onclick="startGamePuzzle()" style="flex:1;" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        선택한 퍼즐 시작
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- THEME MODAL -->
+<div id="puzzle-modal-backdrop" onclick="closeModal(event)">
+  <div id="puzzle-modal">
+    <div id="modal-header">
+      <div id="modal-theme-icon">🎯</div>
+      <div style="flex:1;">
+        <div id="modal-theme-name">테마 이름</div>
+        <div id="modal-theme-desc" style="font-size:12px;color:var(--text-secondary);margin-top:2px;">테마 설명</div>
+      </div>
+      <button id="modal-close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-body">
+      <div class="modal-section-title">난이도 선택</div>
+      <div class="diff-row" id="diff-row">
+        <button type="button" class="diff-btn selected" data-diff="beginner" onclick="selectDiff(this,'beginner')">🟢 입문 (800–1200)</button>
+        <button type="button" class="diff-btn" data-diff="intermediate" onclick="selectDiff(this,'intermediate')">🟡 중급 (1200–1600)</button>
+        <button type="button" class="diff-btn" data-diff="advanced" onclick="selectDiff(this,'advanced')">🔴 고급 (1600–2000)</button>
+        <button type="button" class="diff-btn" data-diff="expert" onclick="selectDiff(this,'expert')">🟣 전문가 (2000+)</button>
+      </div>
+      <div class="modal-section-title">퍼즐 세트</div>
+      <div class="puzzle-set-list" id="puzzle-set-list"></div>
+    </div>
+    <div id="modal-footer">
+      <button id="random-puzzle-btn" onclick="startRandom()">🎲 랜덤</button>
+      <button id="start-puzzle-btn" onclick="startSelected()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        퍼즐 시작
+      </button>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- 모바일 하단 내비게이션 -->
+<nav id="mobile-bottom-nav">
+  <a class="mob-nav-item" href="/"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z"/></svg></span><span>분석</span></a>
+  <a class="mob-nav-item" href="/play.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></span><span>대국</span></a>
+  <a class="mob-nav-item active" href="/puzzle.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg></span><span>퍼즐</span></a>
+  <a class="mob-nav-item" href="/opening-explorer.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></span><span>탐색기</span></a>
+  <a class="mob-nav-item" href="/records.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20ZM8 15V17H16V15H8ZM8 11V13H16V11H8Z"/></svg></span><span>기록</span></a>
+  <a class="mob-nav-item" href="/study.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg></span><span>학습</span></a>
+  <a class="mob-nav-item" href="/practice.html"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5v14h2v2h10v-2h2V5zm-2 12H7V7h10v10zM9 9h6v6H9V9z"/></svg></span><span>연습</span></a>
+  <a class="mob-nav-item" href="/records.html?tab=stats"><span class="mob-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/></svg></span><span>통계</span></a>
+</nav>
