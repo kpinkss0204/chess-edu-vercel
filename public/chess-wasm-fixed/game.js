@@ -1582,12 +1582,12 @@ class ChessGame {
     });
 
     const elBlack = document.getElementById('captured-black');
-    if (elBlack) elBlack.innerHTML = capturedByBlack.map(p=>
+    elBlack.innerHTML = capturedByBlack.map(p=>
       `<img src="${pieceImg(p)}" style="width:18px;height:18px;opacity:0.9" alt="${p}">`
     ).join('');
 
     const elWhite = document.getElementById('captured-white');
-    if (elWhite) elWhite.innerHTML = capturedByWhite.map(p=>
+    elWhite.innerHTML = capturedByWhite.map(p=>
       `<img src="${pieceImg(p)}" style="width:18px;height:18px;opacity:0.9" alt="${p}">`
     ).join('');
   }
@@ -2192,13 +2192,13 @@ class ChessGame {
 
     if (whiteMatch) {
       document.getElementById('info-white').textContent = whiteMatch[1];
-      const nameW = document.getElementById('name-white'); if (nameW) nameW.textContent = whiteMatch[1];
-      const ratingW = document.getElementById('rating-white'); if (ratingW) ratingW.textContent = eloWhiteMatch ? eloWhiteMatch[1] : '?';
+      document.getElementById('name-white').textContent = whiteMatch[1];
+      document.getElementById('rating-white').textContent = eloWhiteMatch ? eloWhiteMatch[1] : '?';
     }
     if (blackMatch) {
       document.getElementById('info-black').textContent = blackMatch[1];
-      const nameB = document.getElementById('name-black'); if (nameB) nameB.textContent = blackMatch[1];
-      const ratingB = document.getElementById('rating-black'); if (ratingB) ratingB.textContent = eloBlackMatch ? eloBlackMatch[1] : '?';
+      document.getElementById('name-black').textContent = blackMatch[1];
+      document.getElementById('rating-black').textContent = eloBlackMatch ? eloBlackMatch[1] : '?';
     }
     if (dateMatch)   document.getElementById('info-date').textContent = dateMatch[1];
     if (resultMatch) document.getElementById('info-result').textContent = resultMatch[1];
