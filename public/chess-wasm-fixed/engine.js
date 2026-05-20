@@ -548,6 +548,12 @@ function handleMainWorkerMessage(e) {
     }
 
   } else if (line.startsWith('bestmove')) {
+    // [수정] 현재 분석 ID와 일치하는 경우에만 bestmove 처리 및 UI 갱신 수행
+    if (cycleId !== currentAnalysisId) {
+      console.log('[SF] Stale bestmove ignored:', line);
+      return;
+    }
+
     if (typeof window._enginePlayAfterStop === 'function') {
       clearTimeout(renderTimer);
       const next = window._enginePlayAfterStop;
@@ -571,65 +577,64 @@ function handleMainWorkerMessage(e) {
 
     clearTimeout(renderTimer);
     engineSearching = false;
-    // 이 bestmove가 현재 분석에 속하지 않으면 무시
-    if (cycleId === currentAnalysisId) {
-      document.getElementById('engine-dot').className = 'engine-dot ready';
+    
+    // bestmove 처리 시점의 데이터가 유효한지 재확인
+    document.getElementById('engine-dot').className = 'engine-dot ready';
 
-      // 미처 flush 안 된 마지막 사이클
-      if (Object.keys(cycleStore).length && cycleSnap) {
-        flushCycleToDisplay();
-      }
+    // 미처 flush 안 된 마지막 사이클
+    if (Object.keys(cycleStore).length && cycleSnap) {
+      flushCycleToDisplay();
+    }
 
-      const b = pvData[1];
-      if (b) {
-        document.getElementById('depth-info').textContent =
-          `✓ d${b.depth}` +
-          (b.nps    ? ` · ${(b.nps/1e6).toFixed(1)}Mnps` : '') +
-          (b.time_ms? ` · ${(b.time_ms/1000).toFixed(1)}s` : '');
-        document.getElementById('eval-score').textContent = b.eval;
-        updateEvalBarFromCp(b.cpFromWhite, b.eval);
-        renderTopMoves();
+    const b = pvData[1];
+    if (b) {
+      document.getElementById('depth-info').textContent =
+        `✓ d${b.depth}` +
+        (b.nps    ? ` · ${(b.nps/1e6).toFixed(1)}Mnps` : '') +
+        (b.time_ms? ` · ${(b.time_ms/1000).toFixed(1)}s` : '');
+      document.getElementById('eval-score').textContent = b.eval;
+      updateEvalBarFromCp(b.cpFromWhite, b.eval);
+      renderTopMoves();
 
-        // evalCache 저장
-        const savedFen = lastSentFen || pendingFen;
-        if (savedFen && b) {
-          // 메이트 수순 정보 추출
-          let mateIn = null;
-          if (b.score_type === 'mate') {
-            mateIn = b.score_val;
-          } else if (Math.abs(b.cpFromWhite) >= 9000) {
-            const turn = savedFen.split(' ')[1] || 'w';
-            mateIn = b.cpFromWhite > 0 ? (turn === 'w' ? 99 : -99) : (turn === 'w' ? -99 : 99);
-          }
-          const topAlts = {
-            best1cp: pvData[1] ? pvData[1].cpFromWhite : null,
-            best2cp: pvData[2] ? pvData[2].cpFromWhite : null,
-          };
-          let legalMoveCount = null;
-          try {
-            const fp = savedFen.split(' ');
-            if (fp.length >= 2) {
-              const tb = parseFenBoard(fp[0]);
-              const tt = fp[1];
-              const tc = parseFenCastling(fp[2] || '-');
-              const te = parseFenEP(fp[3] || '-');
-              if (tb) legalMoveCount = getAllLegalMoves(tb, tt, tc, te).length;
-            }
-          } catch(e) {}
-          const slimPvs = {};
-          for (const [k, v] of Object.entries(rawPvStore)) {
-            slimPvs[k] = {
-              depth: v.depth, score_type: v.score_type, score_val: v.score_val,
-              pv: (v.pv || []).slice(0, 6), multipv: v.multipv,
-            };
-          }
-          evalCache[normFen(savedFen)] = {
-            cp: b.cpFromWhite, depth: b.depth, topAlts, legalMoveCount,
-            mateIn, pvs: slimPvs, turn: pendingTurn,
-          };
-          updateMoveAnnotations();
-          tryTriggerTacticsForCurrentMove(savedFen);
+      // evalCache 저장
+      const savedFen = lastSentFen || pendingFen;
+      if (savedFen && b) {
+        // 메이트 수순 정보 추출
+        let mateIn = null;
+        if (b.score_type === 'mate') {
+          mateIn = b.score_val;
+        } else if (Math.abs(b.cpFromWhite) >= 9000) {
+          const turn = savedFen.split(' ')[1] || 'w';
+          mateIn = b.cpFromWhite > 0 ? (turn === 'w' ? 99 : -99) : (turn === 'w' ? -99 : 99);
         }
+        const topAlts = {
+          best1cp: pvData[1] ? pvData[1].cpFromWhite : null,
+          best2cp: pvData[2] ? pvData[2].cpFromWhite : null,
+        };
+        let legalMoveCount = null;
+        try {
+          const fp = savedFen.split(' ');
+          if (fp.length >= 2) {
+            const tb = parseFenBoard(fp[0]);
+            const tt = fp[1];
+            const tc = parseFenCastling(fp[2] || '-');
+            const te = parseFenEP(fp[3] || '-');
+            if (tb) legalMoveCount = getAllLegalMoves(tb, tt, tc, te).length;
+          }
+        } catch(e) {}
+        const slimPvs = {};
+        for (const [k, v] of Object.entries(rawPvStore)) {
+          slimPvs[k] = {
+            depth: v.depth, score_type: v.score_type, score_val: v.score_val,
+            pv: (v.pv || []).slice(0, 6), multipv: v.multipv,
+          };
+        }
+        evalCache[normFen(savedFen)] = {
+          cp: b.cpFromWhite, depth: b.depth, topAlts, legalMoveCount,
+          mateIn, pvs: slimPvs, turn: pendingTurn,
+        };
+        updateMoveAnnotations();
+        tryTriggerTacticsForCurrentMove(savedFen);
       }
     }
 
