@@ -25,6 +25,13 @@
 ### 4. AI-Driven Analysis (Augmentation)
 엔진의 수치적 데이터(Centipawns)를 AI(Gemini/Groq)가 해석하여 "왜 이 수가 실수인가?"를 인간의 언어로 코칭해주는 시스템을 구축하였습니다.
 
+  4. 기술 요약 (Tech Stack)
+   * Language: JavaScript (ES Modules)
+   * Frontend: React, React Router, Vite, Vanilla CSS
+   * Backend: Node.js (Serverless)
+   * AI/ML: Google Gemini API, Groq Cloud API
+   * Chess Engine: Stockfish (WASM)
+   * External Integration: Lichess API
 ---
 
 ## 📂 상세 폴더 구조 (Directory Tree)
