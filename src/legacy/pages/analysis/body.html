@@ -141,6 +141,7 @@
           <div id="eval-bar-fill" style="height:50%"></div>
           <span id="eval-score-black">0.0</span>
           <span id="eval-score-white">0.0</span>
+          <span id="eval-score-mobile-bar">0.0</span>
         </div>
         <div id="board-wrap">
           <div id="chessboard"></div>
@@ -283,8 +284,6 @@
         <button class="tab-btn active" onclick="switchTab('analysis')">분석</button>
         <button class="tab-btn" onclick="switchTab('pgn')">PGN</button>
         <button class="tab-btn" onclick="switchTab('settings')">설정</button>
-        <button class="tab-btn" id="tab-btn-coach-mobile" onclick="switchTab('coach-mobile')" style="display:none;">🧠
-          AI코치</button>
         <button class="tab-btn" id="tab-btn-more" onclick="switchTab('more')">더보기</button>
       </div>
 
@@ -564,8 +563,6 @@
       </div>
 
       <!-- 모바일 AI 코치 탭 패널 (모바일 전용) -->
-      <div class="tab-panel" id="tab-coach-mobile" style="display:none;"></div>
-
       <div class="tab-panel" id="tab-more">
         <div style="padding:8px 0;">
           <a class="more-menu-item" href="/play.html">
@@ -801,10 +798,9 @@
       }
 
       #eval-bar-wrap {
-        /* 세로 막대를 가로로 눕힘 */
         width: var(--board-size) !important;
         height: 28px !important;
-        order: -1; /* eval-container 안에서 board-wrap보다 위 */
+        order: -1;
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
@@ -812,18 +808,15 @@
         border-radius: 6px !important;
         overflow: hidden !important;
         margin-bottom: 4px;
-        background: var(--bg-tertiary, #222);
+        background: #1a1a1a;
       }
 
-      /* 기존 세로 fill을 가로 fill로 교체 */
       #eval-bar-fill {
-        /* 기존 height 스타일을 JS가 세팅하는데, 모바일에선 width로 재해석 */
-        /* JS가 height:50% 세팅 → 우리가 CSS transform으로 회전 */
         position: absolute !important;
         left: 0 !important;
         top: 0 !important;
         bottom: 0 !important;
-        width: 50% !important; /* JS height 값을 width로 미러링 (아래 JS로 동기화) */
+        width: 50% !important;
         height: 100% !important;
         background: #fff !important;
         transition: width 0.4s ease !important;
@@ -833,26 +826,31 @@
         display: none !important;
       }
 
-      /* 평가 숫자: 막대 왼쪽에 */
       #eval-score-white,
       #eval-score-black {
         display: none !important;
       }
 
-      /* eval-score (board-controls 안) 를 막대 왼쪽에 오버레이 */
-      #eval-bar-wrap::before {
-        content: attr(data-score);
-        position: absolute;
-        left: 6px;
-        top: 50%;
-        transform: translateY(-50%);
-        font-size: 11px;
-        font-weight: 700;
-        color: #333;
-        z-index: 2;
-        pointer-events: none;
-        mix-blend-mode: difference;
-        filter: invert(1);
+      /* 평가 숫자: 막대 왼쪽 안에 표시 */
+      #eval-score-mobile-bar {
+        display: block !important;
+        position: absolute !important;
+        left: 7px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        font-size: 11px !important;
+        font-weight: 800 !important;
+        z-index: 3 !important;
+        pointer-events: none !important;
+        color: #222 !important;
+        mix-blend-mode: difference !important;
+        filter: invert(1) !important;
+        line-height: 1 !important;
+      }
+
+      /* board-controls의 eval-score 숫자는 모바일에서 숨김 */
+      #eval-score {
+        display: none !important;
       }
 
       #right-panel {
@@ -947,49 +945,73 @@
   </nav>
 
   <script>
-  // 모바일: eval-bar-fill height → width 동기화 + 점수 표시
-  (function() {
-    function isMobile() { return window.innerWidth <= 768; }
-
-    function syncEvalBar() {
-      if (!isMobile()) return;
-      const fill = document.getElementById('eval-bar-fill');
-      const wrap = document.getElementById('eval-bar-wrap');
-      const scoreEl = document.getElementById('eval-score');
-      if (!fill || !wrap) return;
-
-      // fill의 height 스타일(JS가 세팅한 값)을 width로 미러링
-      const hStyle = fill.style.height;
-      if (hStyle) {
-        fill.style.width = hStyle;
-        fill.style.height = '100%';
-      }
-
-      // 점수 표시
-      if (scoreEl) {
-        wrap.setAttribute('data-score', scoreEl.textContent || '0.0');
-      }
+  // AI코치 탭 버튼이 삭제되었으므로 ui.js의 show 시도를 방어
+  document.addEventListener('DOMContentLoaded', function() {
+    var _origGetById = document.getElementById.bind(document);
+    // switchTab이 coach-mobile을 요청하면 무시
+    var _origSwitchTab = window.switchTab;
+    if (typeof _origSwitchTab === 'function') {
+      window.switchTab = function(tab) {
+        if (tab === 'coach-mobile') return;
+        _origSwitchTab(tab);
+      };
     }
+  });
+  // 모바일: updateEvalBarFromCp를 패치해서 height→width 변환 + 점수 span 직접 업데이트
+  (function() {
+    function patchEvalBar() {
+      if (typeof updateEvalBarFromCp !== 'function') {
+        setTimeout(patchEvalBar, 100);
+        return;
+      }
+      var _orig = updateEvalBarFromCp;
+      updateEvalBarFromCp = function(cpFromWhite, evalStr) {
+        // 원본 실행
+        _orig(cpFromWhite, evalStr);
 
-    // MutationObserver로 fill 스타일 변화 감지
-    function init() {
-      const fill = document.getElementById('eval-bar-fill');
-      const scoreEl = document.getElementById('eval-score');
-      if (!fill) { setTimeout(init, 300); return; }
+        // 모바일에서만 추가 처리
+        if (window.innerWidth > 768) return;
 
-      syncEvalBar();
+        var fill = document.getElementById('eval-bar-fill');
+        var scoreSpan = document.getElementById('eval-score-mobile-bar');
+        var es = document.getElementById('eval-score');
 
-      const obs = new MutationObserver(syncEvalBar);
-      obs.observe(fill, { attributes: true, attributeFilter: ['style'] });
-      if (scoreEl) obs.observe(scoreEl, { childList: true, subtree: true, characterData: true });
+        // height → width 변환
+        if (fill && fill.style.height) {
+          fill.style.width = fill.style.height;
+          fill.style.height = '100%';
+        }
+
+        // 점수 텍스트 막대 안 span에 표시
+        if (scoreSpan && es) {
+          scoreSpan.textContent = es.textContent || '0.0';
+        }
+      };
     }
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', init);
+      document.addEventListener('DOMContentLoaded', patchEvalBar);
     } else {
-      init();
+      patchEvalBar();
     }
-    window.addEventListener('resize', syncEvalBar);
+
+    // 리사이즈 시 재적용
+    window.addEventListener('resize', function() {
+      var fill = document.getElementById('eval-bar-fill');
+      var es = document.getElementById('eval-score');
+      var scoreSpan = document.getElementById('eval-score-mobile-bar');
+      if (!fill) return;
+      if (window.innerWidth <= 768) {
+        if (fill.style.height && fill.style.height !== '100%') {
+          fill.style.width = fill.style.height;
+          fill.style.height = '100%';
+        }
+        if (scoreSpan && es) scoreSpan.textContent = es.textContent || '0.0';
+      } else {
+        // 데스크탑 복원: width 제거
+        fill.style.width = '';
+      }
+    });
   })();
   </script>
 
