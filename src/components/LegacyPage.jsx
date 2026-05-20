@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
+  loadScript,
   loadScriptsSequential,
   runInlineScript,
   clearLegacyScripts,
@@ -83,7 +84,7 @@ export default function LegacyPage({ pageId }) {
         if (mod) {
           const blob = new Blob([mod], { type: 'application/javascript' });
           const url = URL.createObjectURL(blob);
-          await loadScriptsSequential([url]);
+          await loadScript(url, 'module');
           URL.revokeObjectURL(url);
         }
 

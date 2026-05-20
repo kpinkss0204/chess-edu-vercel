@@ -1,11 +1,12 @@
 const loaded = new Set();
 
-export function loadScript(src) {
+export function loadScript(src, type = null) {
   const url = src.startsWith('http') ? src : src.startsWith('/') ? src : `/${src}`;
   if (loaded.has(url)) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const el = document.createElement('script');
     el.src = url;
+    if (type) el.type = type;
     el.async = false;
     el.dataset.legacySrc = url;
     el.onload = () => {
