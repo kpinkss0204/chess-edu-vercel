@@ -1373,6 +1373,7 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
     }
 
     window.analyzeCurrentGameWithSF = analyzeCurrentGameWithSF;
+    window.runSfAnalysis = analyzeCurrentGameWithSF; // Alias for body.html button compatibility
 
     document.addEventListener('DOMContentLoaded', function () {
       const colorSel = document.getElementById('sf-color-select');
