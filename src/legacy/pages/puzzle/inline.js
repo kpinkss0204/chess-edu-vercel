@@ -1229,6 +1229,21 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   });
 }
 
+function toggleMobilePanel(forceClose) {
+  const panel     = document.getElementById('puzzle-side-panel');
+  const backdrop  = document.getElementById('mobile-panel-backdrop');
+  const iconOpen  = document.getElementById('mpanel-icon-open');
+  const iconClose = document.getElementById('mpanel-icon-close');
+  if (!panel || !backdrop) return;
+  const isOpen    = panel.classList.contains('mobile-open');
+  const shouldOpen = forceClose === false ? false : !isOpen;
+  panel.classList.toggle('mobile-open', shouldOpen);
+  backdrop.classList.toggle('show', shouldOpen);
+  if (iconOpen) iconOpen.style.display  = shouldOpen ? 'none' : '';
+  if (iconClose) iconClose.style.display = shouldOpen ? ''      : 'none';
+}
+window.toggleMobilePanel = toggleMobilePanel;
+
 // Firestore에서 기보 불러와 전술 포지션 추출
 async function loadGamePuzzles() {
   if (!firebaseDbReady() || !_fbUser) return [];

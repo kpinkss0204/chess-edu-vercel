@@ -680,6 +680,24 @@
     }
 
     @media (max-width: 768px) {
+      :root {
+        --board-size: min(96vw, calc(100vh - 250px));
+      }
+      #chessboard, .chessboard {
+        width: var(--board-size) !important;
+        height: var(--board-size) !important;
+      }
+      #board-area {
+        padding: 8px 4px !important;
+      }
+      .player-info, #eval-container, #board-controls {
+        width: var(--board-size) !important;
+        max-width: var(--board-size) !important;
+      }
+      #eval-bar-wrap {
+        height: var(--board-size) !important;
+      }
+
       #sidebar {
         display: none !important;
       }

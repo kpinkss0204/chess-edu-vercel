@@ -307,6 +307,21 @@
     // 두 번째 스크립트 블록에서도 동일 값 사용 (전역 const 가시성 이슈 방지)
     window.__RECORDS_CONSTS__ = { SF_DEPTH, SF_MULTIPV, FORK_CP_GAIN };
 
+function toggleMobilePanel(forceClose) {
+  const panel     = document.getElementById('viewer-panel');
+  const backdrop  = document.getElementById('mobile-panel-backdrop');
+  const iconOpen  = document.getElementById('mpanel-icon-open');
+  const iconClose = document.getElementById('mpanel-icon-close');
+  if (!panel || !backdrop) return;
+  const isOpen    = panel.classList.contains('mobile-open');
+  const shouldOpen = forceClose === false ? false : !isOpen;
+  panel.classList.toggle('mobile-open', shouldOpen);
+  backdrop.classList.toggle('show', shouldOpen);
+  if (iconOpen) iconOpen.style.display  = shouldOpen ? 'none' : '';
+  if (iconClose) iconClose.style.display = shouldOpen ? ''      : 'none';
+}
+window.toggleMobilePanel = toggleMobilePanel;
+
     /**
      * 순수 PGN을 Stockfish로 포지션별 분석.
      * 수 분류: 리체스 lila.tree.CpAdvice와 동일 (winningChances Δ, 임계 0.1/0.2/0.3).
@@ -486,7 +501,22 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       ]);
     }
 
-    let _loadingRecords = false;
+  function toggleMobilePanel(forceClose) {
+    const panel     = document.getElementById('viewer-panel');
+    const backdrop  = document.getElementById('mobile-panel-backdrop');
+    const iconOpen  = document.getElementById('mpanel-icon-open');
+    const iconClose = document.getElementById('mpanel-icon-close');
+    if (!panel || !backdrop) return;
+    const isOpen    = panel.classList.contains('mobile-open');
+    const shouldOpen = forceClose === false ? false : !isOpen;
+    panel.classList.toggle('mobile-open', shouldOpen);
+    backdrop.classList.toggle('show', shouldOpen);
+    if (iconOpen) iconOpen.style.display  = shouldOpen ? 'none' : '';
+    if (iconClose) iconClose.style.display = shouldOpen ? ''      : 'none';
+  }
+  window.toggleMobilePanel = toggleMobilePanel;
+
+  let _loadingRecords = false;
     async function loadRecords() {
       if (_loadingRecords) return; // 중복 실행 방지
       _loadingRecords = true;

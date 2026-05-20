@@ -1019,17 +1019,64 @@ body {
   }
 }
 @media (max-width: 768px) {
-  body { padding-bottom: 56px; }
-  #puzzle-board-view { flex-direction: column !important; overflow-y: auto !important; }
-  #puzzle-side-panel {
-    width: 100% !important;
-    border-left: none !important;
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
+  :root {
+    --board-size: min(96vw, calc(100vh - 250px));
   }
+  body { padding-bottom: 0; }
+  #main { margin-left: 0 !important; height: 100vh; overflow: hidden; }
+  #puzzle-board-view { flex-direction: column !important; height: 100vh; overflow: hidden; }
+  #puzzle-board-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px !important; }
   #puzzle-board-wrap {
-    width: min(calc(100vw - 24px), calc(100vh - 300px)) !important;
-    height: min(calc(100vw - 24px), calc(100vh - 300px)) !important;
+    width: var(--board-size) !important;
+    height: var(--board-size) !important;
+  }
+  #puzzle-board-col > div {
+    width: var(--board-size) !important;
+  }
+  #puzzle-side-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 56px;
+    width: min(320px, 90vw) !important;
+    z-index: 499;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+    background: var(--bg-secondary);
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border);
+  }
+  #puzzle-side-panel.mobile-open {
+    transform: translateX(0);
+  }
+  #mobile-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 498;
+    display: none;
+  }
+  #mobile-panel-backdrop.show {
+    display: block;
+  }
+  #mobile-panel-toggle {
+    display: flex !important;
+    position: fixed;
+    right: 16px;
+    bottom: 72px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 501;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
   }
 }
 

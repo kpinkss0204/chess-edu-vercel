@@ -469,30 +469,78 @@ body {
   }
 }
 @media (max-width: 768px) {
+  :root {
+    --board-size: min(96vw, calc(100vh - 200px));
+  }
   html, body { height: 100%; overflow: hidden; }
-  body { padding-bottom: 56px; }
+  body { padding-bottom: 0; }
   #main {
     flex-direction: column !important;
-    height: calc(100vh - 56px);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    height: 100vh;
+    overflow: hidden;
   }
   #board-area {
-    flex-shrink: 0;
-    padding: 8px !important;
-    gap: 6px !important;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 4px !important;
+    overflow: hidden;
+  }
+  #chessboard {
+    width: var(--board-size) !important;
+    height: var(--board-size) !important;
+  }
+  #board-controls, #pgn-input-row {
+    width: var(--board-size) !important;
+    max-width: var(--board-size) !important;
   }
   #right-panel {
-    width: 100% !important;
-    flex-shrink: 0;
-    border-left: none !important;
-    border-top: 1px solid var(--border);
-    /* 패널 자체도 충분히 보이도록 최소 높이 */
-    min-height: 420px;
-    overflow: hidden;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 56px;
+    width: min(320px, 90vw) !important;
+    z-index: 499;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+    background: var(--bg-secondary);
     display: flex;
     flex-direction: column;
   }
+  #right-panel.mobile-open {
+    transform: translateX(0);
+  }
+  #mobile-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 498;
+    display: none;
+  }
+  #mobile-panel-backdrop.show {
+    display: block;
+  }
+  #mobile-panel-toggle {
+    display: flex !important;
+    position: fixed;
+    right: 16px;
+    bottom: 72px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 501;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+}
   #moves-area {
     flex: 1;
     overflow-y: auto;

@@ -1,6 +1,35 @@
 // ===== UI FUNCTIONS =====
 let game;
 
+function toggleMobilePanel(forceClose) {
+  // 여러 페이지에서 사용되는 다양한 패널 ID들을 순차적으로 확인
+  const panelIds = ['right-panel', 'puzzle-side-panel', 'viewer-panel', 'stats-panel'];
+  let panel = null;
+  for (const id of panelIds) {
+    const el = document.getElementById(id);
+    if (el && (window.getComputedStyle(el).display !== 'none' || el.classList.contains('mobile-open'))) {
+      panel = el;
+      break;
+    }
+  }
+
+  const backdrop  = document.getElementById('mobile-panel-backdrop');
+  const iconOpen  = document.getElementById('mpanel-icon-open');
+  const iconClose = document.getElementById('mpanel-icon-close');
+
+  if (!panel || !backdrop) return;
+
+  const isOpen    = panel.classList.contains('mobile-open');
+  const shouldOpen = forceClose === false ? false : !isOpen;
+
+  panel.classList.toggle('mobile-open', shouldOpen);
+  backdrop.classList.toggle('show', shouldOpen);
+
+  if (iconOpen)  iconOpen.style.display  = shouldOpen ? 'none' : '';
+  if (iconClose) iconClose.style.display = shouldOpen ? ''      : 'none';
+}
+window.toggleMobilePanel = toggleMobilePanel;
+
 function init() {
   game = new ChessGame();
   game.loadFromUrl();

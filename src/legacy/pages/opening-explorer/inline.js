@@ -933,6 +933,21 @@ renderBoard();
     };
   }
 
+  function toggleMobilePanel(forceClose) {
+    const panel     = document.getElementById('right-panel');
+    const backdrop  = document.getElementById('mobile-panel-backdrop');
+    const iconOpen  = document.getElementById('mpanel-icon-open');
+    const iconClose = document.getElementById('mpanel-icon-close');
+    if (!panel || !backdrop) return;
+    const isOpen    = panel.classList.contains('mobile-open');
+    const shouldOpen = forceClose === false ? false : !isOpen;
+    panel.classList.toggle('mobile-open', shouldOpen);
+    backdrop.classList.toggle('show', shouldOpen);
+    if (iconOpen) iconOpen.style.display  = shouldOpen ? 'none' : '';
+    if (iconClose) iconClose.style.display = shouldOpen ? ''      : 'none';
+  }
+  window.toggleMobilePanel = toggleMobilePanel;
+
   function attachEvents() {
     const board = document.getElementById('chessboard');
     if (!board) { setTimeout(attachEvents, 300); return; }

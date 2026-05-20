@@ -457,12 +457,15 @@ body {
   .play-actions { height: auto !important; }
 }
 @media (max-width: 768px) {
+  :root {
+    --board-size: min(96vw, calc(100vh - 250px));
+  }
   body { padding-bottom: 56px; }
   #play-board-wrap {
-    width: min(calc(100vw - 16px), calc(100vh - 200px)) !important;
-    height: min(calc(100vw - 16px), calc(100vh - 200px)) !important;
+    width: var(--board-size) !important;
+    height: var(--board-size) !important;
   }
-  .play-actions {
-    width: min(calc(100vw - 16px), calc(100vh - 200px)) !important;
+  .player-bar, .play-actions {
+    width: var(--board-size) !important;
   }
 }

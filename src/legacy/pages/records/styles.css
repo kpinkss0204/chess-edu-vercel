@@ -1636,11 +1636,92 @@
 
     /* ====== records 반응형 ====== */
     @media (max-width: 768px) {
-      body {
-        padding-bottom: 56px;
+      :root {
+        --board-size: min(96vw, calc(100vh - 250px));
+      }
+      #sidebar { display: none !important; }
+      body { padding-bottom: 0; }
+      #main { margin-left: 0 !important; height: 100vh; overflow: hidden; flex-direction: column !important; }
+
+      #list-panel {
+        flex: 1;
+        width: 100% !important;
+        display: flex;
+        flex-direction: column;
+      }
+      #viewer-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 56px;
+        width: min(420px, 90vw) !important;
+        z-index: 499;
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+        background: var(--bg-secondary);
+        display: flex;
+        flex-direction: column;
+        padding: 0 !important;
+        border-left: 1px solid var(--border);
+      }
+      #viewer-panel.mobile-open {
+        transform: translateX(0);
+      }
+      #viewer-container {
+        width: 100% !important;
+        height: 100%;
+        justify-content: flex-start;
+        padding-top: 10px;
+        overflow-y: auto;
+      }
+      #viewer-board-wrap {
+        width: var(--board-size) !important;
+        height: var(--board-size) !important;
+        margin-bottom: 10px;
+        max-width: none !important;
+      }
+      .viewer-player-bar {
+        width: var(--board-size) !important;
+        padding: 8px 12px !important;
+        max-width: none !important;
+      }
+      .viewer-main {
+        flex-direction: column !important;
+        align-items: center;
+        width: 100%;
+      }
+      .viewer-side {
+        width: var(--board-size) !important;
+        min-height: 200px;
+        flex: none !important;
       }
 
-      #main {
-        flex-direction: column !important;
+      #mobile-panel-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 498;
+        display: none;
+      }
+      #mobile-panel-backdrop.show {
+        display: block;
+      }
+      #mobile-panel-toggle {
+        display: flex !important;
+        position: fixed;
+        right: 16px;
+        bottom: 72px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--accent-green);
+        border: none;
+        color: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        z-index: 501;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
       }
     }
