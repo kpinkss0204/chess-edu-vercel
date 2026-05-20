@@ -1219,8 +1219,10 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
     window.resetAutoGameAnalysisCache = resetAutoGameAnalysisCache;
 
     function scheduleAutoGameAnalysis() {
-      if (_autoGameAnalysisTimer) clearTimeout(_autoGameAnalysisTimer);
-      _autoGameAnalysisTimer = setTimeout(function () { runAutoGameAnalysisIfNeeded(); }, 1200);
+      // [수동 분석으로 전환: 자동 분석 예약 비활성화]
+      return;
+      // if (_autoGameAnalysisTimer) clearTimeout(_autoGameAnalysisTimer);
+      // _autoGameAnalysisTimer = setTimeout(function () { runAutoGameAnalysisIfNeeded(); }, 1200);
     }
     window.scheduleAutoGameAnalysis = scheduleAutoGameAnalysis;
 

@@ -339,10 +339,11 @@ class ChessGame {
     this.updateStatus();
     
     analyzePosition(true);
-    if (typeof tryTriggerTacticsForCurrentMove === 'function') {
-      const currentFen = boardToFen(this.board, this.turn, this.castling, this.enPassant, this.halfMove, this.fullMove);
-      setTimeout(function () { tryTriggerTacticsForCurrentMove(currentFen); }, 600);
-    }
+    // [수동 분석으로 전환: 자동 트리거 비활성화]
+    // if (typeof tryTriggerTacticsForCurrentMove === 'function') {
+    //   const currentFen = boardToFen(this.board, this.turn, this.castling, this.enPassant, this.halfMove, this.fullMove);
+    //   setTimeout(function () { tryTriggerTacticsForCurrentMove(currentFen); }, 600);
+    // }
 
     // 패널 리셋
     lastThreatFen = '';
