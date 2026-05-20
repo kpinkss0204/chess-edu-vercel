@@ -322,7 +322,7 @@ async function initEngine() {
       console.log(`[Engine] 초기화 완료 — 메인 1개 + 백그라운드 ${bgCount}개`);
     }
 
-    setEngineBadge('ready', `SF18 WASM | ${cores}코어` + (usedShared ? ' · 공유' : ''));
+    setEngineBadge('ready', `SF18 WASM | 멀티코어 (${cores}C)` + (usedShared ? ' · 공유' : ''));
     hideLoading();
     try {
       sessionStorage.setItem(STOCKFISH_OVERLAY_SESSION_KEY, '1');

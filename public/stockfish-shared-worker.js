@@ -96,7 +96,8 @@ function _initSF() {
       if (!_sfReady) {
         if (line.includes('uciok')) {
           uciReceived = true;
-          _sfWorker.postMessage('setoption name Threads value 2');
+          const threads = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? Math.max(2, Math.min(navigator.hardwareConcurrency, 16)) : 4;
+          _sfWorker.postMessage(`setoption name Threads value ${threads}`);
           _sfWorker.postMessage('setoption name Hash value 128');
           _sfWorker.postMessage('setoption name UCI_AnalyseMode value true');
           _sfWorker.postMessage('setoption name Move Overhead value 0');
