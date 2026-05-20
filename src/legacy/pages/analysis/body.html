@@ -141,7 +141,7 @@
           <div id="eval-bar-fill" style="height:50%"></div>
           <span id="eval-score-black">0.0</span>
           <span id="eval-score-white">0.0</span>
-          <span id="eval-score-mobile-bar">0.0</span>
+          <span id="eval-score-mobile-bar" style="display:none;">0.0</span>
         </div>
         <div id="board-wrap">
           <div id="chessboard"></div>
@@ -421,12 +421,9 @@
 
           <!-- ── Stockfish 수 평가 ── -->
           <div class="pgn-divider"></div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
             <span class="pgn-label" style="margin-bottom:0;">🎯 Stockfish 수 평가</span>
             <span id="sf-analysis-depth-badge" style="font-size:9px;color:var(--text-muted);"></span>
-          </div>
-          <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;">
-            PGN·FEN 입력 또는 수를 둘 때마다 Stockfish로 자동 분석합니다. 블런더·실수·부정확일 때만 ChessGrammar API로 전술을 분석합니다.
           </div>
           <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
             <select id="sf-color-select"
@@ -434,6 +431,11 @@
               <option value="w">내가 백</option>
               <option value="b">내가 흑</option>
             </select>
+            <button id="btn-run-sf-analysis" onclick="runSfAnalysis()"
+              style="flex:1;padding:5px 10px;background:var(--accent-green-dark);color:#fff;border:1px solid var(--accent-green);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;"
+              onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+              🎯 게임 분석
+            </button>
           </div>
           <div id="sf-analysis-status"
             style="display:none;font-size:11px;line-height:1.6;padding:8px 10px;border-radius:8px;background:var(--bg-card);border:1px solid var(--border);">
@@ -757,103 +759,31 @@
       }
     }
 
+    /* 평가 숫자: 막대 왼쪽 안에 표시 (모바일 전용) */
+    #eval-score-mobile-bar {
+      display: none !important;
+    }
+
+    @media (max-width: 768px) {
+      #eval-score-mobile-bar {
+        display: block !important;
+        position: absolute !important;
+        left: 7px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        font-size: 11px !important;
+        font-weight: 800 !important;
+        z-index: 3 !important;
+        pointer-events: none !important;
+        color: #222 !important;
+        mix-blend-mode: difference !important;
+        filter: invert(1) !important;
+        line-height: 1 !important;
+      }
+    }
+
     /* 모바일 */
     @media (max-width: 768px) {
-      body {
-        padding-bottom: 56px;
-      }
-
-      #board-area {
-        padding: 8px;
-        padding-bottom: 64px;
-        align-items: center !important;
-      }
-
-      :root {
-        --board-size: min(calc(100vw - 16px), calc(100vh - 200px));
-      }
-
-      #chessboard,
-      .chessboard {
-        width: var(--board-size) !important;
-        height: var(--board-size) !important;
-      }
-
-      .player-info,
-      #eval-container,
-      #board-controls,
-      #board-controls-row {
-        width: var(--board-size) !important;
-        max-width: var(--board-size) !important;
-      }
-
-      #eval-bar-wrap {
-        height: var(--board-size) !important;
-      }
-
-      /* ── 평가 막대: 보드 위에 가로 배치 (시계방향 90도) ── */
-      #eval-container {
-        display: flex !important;
-        flex-direction: column !important;
-      }
-
-      #eval-bar-wrap {
-        width: var(--board-size) !important;
-        height: 28px !important;
-        order: -1;
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        position: relative !important;
-        border-radius: 6px !important;
-        overflow: hidden !important;
-        margin-bottom: 4px;
-        background: #1a1a1a;
-      }
-
-      #eval-bar-fill {
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        bottom: 0 !important;
-        width: 50% !important;
-        height: 100% !important;
-        background: #fff !important;
-        transition: width 0.4s ease !important;
-      }
-
-      #eval-bar-black {
-        display: none !important;
-      }
-
-      #eval-score-white,
-      #eval-score-black {
-        display: none !important;
-      }
-
-      /* 평가 숫자: 막대 왼쪽 안에 표시 (모바일 전용) */
-      #eval-score-mobile-bar {
-        display: none;
-      }
-
-      @media (max-width: 768px) {
-        #eval-score-mobile-bar {
-          display: block !important;
-          position: absolute !important;
-          left: 7px !important;
-          top: 50% !important;
-          transform: translateY(-50%) !important;
-          font-size: 11px !important;
-          font-weight: 800 !important;
-          z-index: 3 !important;
-          pointer-events: none !important;
-          color: #222 !important;
-          mix-blend-mode: difference !important;
-          filter: invert(1) !important;
-          line-height: 1 !important;
-        }
-      }
-
       /* board-controls의 eval-score 숫자는 모바일에서 숨김 */
       #eval-score {
         display: none !important;
@@ -990,6 +920,7 @@
 
         // 점수 텍스트 막대 안 span에 표시
         if (scoreSpan && es) {
+          scoreSpan.style.display = 'block';
           scoreSpan.textContent = es.textContent || '0.0';
         }
       };
@@ -1012,10 +943,14 @@
           fill.style.width = fill.style.height;
           fill.style.height = '100%';
         }
-        if (scoreSpan && es) scoreSpan.textContent = es.textContent || '0.0';
+        if (scoreSpan && es) {
+          scoreSpan.style.display = 'block';
+          scoreSpan.textContent = es.textContent || '0.0';
+        }
       } else {
-        // 데스크탑 복원: width 제거
+        // 데스크탑 복원: width 제거, mobile-bar 숨김
         fill.style.width = '';
+        if (scoreSpan) scoreSpan.style.display = 'none';
       }
     });
   })();
