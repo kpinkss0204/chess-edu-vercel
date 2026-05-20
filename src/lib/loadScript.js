@@ -1,7 +1,9 @@
 const loaded = new Set();
 
 export function loadScript(src, type = null) {
-  const url = src.startsWith('http') ? src : src.startsWith('/') ? src : `/${src}`;
+  const url = (src.startsWith('http') || src.startsWith('blob:')) 
+    ? src 
+    : src.startsWith('/') ? src : `/${src}`;
   if (loaded.has(url)) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const el = document.createElement('script');
