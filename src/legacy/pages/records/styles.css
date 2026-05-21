@@ -1640,7 +1640,7 @@
         --board-size: min(96vw, calc(100vh - 250px));
       }
       #sidebar { display: none !important; }
-      body { padding-bottom: 0; }
+      body { padding-bottom: 56px; }
       #main { margin-left: 0 !important; height: 100vh; overflow: hidden; flex-direction: column !important; }
 
       #list-panel {
@@ -1729,4 +1729,24 @@
     /* 모바일 패널 토글 버튼 */
     #mobile-panel-toggle {
       display: none !important;
+    }
+
+    @media (max-width: 768px) {
+      #mobile-panel-toggle {
+        display: flex !important;
+        position: fixed;
+        right: 16px;
+        bottom: 72px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--accent-green);
+        border: none;
+        color: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        z-index: 501;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
     }
