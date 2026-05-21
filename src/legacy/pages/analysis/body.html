@@ -85,8 +85,8 @@
           title="최선수 표시: 엔진 추천수를 보드에 표시">
           💡 최선수
         </button>
-        <!-- AI 코치 버튼 (PC용) -->
-        <button id="coach-open-btn" class="pc-only" onclick="toggleCoachPanel()" title="AI 코치 패널 열기/닫기">
+        <!-- AI 코치 버튼 (PC/모바일 공용) -->
+        <button id="coach-open-btn" onclick="toggleCoachPanel()" title="AI 코치 패널 열기/닫기">
           🧠 AI 코치
         </button>
         <button class="ctrl-btn" onclick="game.flipBoard()" title="보드 뒤집기 (F)">
@@ -179,7 +179,7 @@
     <div id="right-panel">
       <div id="panel-tabs">
         <button class="tab-btn active" onclick="switchTab('analysis')">분석</button>
-        <button class="tab-btn" onclick="switchTab('coach')">AI 코치</button>
+        <button class="tab-btn mobile-only" onclick="switchTab('coach')">AI 코치</button>
         <button class="tab-btn" onclick="switchTab('pgn')">PGN</button>
         <button class="tab-btn" onclick="switchTab('settings')">설정</button>
       </div>
