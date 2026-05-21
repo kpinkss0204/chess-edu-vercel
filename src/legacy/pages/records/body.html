@@ -71,7 +71,7 @@
                   viewBox="0 0 24 24" fill="currentColor">
                   <path d="M6 6H8V18H6ZM9.5 12L18 18V6L9.5 12Z" transform="scale(-1,1) translate(-24,0)" />
                 </svg></button>
-              <button class="ctrl-btn" id="btn-prev" onclick="goToMove(_viewIdx-1)"><svg width="14" height="14"
+              <button class="ctrl-btn" id="btn-prev" onclick="goToPrevMove()"><svg width="14" height="14"
                   viewBox="0 0 24 24" fill="currentColor">
                   <path d="M15.5 5L7 12L15.5 19V5Z" />
                 </svg></button>
@@ -79,11 +79,11 @@
                 <div class="ctrl-move-num" id="ctrl-move-num">시작</div>
                 <div id="ctrl-move-san" style="font-size:11px;color:var(--text-muted);margin-top:1px;"></div>
               </div>
-              <button class="ctrl-btn" id="btn-next" onclick="goToMove(_viewIdx+1)"><svg width="14" height="14"
+              <button class="ctrl-btn" id="btn-next" onclick="goToNextMove()"><svg width="14" height="14"
                   viewBox="0 0 24 24" fill="currentColor">
                   <path d="M8.5 5L17 12L8.5 19V5Z" />
                 </svg></button>
-              <button class="ctrl-btn" id="btn-last" onclick="goToMove(_states.length-1)"><svg width="14" height="14"
+              <button class="ctrl-btn" id="btn-last" onclick="goToLastMove()"><svg width="14" height="14"
                   viewBox="0 0 24 24" fill="currentColor">
                   <path d="M6 6H8V18H6ZM9.5 12L18 18V6L9.5 12Z" />
                 </svg></button>

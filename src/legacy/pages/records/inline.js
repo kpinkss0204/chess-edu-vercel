@@ -1057,37 +1057,6 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       }
     }
 
-      // 평균 게임 정확도
-      const avgMyAccuracy = accuracyCount > 0 ? Math.round(sumMyAccuracy / accuracyCount) : 0;
-
-            _statsCache = {
-        total, wins, losses, draws, winsW, lossesW, drawsW, winsB, lossesB, drawsB, myColor_counts,
-        avgMoves: total > 0 ? Math.round(totalMovesSum / total) : 0,
-        winRate: total > 0 ? Math.round(wins / total * 100) : 0,
-        endCheckmate, endResign, endDraw, endTimeout,
-        myBest: 0, myGood: 0,  // 개별 게임 집계 시 누적 (현재 루프에서 직접 누적 안 함 — analyzeGame 반환값으로 처리됨)
-        myBlunders: sumMyBlunders, myMistakes: sumMyMistakes, myInaccuracies: sumMyInaccuracies,
-        oppBlunders: sumOppBlunders, oppMistakes: sumOppMistakes, oppInaccuracies: sumOppInaccuracies,
-        oppBlunderFound: sumOppBF, oppBlunderMissed: sumOppBM,
-        checkmates: sumCheckmates,
-        forkFound: sumForkFound, forkMissed: sumForkMissed, oppForkCreated: sumOppForkCreated,
-        absPinFound: sumAbsPinFound, absPinMissed: sumAbsPinMissed,
-        relPinFound: sumRelPinFound, relPinMissed: sumRelPinMissed,
-        skewerFound: sumSkewerFound, skewerMissed: sumSkewerMissed,
-        discoveredFound: sumDiscoveredFound, discoveredMissed: sumDiscoveredMissed,
-        trapFound: sumTrapFound, trapMissed: sumTrapMissed,
-        decoyFound: sumDecoyFound, decoyMissed: sumDecoyMissed,
-        pinFound: sumAbsPinFound + sumRelPinFound,
-        pinMissed: sumAbsPinMissed + sumRelPinMissed,
-        avgCpLoss: sumMoves > 0 ? Math.round(sumCp / sumMoves) : 0,
-        myAccuracy: avgMyAccuracy,
-        openingStats: Array.from(openingStatsMap.values())
-          .sort((a, b) => (b.w.total + b.b.total) - (a.w.total + a.b.total))
-      };
-      subEl.textContent = `총 ${total}게임 · Stockfish + 리체스 CpAdvice 동일 로직 (${newlyAnalyzedCount}게임 신규 분석)`;
-      renderStatsHTML(_statsCache);
-    }
-
     // ════════════════════════════════════════
     // 전술 상세 모달
     // ════════════════════════════════════════
@@ -1567,3 +1536,15 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         if (el) g.appendChild(el);
       });
     }
+
+    // 전역 함수 노출 (onclick 핸들러 대응)
+    window.switchTab = switchTab;
+    window.goToMove = goToMove;
+    window.goToPrevMove = () => goToMove(_viewIdx - 1);
+    window.goToNextMove = () => goToMove(_viewIdx + 1);
+    window.goToLastMove = () => goToMove(_states.length - 1);
+    window.closeTacticModal = closeTacticModal;
+    window.retryLoadRecords = retryLoadRecords;
+    window.openTacticModal = openTacticModal;
+    window.openJudgmentModal = openJudgmentModal;
+    window.closeTacticModalAndOpen = closeTacticModalAndOpen;
