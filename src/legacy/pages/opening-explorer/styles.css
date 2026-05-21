@@ -523,35 +523,12 @@ body {
   #mobile-panel-backdrop.show {
     display: block;
   }
-  #mobile-panel-toggle {
-    display: none !important;
-  }
-  @media (max-width: 768px) {
-    #mobile-panel-toggle {
-      display: flex !important;
-      position: fixed;
-      right: 16px;
-      bottom: 72px;
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: var(--accent-green);
-      border: none;
-      color: white;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      z-index: 501;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-    }
-  }
   #moves-area {
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     min-height: 180px;
-  }
-  #chessboard, .chessboard {
+  }  #chessboard, .chessboard {
     width: min(90vw, 340px) !important;
     height: min(90vw, 340px) !important;
   }
@@ -570,4 +547,29 @@ body {
   pointer-events: none;
   z-index: 20;
   overflow: visible;
+}
+
+/* 모바일 패널 토글 버튼 */
+#mobile-panel-toggle {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  #mobile-panel-toggle {
+    display: flex !important;
+    position: fixed;
+    right: 16px;
+    bottom: 72px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 501;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
 }
