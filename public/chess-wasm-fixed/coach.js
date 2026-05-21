@@ -1111,21 +1111,20 @@ async function runPositionCommentary() {
   if (boardAreaRpc) boardAreaRpc.classList.add('coach-open');
   coachOpen = true;
 
-  const responseDiv = document.getElementById('coach-response');
-  if (!responseDiv) return;
-
   const ctx = buildChessContext();
   if (!ctx) return;
 
   coachLoading = true;
-  responseDiv.style.display = 'flex';
-  responseDiv.className = 'loading';
-  responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 스톡피시 라인 수집 중...`;
+  updateCoachUI({
+    html: `<div class="coach-dots"><span></span><span></span><span></span></div> 스톡피시 라인 수집 중...`,
+    className: 'loading',
+    show: true
+  });
 
   try {
     // 스톡피시 라인이 부족하면 대기
     if (!hasEnoughLines(ctx)) {
-      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 스톡피시 깊은 분석 대기 중...`;
+      updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 스톡피시 깊은 분석 대기 중...` });
       await waitForDeepLines(ctx, 8000);
     }
 
@@ -1134,7 +1133,7 @@ async function runPositionCommentary() {
 
     // 위협 패널이 아직 로딩 중이면 완료까지 대기 (최대 4초)
     if (threatLoading) {
-      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 완료 대기 중...`;
+      updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 완료 대기 중...` });
       const tStart = Date.now();
       while (threatLoading && Date.now() - tStart < 4000) {
         await new Promise(r => setTimeout(r, 300));
@@ -1145,7 +1144,7 @@ async function runPositionCommentary() {
 
     // 위협 패널이 비어있으면 백그라운드에서 먼저 위협 분석 실행 후 결과 기다림
     if (!freshCtx.threatData && !threatLoading) {
-      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 중...`;
+      updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 중...` });
       await runThreatAnalysis();
       const tStart2 = Date.now();
       while (threatLoading && Date.now() - tStart2 < 4000) {
@@ -1154,69 +1153,46 @@ async function runPositionCommentary() {
       freshCtx = buildChessContext();
     }
 
-    // ── (구) 최선수 이유 API — position-brief.js 엔진 라인 인과로 대체 ──
-    // pvData에서 현재 최신 라인을 직접 읽어 독립적으로 분석
-    if (false && pvData && pvData[1]) {
-      responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> 최선수 이유 분석 중...`;
-      try {
-        freshCtx = buildChessContext();
-        const explainMoves = pvData[1].moves.slice(0, 6);
-        const rawExplain = await callBestExplainAPI(freshCtx, explainMoves, 0);
-        const cleanedExplain = cleanKorean(rawExplain);
-
-        // 결과 파싱: 타이틀과 이유 목록 추출
-        const explainLines = cleanedExplain.split('\n').map(l => l.trim()).filter(Boolean);
-        const reasons = [];
-        for (const line of explainLines) {
-          if (line.startsWith('•') || line.startsWith('-') || line.startsWith('·') || line.match(/^\d+\./)) {
-            const txt = line.replace(/^[•\-·]\s*/, '').replace(/^\d+\.\s*/, '').trim();
-            if (txt) reasons.push(txt);
-          }
-        }
-        if (reasons.length === 0) {
-          explainLines.slice(1).forEach(l => { if (l) reasons.push(l); });
-        }
-        directBestExplainData = {
-          move: explainMoves[0] || null,
-          reasons,
-        };
-      } catch(e) {
-        console.warn('[Coach] bestExplain 직접 호출 실패:', e);
-      }
-    }
-
-    responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> AI 해설 생성 중...`;
+    updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> AI 해설 생성 중...` });
 
     freshCtx = buildChessContext();
 
     const answer = await callCommentaryAPI(freshCtx);
     const cleaned = sanitizeAnswer(answer, freshCtx);
 
-    responseDiv.className = '';
-    responseDiv.style.display = 'block';
-    responseDiv.innerHTML = formatCommentary(cleaned);
+    updateCoachUI({
+      html: formatCommentary(cleaned),
+      className: '',
+      show: true
+    });
 
     renderCoachSidebar(cleaned);
   } catch (err) {
-    responseDiv.className = '';
-    responseDiv.style.display = 'block';
-    responseDiv.innerHTML = `<span style="color:var(--accent-red)">⚠️ 오류: ${err.message}</span>`;
+    updateCoachUI({
+      html: `<span style="color:var(--accent-red)">⚠️ 오류: ${err.message}</span>`,
+      className: '',
+      show: true
+    });
     console.error('[Coach] 해설 오류:', err);
   } finally {
     coachLoading = false;
   }
 }
 
-// 수동 질문 (사용자가 직접 입력한 질문) — 기존 UI 호환 유지
-async function askCoach() {
+// 수동 질문 (사용자가 직접 입력한 질문)
+async function askCoach(source) {
   if (coachLoading) return;
   if (!coachApiKey) {
     showToast('⚠️ API 키를 먼저 입력하고 저장하세요');
-    document.getElementById('coach-api-input').focus();
+    const keyInput = document.getElementById('coach-api-input');
+    if (keyInput) keyInput.focus();
     return;
   }
 
-  const userQuestion = document.getElementById('coach-input').value.trim();
+  const inputId = (source === 'tab') ? 'coach-input-tab' : 'coach-input';
+  const inputEl = document.getElementById(inputId);
+  const userQuestion = inputEl ? inputEl.value.trim() : '';
+  
   if (!userQuestion) {
     showToast('질문을 입력하세요');
     return;
@@ -1229,21 +1205,26 @@ async function askCoach() {
   }
 
   coachLoading = true;
-  document.getElementById('coach-ask-btn').disabled = true;
+  const btnId = (source === 'tab') ? 'coach-ask-btn-tab' : 'coach-ask-btn';
+  const btnEl = document.getElementById(btnId);
+  if (btnEl) btnEl.disabled = true;
 
-  // 인라인 패널 열기
-  const inlinePanel = document.getElementById('coach-inline');
-  if (inlinePanel) inlinePanel.classList.add('visible');
-  const coachBtn2 = document.getElementById('coach-open-btn');
-  if (coachBtn2) coachBtn2.classList.add('active');
-  const boardAreaAsk = document.getElementById('board-area');
-  if (boardAreaAsk) boardAreaAsk.classList.add('coach-open');
-  coachOpen = true;
+  // 인라인 패널 열기 (데스크탑 용)
+  if (source !== 'tab') {
+    const inlinePanel = document.getElementById('coach-inline');
+    if (inlinePanel) inlinePanel.classList.add('visible');
+    const coachBtn2 = document.getElementById('coach-open-btn');
+    if (coachBtn2) coachBtn2.classList.add('active');
+    const boardAreaAsk = document.getElementById('board-area');
+    if (boardAreaAsk) boardAreaAsk.classList.add('coach-open');
+    coachOpen = true;
+  }
 
-  const responseDiv = document.getElementById('coach-response');
-  responseDiv.style.display = 'flex';
-  responseDiv.className = 'loading';
-  responseDiv.innerHTML = `<div class="coach-dots"><span></span><span></span><span></span></div> AI 코치가 분석 중입니다...`;
+  updateCoachUI({
+    html: `<div class="coach-dots"><span></span><span></span><span></span></div> AI 코치가 분석 중입니다...`,
+    className: 'loading',
+    show: true
+  });
 
   try {
     // 라인이 부족하면 대기
@@ -1254,18 +1235,24 @@ async function askCoach() {
     const prompt = buildCoachPrompt(freshCtx, userQuestion);
     const answer = await callGroqAPI(prompt);
     const cleaned = sanitizeAnswer(answer, freshCtx);
-    responseDiv.className = '';
-    responseDiv.style.display = 'block';
-    responseDiv.innerHTML = formatCommentary(cleaned);
+    
+    updateCoachUI({
+      html: formatCommentary(cleaned),
+      className: '',
+      show: true
+    });
+    
     renderCoachSidebar(cleaned);
   } catch (err) {
-    responseDiv.className = '';
-    responseDiv.style.display = 'block';
-    responseDiv.innerHTML = `<span style="color:var(--accent-red)">⚠️ 오류: ${err.message}</span>`;
+    updateCoachUI({
+      html: `<span style="color:var(--accent-red)">⚠️ 오류: ${err.message}</span>`,
+      className: '',
+      show: true
+    });
     console.error('[Coach] API 오류:', err);
   } finally {
     coachLoading = false;
-    document.getElementById('coach-ask-btn').disabled = false;
+    if (btnEl) btnEl.disabled = false;
   }
 }
 
@@ -1610,6 +1597,35 @@ async function callGroqAPIWithSystemTemp(systemPrompt, userContent, maxTokens = 
 // 응답 포맷팅: 4섹션 카드 렌더링
 // ══════════════════════════════════════════════════════
 
+/** 모든 코치 응답 컨테이너를 한꺼번에 업데이트 */
+function updateCoachUI(options) {
+  const { html, className, show } = options;
+  
+  // ID 기반 컨테이너들
+  const containerIds = ['coach-response', 'coach-response-main', 'coach-response-tab'];
+  containerIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (show !== undefined) el.style.display = show ? (id.includes('tab') ? 'block' : 'flex') : 'none';
+    if (className !== undefined) el.className = className;
+    if (html !== undefined) el.innerHTML = html;
+  });
+
+  // 클래스 기반 컨테이너들
+  const containers = document.querySelectorAll('.coach-response-area');
+  containers.forEach(el => {
+    if (show !== undefined) el.style.display = show ? 'block' : 'none';
+    if (className !== undefined) el.className = className;
+    if (html !== undefined) el.innerHTML = html;
+  });
+
+  // 사이드바 바디도 업데이트 (결과물인 경우에만)
+  if (html && !className && className !== 'loading') {
+    const sidebarBody = document.getElementById('coach-sidebar-body');
+    if (sidebarBody) sidebarBody.innerHTML = html;
+  }
+}
+
 function sanitizeAnswer(text, ctx) {
   if (!text) return text;
   let out = String(text);
@@ -1719,11 +1735,11 @@ function formatPlain(escaped) {
 // 인라인 패널에 해설 렌더링
 // ══════════════════════════════════════════════════════
 function renderCoachSidebar(answerText) {
-  const responseDiv = document.getElementById('coach-response');
-  if (!responseDiv) return;
-  responseDiv.style.display = 'block';
-  responseDiv.className = '';
-  responseDiv.innerHTML = formatCommentary(answerText);
+  updateCoachUI({
+    html: formatCommentary(answerText),
+    className: '',
+    show: true
+  });
 }
 
 // ══════════════════════════════════════════════════════
