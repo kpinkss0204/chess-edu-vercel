@@ -1200,12 +1200,27 @@ body {
 .psp-game-source .src-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
 .psp-game-source .src-text b { font-weight: 700; }
 
-/* ── 우클릭 화살표 오버레이 ── */
-.board-arrow-overlay {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  pointer-events: none;
-  z-index: 20;
-  overflow: visible;
+/* 모바일 패널 토글 버튼 */
+#mobile-panel-toggle {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  #mobile-panel-toggle {
+    display: flex !important;
+    position: fixed;
+    right: 16px;
+    bottom: 72px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 501;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
 }
