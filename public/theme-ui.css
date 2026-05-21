@@ -83,49 +83,96 @@ html[data-color-mode="light"] #sidebar {
     bottom: 0;
     z-index: 1000;
     transform: translateX(-100%);
-    width: 260px !important;
+    width: 280px !important;
+    display: flex !important;
+    flex-direction: column;
+    padding: 0 !important;
+    border-radius: 0 20px 20px 0;
   }
   
   #sidebar.mobile-open {
     transform: translateX(0);
   }
 
-  #mobile-bottom-nav {
+  .sidebar-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+
+  .sidebar-mobile-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent-green-bright);
+  }
+
+  .sidebar-mobile-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 20px;
+    cursor: pointer;
+  }
+
+  .sidebar-nav {
+    padding: 0 10px;
+  }
+
+  .sidebar-item {
+    width: 100% !important;
+    height: auto !important;
+    flex-direction: row !important;
+    justify-content: flex-start !important;
+    padding: 12px 15px !important;
+    gap: 15px !important;
+    border-radius: 12px !important;
+  }
+
+  .sidebar-label {
+    font-size: 14px !important;
+    color: var(--text-primary) !important;
+  }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 20px !important;
+    background: rgba(0,0,0,0.1);
+  }
+
+  .pc-only {
     display: none !important;
   }
+}
 
-  body {
-    padding-bottom: 0 !important;
-  }
-
-  #right-panel {
-    bottom: 0 !important;
-  }
+.pc-only {
+  display: flex;
 }
 
 /* Hamburger Button */
 #hamburger-btn {
   display: none;
   position: fixed;
-  top: 12px;
-  left: 12px;
-  width: 40px;
-  height: 40px;
+  top: 15px;
+  left: 15px;
+  width: 44px;
+  height: 44px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  z-index: 900;
+  border-radius: 12px;
+  z-index: 850;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   color: var(--text-primary);
   box-shadow: var(--shadow-sm);
+  transition: transform 0.2s;
 }
 
-@media (max-width: 768px) {
-  #hamburger-btn {
-    display: flex;
-  }
+#hamburger-btn:active {
+  transform: scale(0.92);
 }
 
 /* Sidebar Backdrop */

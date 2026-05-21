@@ -4,7 +4,11 @@
  */
 (function() {
   const sidebarHTML = `
-    <a class="sidebar-logo" href="/" title="홈">♟</a>
+    <div class="sidebar-mobile-header">
+      <span class="sidebar-mobile-title">더보기</span>
+      <button class="sidebar-mobile-close" onclick="closeSidebar()" aria-label="닫기">✕</button>
+    </div>
+    <a class="sidebar-logo pc-only" href="/" title="홈">♟</a>
     <div class="sidebar-nav">
       <a class="sidebar-item" id="nav-analysis" href="/" title="분석">
         <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z"/></svg></div>
@@ -35,6 +39,10 @@
         <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5v14h2v2h10v-2h2V5zm-2 12H7V7h10v10zM9 9h6v6H9V9z"/></svg></div>
         <span class="sidebar-label">연습</span>
       </a>
+      <a class="sidebar-item" id="nav-stats" href="/records.html?tab=stats" title="통계">
+        <div class="sidebar-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/></svg></div>
+        <span class="sidebar-label">통계</span>
+      </a>
     </div>
     <div class="sidebar-footer">
       <div class="sidebar-user">
@@ -63,11 +71,17 @@
     <div id="sidebar-backdrop"></div>
   `;
 
+  function closeSidebar() {
+    const sidebarEl = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    sidebarEl?.classList.remove('mobile-open');
+    backdrop?.classList.remove('show');
+  }
+
   function initSidebar() {
     const sidebarEl = document.getElementById('sidebar');
     if (!sidebarEl) return;
 
-    // 햄버거 버튼 및 백드롭 추가 (중복 방지)
     if (!document.getElementById('hamburger-btn')) {
       document.body.insertAdjacentHTML('beforeend', hamburgerHTML);
       const btn = document.getElementById('hamburger-btn');
@@ -78,13 +92,11 @@
         backdrop.classList.add('show');
       });
 
-      backdrop.addEventListener('click', () => {
-        sidebarEl.classList.remove('mobile-open');
-        backdrop.classList.remove('show');
-      });
+      backdrop.addEventListener('click', closeSidebar);
     }
 
     sidebarEl.innerHTML = sidebarHTML;
+    window.closeSidebar = closeSidebar; // 글로벌 노출
 
     // 현재 페이지 활성화 표시
     const path = window.location.pathname;
@@ -99,12 +111,9 @@
       }
     });
 
-    // 메뉴 클릭 시 사이드바 닫기 (모바일용)
+    // 메뉴 클릭 시 사이드바 닫기
     sidebarEl.querySelectorAll('.sidebar-item:not([onclick])').forEach(item => {
-      item.addEventListener('click', () => {
-        sidebarEl.classList.remove('mobile-open');
-        document.getElementById('sidebar-backdrop')?.classList.remove('show');
-      });
+      item.addEventListener('click', closeSidebar);
     });
 
     // Firebase 유저 정보 연동
