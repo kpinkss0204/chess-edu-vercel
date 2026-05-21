@@ -1103,6 +1103,7 @@ const TACTIC_META = {
   skewer:    { icon:'🏹', name:'스큐어',    tagCls:'skewer',   desc:'가치 있는 기물을 이동시켜 뒤의 기물 포획' },
   oppBlunder:{ icon:'💥', name:'블런더 포착',tagCls:'blunder', desc:'상대방 실수를 이용한 기물 획득' },
   checkmate: { icon:'👑', name:'체크메이트', tagCls:'checkmate',desc:'킹을 잡는 결정적인 수' },
+  discovered:{ icon:'⚡', name:'디스커버 어택', tagCls:'fork', desc:'기물 이동으로 뒤의 기물이 공격' },
   discoveredAttack:{ icon:'⚡', name:'디스커버 어택', tagCls:'fork', desc:'기물 이동으로 뒤의 기물이 공격' },
   deflection:{ icon:'🛡️', name:'편향',      tagCls:'skewer',    desc:'방어 기물을 수비 위치에서 이탈시키는 전술' },
   interference:{ icon:'🚧', name:'간섭',      tagCls:'pin',       desc:'기물 사이의 방어선을 차단하는 전술' },
@@ -1197,9 +1198,12 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   const found = ev.subtype === 'found';
   if (!missed && !found && !lichessStyle) return;
 
-  let tacticType = ev.type || null;
-  if (lichessStyle) tacticType = lichessThemeToTacticType(ev.themes);
-  if (!tacticType) return;
+  let tacticBaseType = ev.type || null;
+  if (lichessStyle) tacticBaseType = lichessThemeToTacticType(ev.themes);
+  if (!tacticBaseType) return;
+
+  // 타입과 서브타입 결합 (예: fork_missed, fork_found)
+  const tacticType = ev.subtype ? `${tacticBaseType}_${ev.subtype}` : tacticBaseType;
 
   const plyIdx = inferTacticPlyIndex(ev);
   if (plyIdx == null || plyIdx < 0 || plyIdx >= positions.length) return;
@@ -1216,7 +1220,7 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   }
   if (!solutionUci || solutionUci.length < 4) return;
 
-  const meta = TACTIC_META[tacticType] || TACTIC_META.fork;
+  const meta = TACTIC_META[tacticBaseType] || TACTIC_META.fork;
   const missedLabel = missed ? ' 놓침' : '';
   const titleBase = missed ? (meta.name + ' 놓침') : (meta.name + ' (기보)');
 
@@ -1228,6 +1232,7 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
     gameResult: doc.result,
     myColor: myColor,
     tacticType: tacticType,
+    tacticBaseType: tacticBaseType,
     tacticPiece: ev.piece || '',
     moveNum: ev.moveNum || Math.ceil((plyIdx + 1) / 2),
     title: titleBase + ' — ' + dateStr + ' ' + (myColor === 'w' ? ('vs ' + blackName) : ('vs ' + whiteName)),
@@ -1241,7 +1246,7 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
     fullSolution: [solutionUci],
     hint: meta.name + missedLabel + ': ' + meta.desc,
     moves: 1,
-    themes: [tacticType],
+    themes: [tacticBaseType],
     turn: pos.turn,
     lichessId: null,
     gameUrl: null,
@@ -1643,15 +1648,24 @@ function startGamePuzzle() {
 
 // ── 기보 기반 퍼즐 그리드 렌더링 ─────────────────────────
 const GAME_PUZZLE_THEME_DEFS = [
-  { type: 'checkmate', icon: '👑', name: '체크메이트 기회',  desc: '실제 대국에서 내가 놓쳤던 체크메이트 기회를 다시 훈련하세요', tagCls: 'checkmate', color: '#c04040' },
-  { type: 'fork',      icon: '🍴', name: '포크 (놓침)',     desc: '기록 통계 분석에서 놓친 포크 — Stockfish 최선수를 다시 찾아보세요', tagCls: 'fork',     color: '#e08030' },
-  { type: 'oppFork',   icon: '⚔️', name: '상대 포크',       desc: '상대가 건 포크 장면을 기보에서 복습합니다', tagCls: 'fork',     color: '#c06060' },
-  { type: 'pin',       icon: '📌', name: '핀 기회',         desc: '실제 대국에서 상대 기물을 고정시킬 수 있었던 핀 전술을 훈련하세요', tagCls: 'pin',     color: '#5090d0' },
-  { type: 'absPin',    icon: '📌', name: '절대 핀 (놓침)',  desc: '통계 분석에서 놓친 절대 핀 최선수를 연습하세요', tagCls: 'pin',     color: '#5090d0' },
-  { type: 'relPin',    icon: '🔗', name: '상대 핀 (놓침)',  desc: '통계 분석에서 놓친 상대 핀 최선수를 연습하세요', tagCls: 'pin',     color: '#4070b0' },
-  { type: 'skewer',    icon: '🏹', name: '스큐어 기회',     desc: '실제 대국에서 스큐어로 기물을 획득할 수 있었던 순간을 연습하세요', tagCls: 'skewer',  color: '#2aada6' },
-  { type: 'oppBlunder',icon: '💥', name: '블런더 포착',     desc: '상대방 실수를 바로 이용하지 못했던 순간들을 다시 공략하세요', tagCls: 'blunder', color: '#8855cc' },
-  { type: 'discoveredAttack',icon:'⚡',name:'디스커버 어택 기회',desc:'실제 대국에서 디스커버 어택으로 기물을 획득할 수 있었던 기회를 연습하세요',tagCls:'fork',color:'#cc3333'},
+  // 1. 놓친 전술 (훈련용)
+  { type: 'checkmate_missed', icon: '👑', name: '체크메이트 (놓침)', desc: '내가 놓쳤던 결정적인 체크메이트 기회를 다시 찾아보세요.', color: '#c04040' },
+  { type: 'fork_missed',      icon: '🍴', name: '포크 (놓침)',      desc: '통계 분석에서 발견된, 내가 놓친 포크 기회를 훈련합니다.', color: '#e08030' },
+  { type: 'absPin_missed',    icon: '📌', name: '절대 핀 (놓침)',   desc: '킹을 묶어둘 수 있었던 절대 핀 기회를 다시 연습하세요.', color: '#5090d0' },
+  { type: 'relPin_missed',    icon: '🔗', name: '상대 핀 (놓침)',   desc: '상대 기물을 고정시킬 수 있었던 핀 기회를 다시 공략하세요.', color: '#4070b0' },
+  { type: 'skewer_missed',    icon: '🏹', name: '스큐어 (놓침)',   desc: '강력한 직선 공격으로 기물을 획득할 수 있었던 기회입니다.', color: '#2aada6' },
+  { type: 'discovered_missed', icon: '⚡', name: '디스커버 (놓침)',  desc: '숨겨진 길을 열어 공격할 수 있었던 디스커버 어택 기회입니다.', color: '#cc3333' },
+  { type: 'trap_missed',      icon: '🪤', name: '기물 트랩 (놓침)', desc: '상대 기물을 가둘 수 있었던 결정적인 장면을 복습하세요.', color: '#7fa650' },
+  { type: 'decoy_missed',     icon: '🧲', name: '유인 전술 (놓침)', desc: '상대 기물을 유인하여 이득을 볼 수 있었던 기회를 훈련하세요.', color: '#8855cc' },
+  { type: 'oppBlunder_found', icon: '💥', name: '블런더 포착',     desc: '상대방의 실수를 놓치지 않고 응징했던 순간들을 다시 확인하세요.', color: '#8855cc' },
+
+  // 2. 찾은 전술 (복습용)
+  { type: 'fork_found',       icon: '🍴', name: '포크 (성공)',      desc: '실전에서 성공시켰던 포크 장면을 다시 감상하며 복습합니다.', color: '#e08030' },
+  { type: 'absPin_found',     icon: '📌', name: '절대 핀 (성공)',   desc: '실전에서 정확하게 사용했던 절대 핀 성공 사례입니다.', color: '#5090d0' },
+  { type: 'skewer_found',     icon: '🏹', name: '스큐어 (성공)',   desc: '상대방의 기물을 멋지게 꿰뚫었던 스큐어 성공 장면입니다.', color: '#2aada6' },
+  
+  // 3. 기타
+  { type: 'oppFork',          icon: '⚔️', name: '상대 포크 복습',   desc: '상대가 나에게 건 포크 장면을 복기하며 방어력을 높이세요.', color: '#c06060' },
 ];
 
 function renderGamePuzzleThemeGrid(puzzles) {

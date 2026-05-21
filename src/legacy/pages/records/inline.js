@@ -352,11 +352,12 @@ window.toggleMobilePanel = toggleMobilePanel;
       }
       if (states.length < 2) return result;
 
+      report(0, states.length, 'Stockfish 평가 중...');
       const { evalRows, error } = await stockfishEvalStates(states, {
         depth: SF_DEPTH,
         movetime: typeof LICHESS_SF_MOVETIME !== 'undefined' ? LICHESS_SF_MOVETIME : 900,
         multipv: typeof LICHESS_SF_MULTIPV !== 'undefined' ? LICHESS_SF_MULTIPV : 1,
-        onProgress: (cur, tot) => report(cur, tot),
+        onProgress: (cur, tot) => report(cur, tot, 'Stockfish 평가 중...'),
       });
       if (error) {
         console.warn('[analyzeGame] Stockfish Worker 실패:', error);
@@ -369,8 +370,7 @@ window.toggleMobilePanel = toggleMobilePanel;
       const missedRef = { count: 0 };
       const CT = typeof ChessTactics !== 'undefined' ? ChessTactics : null;
 
-      // ── [개선] FEN 기반 정밀 분석 (30 req/min 제한 준수 & 모든 실수 분석)
-      // PGN 방식(일일 3회 제한) 대신 FEN 방식을 사용하여 무제한 분석 지원
+      // ── [개선] FEN 기반 정밀 분석
       const analyzeQueue = [];
       for (let i = 1; i < states.length; i++) {
         const mover = states[i - 1].turn;
@@ -382,7 +382,6 @@ window.toggleMobilePanel = toggleMobilePanel;
         const move = states[i].move;
         const playedUci = move ? (moveToUci(move) || '').toLowerCase() : '';
 
-        // 내가 둔 수가 나쁜 수(??, ?, ?!)이고, 엔진 추천수가 있을 때 분석 대상으로 등록
         if (CT && isMe && bad && bestUci && playedUci && bestUci !== playedUci) {
           analyzeQueue.push({
             plyIdx: i - 1,
@@ -397,87 +396,97 @@ window.toggleMobilePanel = toggleMobilePanel;
         }
       }
 
-      // 큐에 담긴 지점들을 순차 분석 (ChessTactics 내부의 RequestQueue가 2초 간격 보장)
-      for (const task of analyzeQueue) {
+      // 큐에 담긴 지점들을 순차 분석
+      for (let qi = 0; qi < analyzeQueue.length; qi++) {
+        const task = analyzeQueue[qi];
+        report(states.length, states.length, `전술 분석 중... (${qi + 1} / ${analyzeQueue.length})`);
         try {
           const prevFen = CT.snapshotFromState(task.stBefore);
+          
+          // 1. 내가 둔 수 분석 (찾은 전술 확인)
+          const playedMv = uciToMoveFromState(task.playedUci, task.stBefore);
+          if (playedMv) {
+            const playedAfterFen = CT.applyMoveSnapshot(prevFen, playedMv);
+            const playedT = await CT.detectTactics(playedAfterFen, { depth: 'l2', withSequence: true });
+            if (playedT) {
+              const found = {
+                fork: playedT.fork, absPin: playedT.absPin, relPin: playedT.relPin,
+                trap: playedT.trap, decoy: playedT.decoy, skewer: playedT.skewer, discovered: playedT.discovered
+              };
+              const pt = task.stBefore.board[playedMv.from[0]][playedMv.from[1]]?.[1] || task.pt;
+              // 찾은 전술 기록 (result.tacticEvents에 push)
+              ['fork','absPin','relPin','trap','decoy','skewer','discovered'].forEach(t => {
+                if (found[t]) {
+                  // 중복 방지 로직은 간단히 생략하거나 타입별로 체크 가능
+                  result.tacticEvents.push({
+                    type: t, subtype: 'found', piece: pt, moveNum: task.moveNum, san: task.san, plyIdx: task.plyIdx
+                  });
+                  // 통계 반영 (forkFound 등)
+                  if (t === 'fork') { if(!result.forkFound[pt]) result.forkFound[pt]=0; result.forkFound[pt]++; }
+                  else { if(result[t+'Found'] !== undefined) result[t+'Found']++; }
+                }
+              });
+            }
+          }
+
+          // 2. 엔진 추천수 분석 (놓친 전술 확인)
           const bestMv = uciToMoveFromState(task.bestUci, task.stBefore);
           if (!bestMv) continue;
 
-          // 최선의 수를 두었을 때의 FEN 생성
           const bestAfterFen = CT.applyMoveSnapshot(prevFen, bestMv);
-          // FEN 분석 API 호출 (내부적으로 Rate Limit 및 캐시 처리됨)
           const bestT = await CT.detectTactics(bestAfterFen, { depth: 'l2', withSequence: true });
 
           if (bestT) {
-            // 현재 둔 수에서도 같은 전술이 가능했는지 확인 (놓친 것인지 판단)
-            // 실제로는 playedUci 후의 FEN도 체크해야 완벽하지만, 속도를 위해 생략하거나
-            // 간단히 "좋은 전술 기회를 놓침"으로 처리
             const miss = {
-              fork: bestT.fork,
-              absPin: bestT.absPin,
-              relPin: bestT.relPin,
-              trap: bestT.trap,
-              decoy: bestT.decoy,
-              skewer: bestT.skewer,
-              discovered: bestT.discovered
+              fork: bestT.fork, absPin: bestT.absPin, relPin: bestT.relPin,
+              trap: bestT.trap, decoy: bestT.decoy, skewer: bestT.skewer, discovered: bestT.discovered
             };
-
             const ptB = task.stBefore.board[bestMv.from[0]][bestMv.from[1]]?.[1] || task.pt;
             
-            // 전술 이벤트 등록 (이 데이터가 puzzle 페이지에서 사용됨)
-            if (miss.fork) applyMissedTactics(result, { fork: true }, ptB, task.moveNum, task.san, task.plyIdx, task.bestUci, missedRef);
-            if (miss.absPin) applyMissedTactics(result, { absPin: true }, ptB, task.moveNum, task.san, task.plyIdx, task.bestUci, missedRef);
-            if (miss.relPin) applyMissedTactics(result, { relPin: true }, ptB, task.moveNum, task.san, task.plyIdx, task.bestUci, missedRef);
-            if (miss.trap) applyMissedTactics(result, { trap: true }, ptB, task.moveNum, task.san, task.plyIdx, task.bestUci, missedRef);
-            if (miss.decoy) applyMissedTactics(result, { decoy: true }, ptB, task.moveNum, task.san, task.plyIdx, task.bestUci, missedRef);
-            if (miss.skewer) applyMissedTactics(result, { skewer: true }, ptB, task.moveNum, task.san, task.plyIdx, task.bestUci, missedRef);
-            if (miss.discovered) applyMissedTactics(result, { discovered: true }, ptB, task.moveNum, task.san, task.plyIdx, task.bestUci, missedRef);
+            // 각 전술 타입별로 놓침 기록
+            ['fork','absPin','relPin','trap','decoy','skewer','discovered'].forEach(t => {
+              if (miss[t]) {
+                // 이미 해당 지점에서 이 전술을 "찾았다면" 놓친 것으로 보지 않음
+                const alreadyFound = result.tacticEvents.some(e => e.plyIdx === task.plyIdx && e.type === t && e.subtype === 'found');
+                if (!alreadyFound) {
+                  result.tacticEvents.push({
+                    type: t, subtype: 'missed', piece: ptB, moveNum: task.moveNum, san: task.san, plyIdx: task.plyIdx, bestMove: task.bestUci
+                  });
+                  if (t === 'fork') { if(!result.forkMissed[ptB]) result.forkMissed[ptB]=0; result.forkMissed[ptB]++; }
+                  else { if(result[t+'Missed'] !== undefined) result[t+'Missed']++; }
+                }
+              }
+            });
           }
         } catch (e) {
           console.warn('[analyzeGame] FEN 분석 실패:', e.message);
         }
       }
 
-      // 나머지 수들에 대한 기본 루프 (이미 위에서 나쁜 수는 처리했으므로 여기서는 통계 집계만)
       for (let i = 1; i < states.length; i++) {
         const mover = states[i - 1].turn;
         const san = states[i].san || '';
-        const move = states[i].move;
         const isMe = (mover === myColor);
         const cpBefore = evalRows[i - 1].cpw;
         const cpAfter = evalRows[i].cpw;
-
         const bad = lichessCpAdviceJudgment(cpBefore, cpAfter, mover);
-        const judgmentTag = bad
-          ? ((isMe ? 'my' : 'opp') + bad.charAt(0).toUpperCase() + bad.slice(1))
-          : null;
-        
-        // 중복 방지를 위해 이미 result.moveJudgments에 데이터가 없을 때만 push
-        if (result.moveJudgments.length < i) {
-          result.moveJudgments.push(judgmentTag);
-        }
-
+        const judgmentTag = bad ? ((isMe ? 'my' : 'opp') + bad.charAt(0).toUpperCase() + bad.slice(1)) : null;
+        if (result.moveJudgments.length < i) result.moveJudgments.push(judgmentTag);
         if (isMe) {
           if (bad === 'inaccuracy') result.myInaccuracies++;
           else if (bad === 'mistake') result.myMistakes++;
           else if (bad === 'blunder') result.myBlunders++;
+          const cpMeBefore = myColor === 'w' ? cpBefore : -cpBefore;
+          const cpMeAfter  = myColor === 'w' ? cpAfter  : -cpAfter;
+          result.myCpSum += Math.max(0, cpMeBefore - cpMeAfter);
+          result.myMoveCount++;
         } else {
           if (bad === 'inaccuracy') result.oppInaccuracies++;
           else if (bad === 'mistake') result.oppMistakes++;
           else if (bad === 'blunder') result.oppBlunders++;
         }
-
-        if (isMe) {
-          const cpMeBefore = myColor === 'w' ? cpBefore : -cpBefore;
-          const cpMeAfter  = myColor === 'w' ? cpAfter  : -cpAfter;
-          result.myCpSum += Math.max(0, cpMeBefore - cpMeAfter);
-          result.myMoveCount++;
-        }
-
         if (san.includes('#') && isMe) result.checkmates++;
       }
-
       return result;
     }
     window.analyzeGame = analyzeGame;
@@ -503,6 +512,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
     // 뷰어 상태
     // ════════════════════════════════════════
     let _states = [], _viewIdx = 0, _viewMyColor = 'w', _currentRecord = null;
+    let _loadedDocs = []; // 캐시를 위한 문서 보관
 
     // ════════════════════════════════════════
     // 기록 목록
@@ -523,18 +533,11 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       listEl.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div>불러오는 중...</div></div>';
       try {
         let snap = null;
-        // 1차 시도: orderBy 포함 (인덱스 있는 경우)
         try {
           snap = await withTimeout(
             _fbDb.collection('game_records').where('uid', '==', _user.uid).orderBy('playedAt', 'desc').limit(50).get()
           );
         } catch (e1) {
-          // 인덱스 미생성 시 링크 안내
-          if (e1.message && e1.message.includes('index')) {
-            console.info('%c[Firebase] 복합 인덱스를 생성하면 정렬이 더 빨라집니다\n%c▶ https://console.firebase.google.com/v1/r/project/chess-education-464fc/firestore/indexes?create_composite=Clpwcm9qZWN0cy9jaGVzcy1lZHVjYXRpb24tNDY0ZmMvZGF0YWJhc2VzLyhkZWZhdWx0KS9jb2xsZWN0aW9uR3JvdXBzL2dhbWVfcmVjb3Jkcy9pbmRleGVzL18QARoHCgN1aWQQARoMCghwbGF5ZWRBdBACGgwKCF9fbmFtZV9fEAI',
-              'color:#e0b040;font-weight:bold', 'color:#7fa650;text-decoration:underline');
-          }
-          // 2차 시도: orderBy 없이
           try {
             snap = await withTimeout(
               _fbDb.collection('game_records').where('uid', '==', _user.uid).limit(50).get()
@@ -545,12 +548,12 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         }
         if (!snap) { throw new Error('응답 없음'); }
         const docs = []; snap.forEach(d => docs.push({ id: d.id, ...d.data() }));
-        // orderBy 없이 가져온 경우 클라이언트 측 정렬
         docs.sort((a, b) => {
           const ta = a.playedAt ? a.playedAt.seconds : 0;
           const tb = b.playedAt ? b.playedAt.seconds : 0;
           return tb - ta;
         });
+        _loadedDocs = docs; // 전역 보관
         subEl.textContent = `총 ${docs.length}게임`;
         if (!docs.length) { listEl.innerHTML = '<div class="empty-state"><div class="empty-icon">♟</div><div>아직 기록이 없습니다<br>온라인 대국을 플레이해보세요!</div></div>'; return; }
         listEl.innerHTML = '';
@@ -855,16 +858,19 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
 
       _statsBusy = true;
       try {
-        let docs = [];
-        try {
-          let snap = null;
-          try { snap = await _fbDb.collection('game_records').where('uid', '==', _user.uid).orderBy('playedAt', 'desc').limit(50).get(); }
-          catch (e) { snap = await _fbDb.collection('game_records').where('uid', '==', _user.uid).limit(50).get(); }
-          const seenIds = new Set();
-          snap.forEach(d => { if (!seenIds.has(d.id)) { seenIds.add(d.id); docs.push({ id: d.id, ...d.data() }); } });
-        } catch (e) {
-          contentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>불러오기 실패: ${e.message}</div></div>`;
-          return;
+        let docs = _loadedDocs;
+        if (!docs || !docs.length) {
+          try {
+            let snap = null;
+            try { snap = await _fbDb.collection('game_records').where('uid', '==', _user.uid).orderBy('playedAt', 'desc').limit(50).get(); }
+            catch (e) { snap = await _fbDb.collection('game_records').where('uid', '==', _user.uid).limit(50).get(); }
+            docs = []; snap.forEach(d => docs.push({ id: d.id, ...d.data() }));
+            docs.sort((a, b) => (b.playedAt?.seconds || 0) - (a.playedAt?.seconds || 0));
+            _loadedDocs = docs;
+          } catch (e) {
+            contentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>불러오기 실패: ${e.message}</div></div>`;
+            return;
+          }
         }
 
         if (!docs.length) {
@@ -926,6 +932,16 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           if (a.myAccuracy > 0) { sumMyAccuracy += a.myAccuracy; accuracyCount++; }
         }
 
+        const updateLoadingUI = (idx, label = '포지션 분석 중…', extra = '') => {
+          const pct = Math.round(idx / total * 100);
+          contentEl.innerHTML = `<div class="stats-loading"><div class="stats-spinner"></div><div class="stats-progress-wrap">
+            <div style="font-size:13px;color:var(--text-secondary)">Stockfish 분석 중… (${idx + 1} / ${total})</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">깊이 ${__RC.SF_DEPTH} · 수 분류 = 리체스 Accuracy%식</div>
+            <div class="stats-progress-bar-outer"><div class="stats-progress-bar-fill" style="width:${pct}%"></div></div>
+            <div class="stats-progress-label">${label}${extra ? ' (' + extra + ')' : ''}</div>
+          </div></div>`;
+        };
+
         for (let gi = 0; gi < docs.length; gi++) {
           const doc = docs[gi];
           const myColor = resolveMyColor(doc), result = doc.result || '*';
@@ -967,22 +983,20 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           if (AC && AC.isTacticAnalysisComplete(ta, expectedMoves)) {
             accumulateFromAnalysis(doc, ta);
             cachedAnalysisCount++;
+            updateLoadingUI(gi, '캐시 데이터 로드 중…');
             continue;
           }
 
-          const pct = Math.round(gi / total * 100);
-          contentEl.innerHTML = `<div class="stats-loading"><div class="stats-spinner"></div><div class="stats-progress-wrap">
-        <div style="font-size:13px;color:var(--text-secondary)">Stockfish 분석 중… (${gi + 1} / ${total})</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">깊이 ${__RC.SF_DEPTH} · 수 분류 = 리체스 Accuracy%식</div>
-        <div class="stats-progress-bar-outer"><div class="stats-progress-bar-fill" style="width:${pct}%"></div></div>
-        <div class="stats-progress-label">포지션 분석 중…</div>
-      </div></div>`;
+          updateLoadingUI(gi);
 
           try {
-            const a = await window.analyzeGame(doc.pgn, myColor, (cur, tot) => {
-              const ip = Math.round(cur / Math.max(tot, 1) * 100);
+            const a = await window.analyzeGame(doc.pgn, myColor, (cur, tot, label) => {
+              const gameProgress = Math.round(cur / Math.max(tot, 1) * 100);
+              const totalProgress = Math.round(gi / total * 100 + gameProgress / total);
               const fill = contentEl.querySelector('.stats-progress-bar-fill');
-              if (fill) fill.style.width = Math.round(gi / total * 100 + ip / total) + '%';
+              if (fill) fill.style.width = totalProgress + '%';
+              const labelEl = contentEl.querySelector('.stats-progress-label');
+              if (labelEl) labelEl.textContent = label || '분석 중…';
             });
 
             accumulateFromAnalysis(doc, a);
@@ -1218,59 +1232,60 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
     // 오프닝 통계 렌더링
     // ════════════════════════════════════════
     function renderOpeningStats(openingStats) {
+      const container = document.getElementById('opening-stats-container');
+      if (!container) return;
+
       if (!openingStats || !openingStats.length) {
-        return `<div class="stats-section-title">📖 오프닝 통계</div>
-      <div class="stats-note" style="padding:8px 0">오프닝 데이터가 없습니다 (기보 필요)</div>`;
+        container.innerHTML = `<div class="empty-state">오프닝 데이터가 없습니다 (기보 필요)</div>`;
+        return;
       }
 
-      // 백으로 플레이한 것들 (w.total > 0)
       const whiteOps = openingStats.filter(o => o.w.total > 0).sort((a, b) => b.w.total - a.w.total);
-      // 흑으로 플레이한 것들 (b.total > 0)
       const blackOps = openingStats.filter(o => o.b.total > 0).sort((a, b) => b.b.total - a.b.total);
 
       function opRow(op, colorKey) {
         const cs = op[colorKey];
         const tot = cs.total;
         if (!tot) return '';
-        const maxVal = tot;
         const wPct = Math.round(cs.wins / tot * 100);
         const dPct = Math.round(cs.draws / tot * 100);
         const lPct = 100 - wPct - dPct;
         const varText = op.variation ? `<div class="opening-stat-var">${op.variation}</div>` : '';
+        
         return `<div class="opening-stat-row">
-      <span class="opening-eco-badge">${op.eco}</span>
-      <div class="opening-stat-info">
-        <div class="opening-stat-name">${op.name}</div>
-        ${varText}
-        <div class="opening-wdl">
-          <span class="owdl w">${cs.wins}승</span>
-          <span class="owdl d">${cs.draws}무</span>
-          <span class="owdl l">${cs.losses}패</span>
-        </div>
-      </div>
-      <div class="opening-stat-bars">
-        <div style="font-size:9px;color:var(--text-muted);text-align:right;margin-bottom:2px">${tot}게임 · 승률 ${wPct}%</div>
-        <div style="height:8px;background:var(--bg-tertiary);border-radius:4px;overflow:hidden;display:flex;">
-          <div style="height:100%;background:var(--accent-green-bright);width:${wPct}%;transition:width .5s"></div>
-          <div style="height:100%;background:var(--text-muted);width:${dPct}%;transition:width .5s"></div>
-          <div style="height:100%;background:#e07070;width:${lPct}%;transition:width .5s"></div>
-        </div>
-      </div>
-    </div>`;
+          <span class="opening-eco-badge">${op.eco}</span>
+          <div class="opening-stat-info">
+            <div class="opening-stat-name">${op.name}</div>
+            ${varText}
+          </div>
+          <div class="opening-stat-bars">
+            <div class="opening-bar-row">
+              <span class="opening-bar-label">승률</span>
+              <div class="opening-bar-track"><div class="opening-bar-fill white" style="width:${wPct}%"></div></div>
+              <span class="opening-bar-count">${wPct}%</span>
+            </div>
+            <div style="font-size:9px; color:var(--text-muted); text-align:right; margin-top:2px;">
+              ${tot}게임 (${cs.wins}승 ${cs.draws}무 ${cs.losses}패)
+            </div>
+          </div>
+        </div>`;
       }
 
-      let html = `<div class="stats-section-title">📖 오프닝 통계</div>`;
-
+      let html = '';
       if (whiteOps.length) {
-        html += `<div class="stats-section-title" style="margin-top:12px;color:var(--text-secondary)">⬜ 백으로 플레이한 오프닝</div>
-      <div class="opening-stats-grid">${whiteOps.slice(0, 8).map(o => opRow(o, 'w')).join('')}</div>`;
+        html += `<div class="stats-section-title" style="margin-top:0">⬜ 백으로 즐겨 쓰는 오프닝</div>
+          <div class="opening-stats-grid">${whiteOps.slice(0, 5).map(o => opRow(o, 'w')).join('')}</div>`;
       }
       if (blackOps.length) {
-        html += `<div class="stats-section-title" style="margin-top:12px;color:var(--text-secondary)">⬛ 흑으로 플레이한 오프닝</div>
-      <div class="opening-stats-grid">${blackOps.slice(0, 8).map(o => opRow(o, 'b')).join('')}</div>`;
+        html += `<div class="stats-section-title" style="margin-top:20px">⬛ 흑으로 즐겨 쓰는 오프닝</div>
+          <div class="opening-stats-grid">${blackOps.slice(0, 5).map(o => opRow(o, 'b')).join('')}</div>`;
       }
-      html += `<div class="stats-note">※ 오프닝은 ECO 코드 기준으로 기보의 초반 수에서 자동 감지됩니다. 상위 8개 표시.</div>`;
-      return html;
+      
+      html += `<div style="margin-top:16px; font-size:11px; color:var(--text-muted); text-align:center;">
+        ※ ECO 코드 기반 자동 감지 (최근 50게임 중 상위 5개)
+      </div>`;
+      
+      container.innerHTML = html;
     }
 
     // ════════════════════════════════════════
@@ -1278,186 +1293,218 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
     // ════════════════════════════════════════
     function renderStatsHTML(s) {
       const contentEl = document.getElementById('stats-content');
-      const endMax = Math.max(s.endCheckmate, s.endResign, s.endDraw, s.endTimeout, 1);
-      const PIECES = [{ key: 'P', icon: '♙', name: '폰' }, { key: 'N', icon: '♞', name: '나이트' }, { key: 'B', icon: '♝', name: '비숍' }, { key: 'R', icon: '♜', name: '룩' }, { key: 'Q', icon: '♛', name: '퀸' }, { key: 'K', icon: '♚', name: '킹' }];
+      if (!contentEl) return;
 
-      function fvmRow(icon, name, total_label, found, missed, tacticType, tacticPiece) {
-        const tot = found + missed; if (tot === 0) return '';
-        const fp = Math.round(found / tot * 100), mp = 100 - fp;
-        const clickAttr = tacticType ? `onclick="openTacticModal('${tacticType}','${tacticPiece || ''}','${icon}','${name}')" style="cursor:pointer"` : '';
-        return `<div class="fvm-row${tacticType ? ' clickable' : ''}" ${clickAttr}>
-      <div class="fvm-piece-col"><div class="fvm-piece-icon">${icon}</div><div class="fvm-piece-name">${name}</div><div class="fvm-piece-total">${tot}회</div></div>
-      <div class="fvm-bars-col">
-        <div class="fvm-bar-row"><span class="fvm-pct found">✔ ${fp}%</span><div class="fvm-track"><div class="fvm-fill found" style="width:${fp}%"></div></div><span class="fvm-count">${found}</span></div>
-        <div class="fvm-bar-row"><span class="fvm-pct missed">✘ ${mp}%</span><div class="fvm-track"><div class="fvm-fill missed" style="width:${mp}%"></div></div><span class="fvm-count">${missed}</span></div>
-      </div></div>`;
-      }
+      const total = s.total || 0;
+      const avgAcc = s.myAccuracy || 0;
+      const winPct = s.winRate || 0;
 
-      const forkHtml = PIECES.map(p => fvmRow(p.icon, p.name, '', s.forkFound[p.key] || 0, s.forkMissed[p.key] || 0, 'fork', p.key)).join('');
-      const oppForkHtml = PIECES.map(p => {
-        const cnt = s.oppForkCreated?.[p.key] || 0; if (!cnt) return '';
-        return `<div class="fvm-row clickable" onclick="openTacticModal('oppFork','${p.key}','${p.icon}','${p.name}')">
-      <div class="fvm-piece-col"><div class="fvm-piece-icon">${p.icon}</div><div class="fvm-piece-name">${p.name}</div><div class="fvm-piece-total">${cnt}회</div></div>
-      <div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct missed">상대가 사용</span><div class="fvm-track"><div class="fvm-fill missed" style="width:100%"></div></div><span class="fvm-count">${cnt}</span></div></div>
-    </div>`;
-      }).join('');
-      const pinHtml = (() => {
-        const absFound = s.absPinFound || 0, absMissed = s.absPinMissed || 0;
-        const relFound = s.relPinFound || 0, relMissed = s.relPinMissed || 0;
-        const tot = (absFound + absMissed + relFound + relMissed);
-        if (tot === 0) return '';
-        const rows = [];
-        // 절대 핀
-        if (absFound > 0) rows.push(`<div class="fvm-row clickable" onclick="openTacticModal('absPin','','📌','찾은 절대 핀','found')">
-        <div class="fvm-piece-col"><div class="fvm-piece-icon">📌</div><div class="fvm-piece-name">찾은 절대 핀</div><div class="fvm-piece-total">${absFound}회</div></div>
-        <div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct found">✔ 찾음</span><div class="fvm-track"><div class="fvm-fill found" style="width:100%"></div></div><span class="fvm-count">${absFound}</span></div></div>
-      </div>`);
-        if (absMissed > 0) rows.push(`<div class="fvm-row clickable" onclick="openTacticModal('absPin','','📌','놓친 절대 핀','missed')">
-        <div class="fvm-piece-col"><div class="fvm-piece-icon">📌</div><div class="fvm-piece-name">놓친 절대 핀</div><div class="fvm-piece-total">${absMissed}회</div></div>
-        <div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct missed">✘ 놓침</span><div class="fvm-track"><div class="fvm-fill missed" style="width:100%"></div></div><span class="fvm-count">${absMissed}</span></div></div>
-      </div>`);
-        // 상대 핀
-        if (relFound > 0) rows.push(`<div class="fvm-row clickable" onclick="openTacticModal('relPin','','🔗','찾은 상대 핀','found')">
-        <div class="fvm-piece-col"><div class="fvm-piece-icon">🔗</div><div class="fvm-piece-name">찾은 상대 핀</div><div class="fvm-piece-total">${relFound}회</div></div>
-        <div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct found">✔ 찾음</span><div class="fvm-track"><div class="fvm-fill found" style="width:100%"></div></div><span class="fvm-count">${relFound}</span></div></div>
-      </div>`);
-        if (relMissed > 0) rows.push(`<div class="fvm-row clickable" onclick="openTacticModal('relPin','','🔗','놓친 상대 핀','missed')">
-        <div class="fvm-piece-col"><div class="fvm-piece-icon">🔗</div><div class="fvm-piece-name">놓친 상대 핀</div><div class="fvm-piece-total">${relMissed}회</div></div>
-        <div class="fvm-bars-col"><div class="fvm-bar-row"><span class="fvm-pct missed">✘ 놓침</span><div class="fvm-track"><div class="fvm-fill missed" style="width:100%"></div></div><span class="fvm-count">${relMissed}</span></div></div>
-      </div>`);
-        return rows.join('');
-      })();
-      const skewDiscHtml = [
-        fvmRow('↗', '스큐어 (직선)', '', s.skewerFound || 0, s.skewerMissed || 0, 'skewer', ''),
-        fvmRow('◎', '디스커버 어택', '', s.discoveredFound || 0, s.discoveredMissed || 0, 'discovered', ''),
-        fvmRow('🪤', '기물 트랩', '', s.trapFound || 0, s.trapMissed || 0, 'trap', ''),
-        fvmRow('🧲', '유인', '', s.decoyFound || 0, s.decoyMissed || 0, 'decoy', ''),
-      ].join('');
-      const obHtml = fvmRow('🎯', '상대 실수', '', s.oppBlunderFound, s.oppBlunderMissed, 'oppBlunder', '');
-      const cpColor = s.avgCpLoss < 30 ? 'var(--accent-green-bright)' : s.avgCpLoss < 75 ? '#e0b040' : '#e07070';
+      const wPct = Math.round((s.wins / total) * 100) || 0;
+      const dPct = Math.round((s.draws / total) * 100) || 0;
+      const lPct = 100 - wPct - dPct;
 
       contentEl.innerHTML = `
-    <div class="wdl-row">
-      <div class="wdl-card win"><div class="wdl-num">${s.wins}</div><div class="wdl-label">승리</div></div>
-      <div class="wdl-card draw"><div class="wdl-num">${s.draws}</div><div class="wdl-label">무승부</div></div>
-      <div class="wdl-card lose"><div class="wdl-num">${s.losses}</div><div class="wdl-label">패배</div></div>
-    </div>
-    <div class="winrate-bar-wrap">
-      <div class="winrate-bar-label"><span class="winrate-bar-title">승률</span><span class="winrate-bar-pct">${s.winRate}%</span></div>
-      <div class="winrate-bar"><div class="winrate-bar-fill" style="width:${s.winRate}%"></div></div>
-    </div>
+        <div class="stats-hero">
+          <div class="stats-hero-card">
+            <div class="stats-hero-label">총 분석 대국</div>
+            <div class="stats-hero-value">${total}<span class="stats-hero-unit">회</span></div>
+          </div>
+          <div class="stats-hero-card">
+            <div class="stats-hero-label">평균 종합 정확도</div>
+            <div class="stats-hero-value" style="color:var(--accent-green-bright)">${avgAcc}<span class="stats-hero-unit">%</span></div>
+          </div>
+          <div class="stats-hero-card">
+            <div class="stats-hero-label">승률</div>
+            <div class="stats-hero-value" style="color:var(--accent-orange)">${winPct}<span class="stats-hero-unit">%</span></div>
+          </div>
+        </div>
 
-    <div class="stats-section-title">⬜⬛ 색상별 성적</div>
-    <div class="color-grid">
-      <div class="color-card"><div class="color-card-title">⬜ 백으로 플레이</div>
-        <div class="color-stat-row"><span>승</span><span>${s.winsW}</span></div>
-        <div class="color-stat-row"><span>무</span><span>${s.drawsW}</span></div>
-        <div class="color-stat-row"><span>패</span><span>${s.lossesW}</span></div>
-        <div class="color-stat-row"><span>게임 수</span><span>${s.myColor_counts.w}</span></div>
-      </div>
-      <div class="color-card"><div class="color-card-title">⬛ 흑으로 플레이</div>
-        <div class="color-stat-row"><span>승</span><span>${s.winsB}</span></div>
-        <div class="color-stat-row"><span>무</span><span>${s.drawsB}</span></div>
-        <div class="color-stat-row"><span>패</span><span>${s.lossesB}</span></div>
-        <div class="color-stat-row"><span>게임 수</span><span>${s.myColor_counts.b}</span></div>
-      </div>
-    </div>
+        <div class="stats-card-group">
+          <div class="stats-group-title">📊 대국 성과 요약</div>
+          <div class="wdl-container">
+            <div class="wdl-bar-wrap">
+              <div class="wdl-bar-segment win" style="width:${wPct}%">${wPct >= 10 ? wPct + '%' : ''}</div>
+              <div class="wdl-bar-segment draw" style="width:${dPct}%">${dPct >= 10 ? dPct + '%' : ''}</div>
+              <div class="wdl-bar-segment lose" style="width:${lPct}%">${lPct >= 10 ? lPct + '%' : ''}</div>
+            </div>
+            <div class="wdl-legend">
+              <div class="wdl-legend-item"><div class="wdl-dot win"></div> 승리 ${s.wins}</div>
+              <div class="wdl-legend-item"><div class="wdl-dot draw"></div> 무승부 ${s.draws}</div>
+              <div class="wdl-legend-item"><div class="wdl-dot lose"></div> 패배 ${s.losses}</div>
+            </div>
+          </div>
 
-    <div class="stats-section-title">🎯 수 정확도 (Stockfish 깊이 ${__RC.SF_DEPTH} · 리체스 Accuracy%식)</div>
-    <div class="key-grid">
-      <div class="key-card"><div class="key-card-icon">🎯</div><div class="key-card-body">
-        <div class="key-card-name">게임 정확도</div>
-        <div class="key-card-num" style="color:${s.myAccuracy >= 85 ? 'var(--accent-green-bright)' : s.myAccuracy >= 70 ? '#e0b040' : '#e07070'}">${s.myAccuracy}%</div>
-        <div class="key-card-sub">조화평균 · 높을수록 정확</div>
-      </div></div>
-      <div class="key-card"><div class="key-card-icon">📉</div><div class="key-card-body">
-        <div class="key-card-name">평균 센티폰 손실 (ACPL)</div>
-        <div class="key-card-num" style="color:${cpColor}">${s.avgCpLoss}</div>
-        <div class="key-card-sub">낮을수록 정확 (0 = 완벽)</div>
-      </div></div>
-      <div class="key-card good"><div class="key-card-icon">👑</div><div class="key-card-body">
-        <div class="key-card-name">체크메이트</div>
-        <div class="key-card-num">${s.checkmates}</div>
-        <div class="key-card-sub">내가 걸은 체크메이트</div>
-      </div></div>
-    </div>
+          <div class="comparison-grid">
+            <div class="comp-box">
+              <div class="comp-title">⬜ 백으로 플레이</div>
+              <div class="wdl-legend" style="gap:12px; justify-content:space-between; font-size:12px;">
+                <span>승 <b>${s.winsW}</b></span> <span>무 <b>${s.drawsW}</b></span> <span>패 <b>${s.lossesW}</b></span> <span>(총 ${s.myColor_counts.w}회)</span>
+              </div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-title">⬛ 흑으로 플레이</div>
+              <div class="wdl-legend" style="gap:12px; justify-content:space-between; font-size:12px;">
+                <span>승 <b>${s.winsB}</b></span> <span>무 <b>${s.drawsB}</b></span> <span>패 <b>${s.lossesB}</b></span> <span>(총 ${s.myColor_counts.b}회)</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-    <div class="stats-section-title">⚠️ 수 분류 결과 (Delta 기반)</div>
-    <div class="key-grid">
-    <!-- 내 분류 -->
-      <div class="key-card danger" onclick="openJudgmentModal('myBlunder', '내 블런더', '??', '블런더')"><div class="key-card-body">
-        <div class="key-card-name">내 블런더 ??</div><div class="key-card-num">${s.myBlunders}</div>
-        <div class="key-card-sub">클릭 시 게임 상세</div>
-      </div></div>
-      <div class="key-card warn" onclick="openJudgmentModal('myMistake', '내 실수', '?', '실수')"><div class="key-card-body">
-        <div class="key-card-name">내 실수 ?</div><div class="key-card-num">${s.myMistakes}</div>
-        <div class="key-card-sub">클릭 시 게임 상세</div>
-      </div></div>
-      <div class="key-card" onclick="openJudgmentModal('myInaccuracy', '내 부정확', '?!', '부정확')"><div class="key-card-body">
-        <div class="key-card-name">내 부정확 ?!</div><div class="key-card-num">${s.myInaccuracies}</div>
-        <div class="key-card-sub">클릭 시 게임 상세</div>
-      </div></div>
-      <!-- 상대 분류 -->
-      <div class="key-card danger" onclick="openJudgmentModal('oppBlunder', '상대 블런더', '??', '블런더')"><div class="key-card-body">
-        <div class="key-card-name">상대 블런더 ??</div><div class="key-card-num">${s.oppBlunders}</div>
-        <div class="key-card-sub">클릭 시 게임 상세</div>
-      </div></div>
-      <div class="key-card warn" onclick="openJudgmentModal('oppMistake', '상대 실수', '?', '실수')"><div class="key-card-body">
-        <div class="key-card-name">상대 실수 ?</div><div class="key-card-num">${s.oppMistakes}</div>
-        <div class="key-card-sub">클릭 시 게임 상세</div>
-      </div></div>
-      <div class="key-card" onclick="openJudgmentModal('oppInaccuracy', '상대 부정확', '?!', '부정확')"><div class="key-card-body">
-        <div class="key-card-name">상대 부정확 ?!</div><div class="key-card-num">${s.oppInaccuracies}</div>
-        <div class="key-card-sub">클릭 시 게임 상세</div>
-      </div></div>
-    </div>
+        <div class="stats-card-group">
+          <div class="stats-group-title">⚠️ 주요 분석 포인트 (수 분류)</div>
+          <div class="comparison-grid">
+            <div class="comp-box">
+              <div class="comp-title">나의 수 분석</div>
+              <div class="key-grid" style="grid-template-columns: 1fr; gap: 8px;">
+                <div class="key-card danger" onclick="openJudgmentModal('myBlunder', '치명적 실수', '??', '블런더')">
+                  <div class="key-card-icon">😱</div>
+                  <div class="key-card-body">
+                    <div class="key-card-name">놓친 결정적 기회 (블런더)</div>
+                    <div class="key-card-num">${s.myBlunders}</div>
+                  </div>
+                </div>
+                <div class="key-card warn" onclick="openJudgmentModal('myMistake', '아쉬운 실수', '?', '실수')">
+                  <div class="key-card-icon">😟</div>
+                  <div class="key-card-body">
+                    <div class="key-card-name">아쉬운 실수 (미스테이크)</div>
+                    <div class="key-card-num">${s.myMistakes}</div>
+                  </div>
+                </div>
+                <div class="key-card" style="border-color:rgba(255,255,255,0.05)" onclick="openJudgmentModal('myInaccuracy', '부정확한 수', '?!', '부정확')">
+                  <div class="key-card-icon">🤨</div>
+                  <div class="key-card-body">
+                    <div class="key-card-name">정교하지 못한 수 (부정확)</div>
+                    <div class="key-card-num">${s.myInaccuracies}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-title">상대의 수 분석</div>
+              <div class="key-grid" style="grid-template-columns: 1fr; gap: 8px;">
+                <div class="key-card good" onclick="openTacticModal('oppBlunder', '', '🎯', '상대 블런더 포착', 'found')">
+                  <div class="key-card-icon">⚡</div>
+                  <div class="key-card-body">
+                    <div class="key-card-name">포착한 상대의 블런더</div>
+                    <div class="key-card-num">${s.oppBlunderFound} <span style="font-size:12px; font-weight:normal; color:var(--text-muted)">/ ${s.oppBlunders}</span></div>
+                  </div>
+                </div>
+                <div class="key-card" style="border-color:rgba(255,255,255,0.05)" onclick="openJudgmentModal('oppMistake', '상대 실수', '?', '상대 실수')">
+                  <div class="key-card-icon">📉</div>
+                  <div class="key-card-body">
+                    <div class="key-card-name">상대가 저지른 실수</div>
+                    <div class="key-card-num">${s.oppMistakes}</div>
+                  </div>
+                </div>
+                <div class="key-card" style="border-color:rgba(255,255,255,0.05)" onclick="openJudgmentModal('oppInaccuracy', '상대 부정확', '?!', '상대 부정확')">
+                  <div class="key-card-icon">🧐</div>
+                  <div class="key-card-body">
+                    <div class="key-card-name">상대의 부정확한 수</div>
+                    <div class="key-card-num">${s.oppInaccuracies}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:16px; font-size:11px; color:var(--text-muted); text-align:center;">
+             💡 각 항목을 클릭하면 해당 장면이 포함된 대국 목록을 볼 수 있습니다.
+          </div>
+        </div>
 
-    <div class="stats-section-title">🎯 상대 블런더 합계</div>
-    <div class="key-grid">
-      <div class="key-card"><div class="key-card-icon">🎯</div><div class="key-card-body">
-        <div class="key-card-name">상대 블런더</div><div class="key-card-num">${s.oppBlunders}</div>
-        <div class="key-card-sub">상대가 낸 블런더 합계</div>
-      </div></div>
-    </div>
+        <div class="stats-card-group">
+          <div class="stats-group-title">♟ 전술 테마별 성과 (내가 찾은 vs 놓친 전술)</div>
+          <div class="tactics-grid">
+            ${renderTacticModernCard('🍴', '포크 (Fork)', 'fork', s.forkFound, s.forkMissed)}
+            ${renderTacticModernCard('📌', '핀 (Pin)', 'pin', s.pinFound, s.pinMissed)}
+            ${renderTacticModernCard('🏹', '스큐어 (Skewer)', 'skewer', s.skewerFound, s.skewerMissed)}
+            ${renderTacticModernCard('⚡', '디스커버 (Discovery)', 'discovered', s.discoveredFound, s.discoveredMissed)}
+            ${renderTacticModernCard('🪤', '기물 트랩 (Trap)', 'trap', s.trapFound, s.trapMissed)}
+            ${renderTacticModernCard('🧲', '유인 (Decoy)', 'decoy', s.decoyFound, s.decoyMissed)}
+          </div>
+          <div style="margin-top:20px; font-size:11px; color:var(--text-muted); line-height:1.6;">
+            ※ <b>전술 기회</b>: 엔진(Stockfish) 분석 기준, 최선수가 전술적 이득을 가져오는 포지션입니다.<br>
+            ※ 놓친 전술들은 <b>퍼즐 페이지</b>에서 '내 기보 퍼즐'로 다시 풀어볼 수 있습니다.
+          </div>
+        </div>
 
-    <div class="stats-section-title">🎯 상대 블런더 포착</div>
-    <div class="fvm-section">${obHtml || '<div class="stats-note" style="padding:12px 0">상대 블런더 데이터 없음</div>'}</div>
-    <div class="stats-note">※ 상대 블런더 직후 최선수로 응수 → 찾음. 놓치면 → 놓침. <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
+        <div class="stats-card-group">
+          <div class="stats-group-title">📖 오프닝 리포트</div>
+          <div id="opening-stats-container">
+             <div class="empty-state">오프닝 데이터를 로드 중입니다...</div>
+          </div>
+        </div>
 
-    <div class="stats-section-title">♞ 내가 찾은 vs 놓친 포크</div>
-    <div class="fvm-section">${forkHtml || '<div class="stats-note" style="padding:12px 0">포크 데이터 없음</div>'}</div>
-    <div class="stats-note">※ Stockfish 베스트 무브가 포크였는데 다른 수를 두고 ≥${__RC.FORK_CP_GAIN}cp 손실이면 "놓친 포크". <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
+        <div class="stats-card-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+          <div>
+            <div class="stats-group-title">📏 대국 길이</div>
+            <div class="avg-moves-card">
+              <div class="avg-moves-num">${s.avgMoves}</div>
+              <div class="avg-moves-desc">평균 대국 수<br><span style="font-size:11px">대국당 평균 ${s.avgMoves}수 진행</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="stats-group-title">🏁 종료 방식 요약</div>
+            <div class="end-list">
+              ${renderEndItem('체크메이트', s.endCheckmate, total)}
+              ${renderEndItem('기권/기타', s.endResign, total)}
+              ${renderEndItem('시간 초과', s.endTimeout, total)}
+              ${renderEndItem('무승부', s.endDraw, total)}
+            </div>
+          </div>
+        </div>
+        <div style="height:32px"></div>
+      `;
 
-    <div class="stats-section-title">⚔️ 상대가 사용한 포크</div>
-    <div class="fvm-section">${oppForkHtml || '<div class="stats-note" style="padding:12px 0">상대 포크 데이터 없음</div>'}</div>
-    <div class="stats-note">※ 상대가 나에게 포크를 걸었던 횟수입니다. 자주 당하는 기물 유형을 파악해보세요. <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
+      renderOpeningStats(s.openingStats);
+    }
 
-    <div class="stats-section-title">📌 찾은 vs 놓친 핀</div>
-    <div class="fvm-section">${pinHtml || '<div class="stats-note" style="padding:12px 0">핀 데이터 없음</div>'}</div>
-    <div class="stats-note">※ 상대 기물이 움직이면 상대 킹 노출되는 절대 핀. Stockfish 베스트가 핀이었는데 안 뒀으면 "놓침". <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록을 확인할 수 있습니다</span></div>
+    function renderTacticModernCard(icon, name, type, found, missed) {
+      const fCount = typeof found === 'object' ? Object.values(found).reduce((a,b)=>a+b, 0) : (found || 0);
+      const mCount = typeof missed === 'object' ? Object.values(missed).reduce((a,b)=>a+b, 0) : (missed || 0);
+      const total = fCount + mCount;
+      const pct = total > 0 ? Math.round((fCount / total) * 100) : 0;
+      
+      if (total === 0) {
+        return `
+          <div class="tactic-modern-card" style="opacity:0.5; cursor:default;">
+            <div class="tm-header">
+              <div class="tm-name">${name}</div>
+              <div class="tm-icon-box">${icon}</div>
+            </div>
+            <div class="tm-meta">분석된 기회가 없습니다</div>
+          </div>
+        `;
+      }
 
-    <div class="stats-section-title">🔭 스큐어 · 디스커버 · 트랩 · 유인</div>
-    <div class="fvm-section">${skewDiscHtml || '<div class="stats-note" style="padding:12px 0">전술 데이터 없음</div>'}</div>
-    <div class="stats-note">※ 합법 수 기반 판별. 트랩: 공격받은 기물이 빠져도 계속 잡히는 상황. 유인: 방어 기물을 끌어내 다른 위협을 여는 수. 포크와 겹치면 포크만 집계합니다. <span style="color:var(--accent-green-bright)">· 클릭하면 게임 목록</span></div>
+      return `
+        <div class="tactic-modern-card" onclick="openTacticModal('${type}', '', '${icon}', '${name}')">
+          <div class="tm-header">
+            <div class="tm-name">${name}</div>
+            <div class="tm-icon-box">${icon}</div>
+          </div>
+          <div class="tm-stats-row">
+            <div class="tm-main-pct">${pct}%</div>
+            <div class="tm-sub-count">성공률 (${fCount}/${total})</div>
+          </div>
+          <div class="tm-progress-bar">
+            <div class="tm-progress-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="tm-meta">
+            ${fCount}번의 기회를 잡았고, ${mCount}번의 기회를 놓쳤습니다.
+          </div>
+        </div>
+      `;
+    }
 
-    ${renderOpeningStats(s.openingStats || [])}
-
-    <div class="stats-section-title">📏 게임 길이</div>
-    <div class="avg-moves-card">
-      <div class="avg-moves-num">${s.avgMoves}</div>
-      <div class="avg-moves-desc">평균 수<br><span style="color:var(--text-muted)">총 ${s.total}게임 기준</span></div>
-    </div>
-
-    <div class="stats-section-title">🏁 종료 방식 (추정)</div>
-    <div class="end-list">
-      <div class="end-item"><span class="end-label">체크메이트</span><div class="end-bar-wrap"><div class="end-bar-fill" style="width:${Math.round(s.endCheckmate / endMax * 100)}%"></div></div><span class="end-count">${s.endCheckmate}</span></div>
-      <div class="end-item"><span class="end-label">기권/기타</span><div class="end-bar-wrap"><div class="end-bar-fill" style="width:${Math.round(s.endResign / endMax * 100)}%"></div></div><span class="end-count">${s.endResign}</span></div>
-      <div class="end-item"><span class="end-label">시간 초과</span><div class="end-bar-wrap"><div class="end-bar-fill" style="width:${Math.round(s.endTimeout / endMax * 100)}%"></div></div><span class="end-count">${s.endTimeout}</span></div>
-      <div class="end-item"><span class="end-label">무승부</span><div class="end-bar-wrap"><div class="end-bar-fill" style="width:${Math.round(s.endDraw / endMax * 100)}%"></div></div><span class="end-count">${s.endDraw}</span></div>
-    </div>
-    <div class="stats-note">※ 종료 방식은 Firebase termination 필드 기반 추정치입니다.</div>
-    <div style="height:32px"></div>
-  `;
+    function renderEndItem(label, count, total) {
+      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+      return `
+        <div class="end-item">
+          <div class="end-label">${label}</div>
+          <div class="end-bar-wrap"><div class="end-bar-fill" style="width:${pct}%"></div></div>
+          <div class="end-count">${count}</div>
+        </div>
+      `;
     }
 
     // ════════════════════════════════════════

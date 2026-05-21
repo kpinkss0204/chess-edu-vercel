@@ -714,6 +714,10 @@
       animation: spin .8s linear infinite
     }
 
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .wdl-row {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -820,6 +824,230 @@
       margin-bottom: 8px
     }
 
+    /* redesigned stats styles */
+    .stats-hero {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stats-hero-card {
+      background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      transition: transform 0.2s ease;
+    }
+
+    .stats-hero-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent-green);
+    }
+
+    .stats-hero-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .stats-hero-value {
+      font-family: var(--font-display);
+      font-size: 2.8rem;
+      font-weight: 900;
+      line-height: 1;
+      color: var(--text-primary);
+    }
+
+    .stats-hero-unit {
+      font-size: 16px;
+      margin-left: 4px;
+      color: var(--text-muted);
+    }
+
+    .stats-card-group {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .stats-group-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Unified WDL Bar */
+    .wdl-container {
+      margin-bottom: 32px;
+    }
+
+    .wdl-bar-wrap {
+      height: 48px;
+      background: var(--bg-tertiary);
+      border-radius: 12px;
+      display: flex;
+      overflow: hidden;
+      margin-bottom: 12px;
+      border: 1px solid var(--border-light);
+    }
+
+    .wdl-bar-segment {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 800;
+      color: white;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+
+    .wdl-bar-segment.win { background: var(--accent-green); }
+    .wdl-bar-segment.draw { background: #888; }
+    .wdl-bar-segment.lose { background: #c04040; }
+
+    .wdl-legend {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    .wdl-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .wdl-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    /* Comparison Grid */
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 600px) {
+      .comparison-grid { grid-template-columns: 1fr; }
+    }
+
+    .comp-box {
+      background: var(--bg-tertiary);
+      border-radius: 16px;
+      padding: 16px;
+    }
+
+    .comp-title {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* Tactics Card Grid */
+    .tactics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .tactic-modern-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .tactic-modern-card:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent-green-bright);
+      transform: scale(1.02);
+    }
+
+    .tm-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .tm-icon-box {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    .tm-name {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .tm-stats-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+    }
+
+    .tm-main-pct {
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--accent-green-bright);
+      line-height: 1;
+    }
+
+    .tm-sub-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .tm-progress-bar {
+      height: 6px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .tm-progress-fill {
+      height: 100%;
+      background: var(--accent-green);
+      transition: width 0.6s ease;
+    }
+
+    .tm-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
     .key-card {
       background: var(--bg-secondary);
       border: 1px solid var(--border);
@@ -827,7 +1055,14 @@
       padding: 16px;
       display: flex;
       align-items: center;
-      gap: 12px
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .key-card:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent-green-dark);
     }
 
     .key-card-icon {
