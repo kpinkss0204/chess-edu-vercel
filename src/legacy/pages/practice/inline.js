@@ -200,7 +200,13 @@ function loadPositionFromInput() {
         el.dataset.c = c; el.dataset.t = t;
         el.draggable = true;
         el.innerHTML = '<img src="' + IMG + c + t + '.svg" draggable="false">';
+        // click (데스크탑)
         el.addEventListener('click', function() { sel(c, t); });
+        // touchend (모바일 300ms 딜레이 제거)
+        el.addEventListener('touchend', function(e) {
+          e.preventDefault(); // click 이벤트 중복 방지
+          sel(c, t);
+        }, { passive: false });
         el.addEventListener('dragstart', function(e) {
           sel(c, t);
           e.dataTransfer.effectAllowed = 'copy';
@@ -228,6 +234,17 @@ function loadPositionFromInput() {
     document.querySelectorAll('.pal-piece').forEach(function(el) { el.classList.remove('pal-selected'); });
   };
 
+  // 지우개 버튼에 touchend 직접 연결 (onclick 300ms 딜레이 우회)
+  document.addEventListener('DOMContentLoaded', function() {
+    var er = document.getElementById('pal-erase');
+    if (er) {
+      er.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        window.palErase();
+      }, { passive: false });
+    }
+  });
+
   /* ── 팔레트 열기/닫기 ── */
   window.palToggle = function() {
     _open = !_open;
@@ -245,6 +262,8 @@ function loadPositionFromInput() {
       palTurn(t || 'w');
       window._editorSavedPracticeMode = window._enginePracticeMode;
       window._enginePracticeMode = null;
+      // 디버그 오버레이 활성화
+      if (window.__palDbg) window.__palDbg.log('=== 편집 모드 시작 ===\n탭:배치 | 드래그:이동 | 길게누르기:삭제');
     } else {
       if (panel) panel.classList.remove('pal-open');
       if (board) board.classList.remove('pal-edit');
@@ -482,144 +501,273 @@ function loadPositionFromInput() {
       if (img) img.classList.add('pal-dragging');
     }, true);
 
-    /* ── 터치 지원: 팔레트 기물 배치 + 보드→보드 이동 + 길게 눌러 삭제 ── */
-    var _touchDragSq = null;   // 터치 드래그 출발 칸
-    var _touchGhost  = null;   // 터치 고스트 이미지
-    var _longPressTimer = null; // 길게 누르기 타이머
-    var _touchMoved = false;   // 터치 중 이동 여부
+    /* ══════════════════════════════════════════════════════════
+       터치 지원: 배치 / 이동 / 삭제  +  디버그 오버레이
+       ══════════════════════════════════════════════════════════ */
 
-    function sqAtTouch(touch) {
-      var fakeEv = { clientX: touch.clientX, clientY: touch.clientY };
-      return sqAt(fakeEv);
-    }
+    // ── 디버그 오버레이 (우상단 반투명 패널) ──────────────────
+    var _dbg = (function() {
+      var el = document.createElement('div');
+      el.id = 'pal-debug-overlay';
+      el.style.cssText = [
+        'position:fixed',
+        'top:8px',
+        'right:8px',
+        'min-width:200px',
+        'max-width:280px',
+        'background:rgba(0,0,0,0.82)',
+        'color:#0f0',
+        'font:11px/1.45 monospace',
+        'padding:8px 10px',
+        'border-radius:8px',
+        'z-index:99999',
+        'pointer-events:none',
+        'white-space:pre-wrap',
+        'border:1px solid #0f08',
+        'display:none'
+      ].join(';');
+      document.body.appendChild(el);
 
-    function startTouchGhost(src, clientX, clientY) {
-      if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
-      _touchGhost = document.createElement('img');
-      _touchGhost.src = src;
-      _touchGhost.style.cssText = 'position:fixed;width:70px;height:70px;pointer-events:none;z-index:9999;opacity:0.88;transform:translate(-50%,-80%);transition:none;';
-      _touchGhost.style.left = clientX + 'px';
-      _touchGhost.style.top  = clientY + 'px';
-      document.body.appendChild(_touchGhost);
-    }
-
-    function highlightSq(sq, on) {
-      if (!sq) return;
-      var sqEls = board.querySelectorAll('.square');
-      var el = sqEls[sq.row * 8 + sq.col];
-      if (!el) return;
-      if (on) el.classList.add('pal-touch-target');
-      else    el.classList.remove('pal-touch-target');
-    }
-
-    board.addEventListener('touchstart', function(e) {
-      if (!_open) return;
-      if (e.touches.length !== 1) return;
-      var touch = e.touches[0];
-      var sq = sqAtTouch(touch);
-      if (!sq) return;
-
-      _touchMoved = false;
-
-      // 길게 누르기 → 삭제 (500ms)
-      _longPressTimer = setTimeout(function() {
-        if (!_touchMoved) {
-          e.preventDefault();
-          set(sq.col, sq.row, null);
-          if (navigator.vibrate) navigator.vibrate(40);
-          _touchDragSq = null;
-          if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
+      var _lines = [];
+      var _timer = null;
+      return {
+        show: function() { el.style.display = 'block'; },
+        hide: function() { el.style.display = 'none'; },
+        log: function() {
+          var msg = Array.prototype.slice.call(arguments).join(' ');
+          var ts  = new Date().toISOString().slice(11, 23);
+          _lines.push('[' + ts + '] ' + msg);
+          if (_lines.length > 18) _lines.shift();
+          el.textContent = _lines.join('\n');
+          console.log('[PAL-DBG]', msg);
+          // 5초 뒤 자동 숨김 타이머 리셋
+          clearTimeout(_timer);
+          _timer = setTimeout(function() { el.style.display = 'none'; _lines = []; }, 8000);
+          el.style.display = 'block';
         }
-      }, 500);
+      };
+    })();
+    // 전역 노출 (콘솔에서 window.__palDbg.show() 로 강제 표시 가능)
+    window.__palDbg = _dbg;
+
+    // ── 터치 상태 변수 ────────────────────────────────────────
+    var _touchDragSq    = null;  // 드래그 출발 칸 {col,row}
+    var _touchGhost     = null;  // 드래그 중 고스트 이미지 엘리먼트
+    var _longPressTimer = null;  // 길게 누르기 타이머 ID
+    var _touchStartPt   = null;  // 터치 시작 좌표 {x,y}
+    var _touchActed     = false; // touchend에서 이미 처리됐는지 (중복 방지)
+    var MOVE_THRESHOLD  = 10;    // px — 이 이상 이동해야 드래그로 판정
+
+    // ── 헬퍼: touch → 보드 칸 좌표 ──────────────────────────
+    function sqAtTouch(touch) {
+      return sqAt({ clientX: touch.clientX, clientY: touch.clientY });
+    }
+
+    // ── 헬퍼: 고스트 이미지 생성/이동 ───────────────────────
+    function spawnGhost(src, cx, cy) {
+      if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
+      var g = document.createElement('img');
+      g.src = src;
+      g.style.cssText = 'position:fixed;width:72px;height:72px;pointer-events:none;z-index:9999;opacity:0.9;transform:translate(-50%,-75%);transition:none;';
+      g.style.left = cx + 'px';
+      g.style.top  = cy + 'px';
+      document.body.appendChild(g);
+      _touchGhost = g;
+    }
+    function moveGhost(cx, cy) {
+      if (!_touchGhost) return;
+      _touchGhost.style.left = cx + 'px';
+      _touchGhost.style.top  = cy + 'px';
+    }
+    function removeGhost() {
+      if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
+    }
+
+    // ── 헬퍼: 목표 칸 하이라이트 ─────────────────────────────
+    function setHoverSq(sq) {
+      board.querySelectorAll('.pal-touch-target').forEach(function(el) {
+        el.classList.remove('pal-touch-target');
+      });
+      if (!sq) return;
+      var els = board.querySelectorAll('.square');
+      var el  = els[sq.row * 8 + sq.col];
+      if (el) el.classList.add('pal-touch-target');
+    }
+
+    // ── 헬퍼: 출발 칸 기물 이미지 투명도 ────────────────────
+    function dimSq(sq, on) {
+      var els  = board.querySelectorAll('.square');
+      var pImg = els[sq.row * 8 + sq.col] && els[sq.row * 8 + sq.col].querySelector('.piece-img');
+      if (pImg) { if (on) pImg.classList.add('pal-dragging'); else pImg.classList.remove('pal-dragging'); }
+    }
+
+    // ── 헬퍼: 터치 이동 거리 ─────────────────────────────────
+    function touchDist(touch) {
+      if (!_touchStartPt) return 0;
+      var dx = touch.clientX - _touchStartPt.x;
+      var dy = touch.clientY - _touchStartPt.y;
+      return Math.sqrt(dx*dx + dy*dy);
+    }
+
+    // ── 정리: 드래그 상태 초기화 ─────────────────────────────
+    function cancelTouchDrag() {
+      if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+      removeGhost();
+      setHoverSq(null);
+      if (_touchDragSq) { dimSq(_touchDragSq, false); _touchDragSq = null; }
+      _touchStartPt = null;
+      _touchActed   = false;
+    }
+
+    // ════════════════════════════════════════════════════════
+    board.addEventListener('touchstart', function(e) {
+      // 편집 모드가 아니면 완전히 무시 (기본 동작 유지)
+      if (!_open) return;
+      if (e.touches.length !== 1) { cancelTouchDrag(); return; }
+
+      e.preventDefault(); // 스크롤/줌/300ms 클릭 딜레이 모두 차단
+      e.stopPropagation();
+
+      var touch = e.touches[0];
+      var sq    = sqAtTouch(touch);
+
+      _touchStartPt = { x: touch.clientX, y: touch.clientY };
+      _touchActed   = false;
+
+      _dbg.log('touchstart sq=' + (sq ? sq.col+','+sq.row : 'null') +
+               ' sel=' + JSON.stringify(_sel));
+
+      if (!sq) return;
 
       var p = get(sq.col, sq.row);
+
+      // 길게 누르기 → 삭제 (400ms, 이동 없을 때만)
+      _longPressTimer = setTimeout(function() {
+        if (_touchDragSq) return; // 이미 드래그 중이면 무시
+        _dbg.log('longpress → delete sq=' + sq.col + ',' + sq.row);
+        set(sq.col, sq.row, null);
+        if (navigator.vibrate) navigator.vibrate(40);
+        cancelTouchDrag();
+        _touchActed = true;
+      }, 400);
+
       if (p) {
-        // 기존 기물 위 터치: 드래그 준비
-        e.preventDefault();
+        // 기존 기물: 드래그 준비
         _touchDragSq = sq;
+        dimSq(sq, true);
         var type = (p.type || '').toUpperCase();
-        startTouchGhost(IMG + p.color + type + '.svg', touch.clientX, touch.clientY);
-        var sqEls = board.querySelectorAll('.square');
-        var pImg = sqEls[sq.row * 8 + sq.col] && sqEls[sq.row * 8 + sq.col].querySelector('.piece-img');
-        if (pImg) pImg.classList.add('pal-dragging');
-      } else if (_sel && _sel !== 'erase') {
-        // 빈 칸 탭: 선택된 팔레트 기물 배치 (touchend에서 처리)
-        e.preventDefault();
-      } else if (_sel === 'erase') {
-        e.preventDefault();
+        spawnGhost(IMG + p.color + type + '.svg', touch.clientX, touch.clientY);
+        _dbg.log('drag-start piece=' + p.color + p.type + ' from=' + sq.col + ',' + sq.row);
       }
+      // 빈 칸이면 touchend에서 배치 처리
     }, { passive: false });
 
+    // ════════════════════════════════════════════════════════
     board.addEventListener('touchmove', function(e) {
       if (!_open) return;
-      if (e.touches.length !== 1) return;
-      _touchMoved = true;
-      if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+      e.preventDefault();
+      e.stopPropagation();
 
       var touch = e.touches[0];
-      if (_touchGhost) {
-        _touchGhost.style.left = touch.clientX + 'px';
-        _touchGhost.style.top  = touch.clientY + 'px';
-        e.preventDefault();
+      var dist  = touchDist(touch);
+
+      // MOVE_THRESHOLD 이상 움직이면 길게 누르기 취소
+      if (dist > MOVE_THRESHOLD && _longPressTimer) {
+        clearTimeout(_longPressTimer);
+        _longPressTimer = null;
       }
 
-      // 현재 칸 하이라이트
-      if (_touchDragSq) {
+      moveGhost(touch.clientX, touch.clientY);
+
+      if (_touchDragSq && dist > MOVE_THRESHOLD) {
         var sq = sqAtTouch(touch);
-        board.querySelectorAll('.pal-touch-target').forEach(function(el) { el.classList.remove('pal-touch-target'); });
-        if (sq && (sq.col !== _touchDragSq.col || sq.row !== _touchDragSq.row)) {
-          highlightSq(sq, true);
-        }
+        setHoverSq(sq && (sq.col !== _touchDragSq.col || sq.row !== _touchDragSq.row) ? sq : null);
+        _dbg.log('touchmove drag dist=' + dist.toFixed(0) + ' over=' + (sq ? sq.col+','+sq.row : 'null'));
       }
     }, { passive: false });
 
+    // ════════════════════════════════════════════════════════
     board.addEventListener('touchend', function(e) {
       if (!_open) return;
+      e.preventDefault();
+      e.stopPropagation();
+
       if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
-      board.querySelectorAll('.pal-touch-target').forEach(function(el) { el.classList.remove('pal-touch-target'); });
+      setHoverSq(null);
 
-      var touch = e.changedTouches[0];
-      var sq = sqAtTouch(touch);
-
-      if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
-
-      if (_touchDragSq) {
-        // 보드→보드 이동
-        var from = _touchDragSq; _touchDragSq = null;
-        var sqEls = board.querySelectorAll('.square');
-        var pImg = sqEls[from.row * 8 + from.col] && sqEls[from.row * 8 + from.col].querySelector('.piece-img');
-        if (pImg) pImg.classList.remove('pal-dragging');
-
-        if (sq && (sq.col !== from.col || sq.row !== from.row)) {
-          var p = get(from.col, from.row);
-          set(from.col, from.row, null);
-          if (p) set(sq.col, sq.row, p);
-        } else {
-          refresh();
-        }
+      if (_touchActed) { // 길게 누르기가 이미 처리함
+        cancelTouchDrag();
         return;
       }
 
-      if (!sq || _touchMoved) return;
+      var touch = e.changedTouches[0];
+      var sq    = sqAtTouch(touch);
+      var dist  = touchDist(touch);
+      var isDrag = (dist > MOVE_THRESHOLD);
 
-      // 탭: 선택 기물 배치 또는 지우개
+      _dbg.log('touchend sq=' + (sq ? sq.col+','+sq.row : 'null') +
+               ' dist=' + dist.toFixed(0) +
+               ' dragSq=' + (_touchDragSq ? _touchDragSq.col+','+_touchDragSq.row : 'null') +
+               ' sel=' + JSON.stringify(_sel));
+
+      removeGhost();
+
+      if (_touchDragSq) {
+        // ── 보드→보드 이동 ──────────────────────────────────
+        var from = _touchDragSq;
+        dimSq(from, false);
+        _touchDragSq = null;
+
+        if (sq && isDrag && (sq.col !== from.col || sq.row !== from.row)) {
+          var p = get(from.col, from.row);
+          _dbg.log('move ' + (p ? p.color+p.type : '?') +
+                   ' from=' + from.col+','+from.row +
+                   ' to=' + sq.col+','+sq.row);
+          set(from.col, from.row, null);
+          if (p) set(sq.col, sq.row, p);
+        } else if (!isDrag && sq) {
+          // 드래그 없이 손 뗀 경우: 같은 칸이면 아무것도 안 함
+          // 다른 칸이면 팔레트 선택 기물로 덮어쓰기
+          if (sq.col !== from.col || sq.row !== from.row) {
+            if (_sel && _sel !== 'erase') {
+              _dbg.log('tap-on-piece: place sel=' + JSON.stringify(_sel) + ' at=' + sq.col+','+sq.row);
+              set(sq.col, sq.row, _sel);
+            }
+          } else {
+            // 같은 칸 탭 → 그냥 리프레시 (기물 유지)
+            refresh();
+          }
+        } else {
+          refresh();
+        }
+        _touchStartPt = null;
+        return;
+      }
+
+      // ── 팔레트 기물 탭으로 배치 / 지우개 ──────────────────
+      if (!sq) {
+        _dbg.log('touchend: no square hit');
+        _touchStartPt = null;
+        return;
+      }
+
       if (_sel === 'erase') {
+        _dbg.log('erase at=' + sq.col + ',' + sq.row);
         set(sq.col, sq.row, null);
       } else if (_sel) {
+        _dbg.log('place ' + JSON.stringify(_sel) + ' at=' + sq.col + ',' + sq.row);
         set(sq.col, sq.row, _sel);
+      } else {
+        _dbg.log('touchend: _sel is null, nothing to place');
       }
+
+      _touchStartPt = null;
     }, { passive: false });
 
+    // ════════════════════════════════════════════════════════
     board.addEventListener('touchcancel', function() {
-      if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
-      if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
-      board.querySelectorAll('.pal-touch-target').forEach(function(el) { el.classList.remove('pal-touch-target'); });
-      if (_touchDragSq) {
-        var sqEls = board.querySelectorAll('.square');
-        var pImg = sqEls[_touchDragSq.row * 8 + _touchDragSq.col] && sqEls[_touchDragSq.row * 8 + _touchDragSq.col].querySelector('.piece-img');
-        if (pImg) pImg.classList.remove('pal-dragging');
-        _touchDragSq = null;
-      }
+      _dbg.log('touchcancel — reset');
+      cancelTouchDrag();
     });
   }
 
