@@ -1656,8 +1656,10 @@ class ChessGame {
     // (이 위치에는 별도 블록 없음)
 
     const count = this.history.length;
-    document.getElementById('move-count').textContent = `${count} 수`;
-    document.getElementById('move-count-bar').textContent = `${count} 수`;
+    const mc = document.getElementById('move-count');
+    if (mc) mc.textContent = `${count} 수`;
+    const mcb = document.getElementById('move-count-bar');
+    if (mcb) mcb.textContent = `${count} 수`;
   }
 
   // ── 변화수 블록 빌더 (인라인 스타일) ──────────────────────

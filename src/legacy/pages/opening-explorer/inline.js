@@ -277,8 +277,16 @@ function getCurrentEnPassant() {
 }
 
 // ===== RENDER BOARD =====
-function renderBoard() {
+function getActiveBoard() {
   const cb = document.getElementById('chessboard');
+  const cbm = document.getElementById('chessboard-mobile');
+  if (cbm && window.getComputedStyle(cbm).display !== 'none') return cbm;
+  return cb;
+}
+
+function renderBoard() {
+  const cb = getActiveBoard();
+  if (!cb) return;
   cb.innerHTML = '';
   const b = getCurrentBoard();
   const lastFrom = currentHistIdx >= 0 ? moveHistory[currentHistIdx].from : null;
@@ -923,7 +931,7 @@ setTimeout(renderBoard, 100); // 초기 레이아웃 이슈 방지 (처음에 �
   }
 
   function getBoardSquare(e) {
-    const board = document.getElementById('chessboard');
+    const board = getActiveBoard();
     if (!board) return null;
     const rect = board.getBoundingClientRect();
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
@@ -951,42 +959,46 @@ setTimeout(renderBoard, 100); // 초기 레이아웃 이슈 방지 (처음에 �
 
   function attachEvents() {
     const board = document.getElementById('chessboard');
-    if (!board) { setTimeout(attachEvents, 300); return; }
+    const boardMobile = document.getElementById('chessboard-mobile');
+    if (!board && !boardMobile) { setTimeout(attachEvents, 300); return; }
     ensureSvg();
 
-    board.addEventListener('contextmenu', function(e) {
-      e.preventDefault();
-      const sq = getBoardSquare(e);
-      if (sq) _arrowStart = sq;
-    });
+    const boards = [board, boardMobile].filter(b => b !== null);
+    boards.forEach(b => {
+      b.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        const sq = getBoardSquare(e);
+        if (sq) _arrowStart = sq;
+      });
 
-    board.addEventListener('mouseup', function(e) {
-      if (e.button !== 2) return;
-      if (!_arrowStart) return;
-      const sq = getBoardSquare(e);
-      ensureSvg();
-      if (sq) {
-        if (sq.col === _arrowStart.col && sq.row === _arrowStart.row) {
-          _userArrows = [];
-        } else {
-          const idx = _userArrows.findIndex(a =>
-            a.fromCol===_arrowStart.col && a.fromRow===_arrowStart.row &&
-            a.toCol===sq.col && a.toRow===sq.row
-          );
-          if (idx >= 0) _userArrows.splice(idx, 1);
-          else _userArrows.push({ fromCol:_arrowStart.col, fromRow:_arrowStart.row, toCol:sq.col, toRow:sq.row });
+      b.addEventListener('mouseup', function(e) {
+        if (e.button !== 2) return;
+        if (!_arrowStart) return;
+        const sq = getBoardSquare(e);
+        ensureSvg();
+        if (sq) {
+          if (sq.col === _arrowStart.col && sq.row === _arrowStart.row) {
+            _userArrows = [];
+          } else {
+            const idx = _userArrows.findIndex(a =>
+              a.fromCol===_arrowStart.col && a.fromRow===_arrowStart.row &&
+              a.toCol===sq.col && a.toRow===sq.row
+            );
+            if (idx >= 0) _userArrows.splice(idx, 1);
+            else _userArrows.push({ fromCol:_arrowStart.col, fromRow:_arrowStart.row, toCol:sq.col, toRow:sq.row });
+          }
+          redrawArrows();
         }
-        redrawArrows();
-      }
-      _arrowStart = null;
-    });
-
-    board.addEventListener('mousedown', function(e) {
-      if (e.button === 0) {
-        _userArrows = [];
-        redrawArrows();
         _arrowStart = null;
-      }
+      });
+
+      b.addEventListener('mousedown', function(e) {
+        if (e.button === 0) {
+          _userArrows = [];
+          redrawArrows();
+          _arrowStart = null;
+        }
+      });
     });
   }
 

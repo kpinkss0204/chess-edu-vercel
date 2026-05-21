@@ -1,13 +1,17 @@
 <nav id="sidebar"></nav>
 
+<div id="mobile-panel-backdrop" onclick="toggleMobilePanel(false)"></div>
+<button id="mobile-panel-toggle" onclick="toggleMobilePanel()" aria-label="메뉴 열기">
+  <span id="mpanel-icon-open">📊</span>
+  <span id="mpanel-icon-close" style="display:none">✕</span>
+</button>
+
 <div id="main">
   <div id="board-area">
     <div id="eval-container" class="pc-only">
       <div id="eval-bar-wrap">
         <div id="eval-bar-black"></div>
         <div id="eval-bar-fill" style="height:50%"></div>
-        <span id="eval-score-black">0.0</span>
-        <span id="eval-score-white">0.0</span>
       </div>
       <div id="board-wrap">
         <div id="chessboard"></div>
