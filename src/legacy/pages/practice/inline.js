@@ -202,9 +202,9 @@ function loadPositionFromInput() {
         el.innerHTML = '<img src="' + IMG + c + t + '.svg" draggable="false">';
         // click (데스크탑)
         el.addEventListener('click', function() { sel(c, t); });
-        // touchend (모바일 300ms 딜레이 제거)
-        el.addEventListener('touchend', function(e) {
-          e.preventDefault(); // click 이벤트 중복 방지
+        // touchstart로 즉시 선택 — touchend는 스크롤 중 cancelable=false가 될 수 있어서 사용 불가
+        el.addEventListener('touchstart', function(e) {
+          if (e.cancelable) e.preventDefault(); // cancelable일 때만 — scroll 중이면 건너뜀
           sel(c, t);
         }, { passive: false });
         el.addEventListener('dragstart', function(e) {
@@ -238,8 +238,8 @@ function loadPositionFromInput() {
   document.addEventListener('DOMContentLoaded', function() {
     var er = document.getElementById('pal-erase');
     if (er) {
-      er.addEventListener('touchend', function(e) {
-        e.preventDefault();
+      er.addEventListener('touchstart', function(e) {
+        if (e.cancelable) e.preventDefault();
         window.palErase();
       }, { passive: false });
     }
@@ -625,8 +625,8 @@ function loadPositionFromInput() {
       if (!_open) return;
       if (e.touches.length !== 1) { cancelTouchDrag(); return; }
 
-      e.preventDefault(); // 스크롤/줌/300ms 클릭 딜레이 모두 차단
-      e.stopPropagation();
+      // touchstart는 거의 항상 cancelable=true이지만 방어적으로 체크
+      if (e.cancelable) { e.preventDefault(); e.stopPropagation(); }
 
       var touch = e.touches[0];
       var sq    = sqAtTouch(touch);
@@ -665,8 +665,7 @@ function loadPositionFromInput() {
     // ════════════════════════════════════════════════════════
     board.addEventListener('touchmove', function(e) {
       if (!_open) return;
-      e.preventDefault();
-      e.stopPropagation();
+      if (e.cancelable) { e.preventDefault(); e.stopPropagation(); }
 
       var touch = e.touches[0];
       var dist  = touchDist(touch);
@@ -689,8 +688,8 @@ function loadPositionFromInput() {
     // ════════════════════════════════════════════════════════
     board.addEventListener('touchend', function(e) {
       if (!_open) return;
-      e.preventDefault();
-      e.stopPropagation();
+      // touchend는 스크롤 중이면 cancelable=false — 그 경우 preventDefault 건너뜀
+      if (e.cancelable) { e.preventDefault(); e.stopPropagation(); }
 
       if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
       setHoverSq(null);
@@ -705,7 +704,8 @@ function loadPositionFromInput() {
       var dist  = touchDist(touch);
       var isDrag = (dist > MOVE_THRESHOLD);
 
-      _dbg.log('touchend sq=' + (sq ? sq.col+','+sq.row : 'null') +
+      _dbg.log('touchend cancelable=' + e.cancelable +
+               ' sq=' + (sq ? sq.col+','+sq.row : 'null') +
                ' dist=' + dist.toFixed(0) +
                ' dragSq=' + (_touchDragSq ? _touchDragSq.col+','+_touchDragSq.row : 'null') +
                ' sel=' + JSON.stringify(_sel));
