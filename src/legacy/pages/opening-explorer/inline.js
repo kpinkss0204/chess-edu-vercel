@@ -815,6 +815,7 @@ function formatNum(n){
 
 // ===== INIT =====
 renderBoard();
+setTimeout(renderBoard, 100); // 초기 레이아웃 이슈 방지 (처음에 작게 나오는 문제 해결)
 // fetchExplorerData()는 initToken() 완료 후 자동 호출됨
 
 /* --- script block --- */
