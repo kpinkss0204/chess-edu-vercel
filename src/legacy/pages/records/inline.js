@@ -745,7 +745,10 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       if (!el) return; 
       el.innerHTML = '';
       
-      const state = _states[_viewIdx], board = state.board, flipped = _viewMyColor === 'b', lastMove = state.move, turn = state.turn;
+      const state = _states[_viewIdx];
+      if (!state) return; // 데이터가 아직 없는 경우 방어
+      
+      const board = state.board, flipped = _viewMyColor === 'b', lastMove = state.move, turn = state.turn;
       const FILES_ARR = ['a','b','c','d','e','f','g','h'];
       
       // 1. Squares Layer

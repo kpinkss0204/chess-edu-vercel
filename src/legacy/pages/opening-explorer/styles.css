@@ -136,8 +136,10 @@ body {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  width: min(calc(100vh - 180px), calc(100vw - 420px));
-  height: min(calc(100vh - 180px), calc(100vw - 420px));
+  width: min(70vh, calc(100vw - 400px));
+  height: min(70vh, calc(100vw - 400px));
+  max-width: 600px;
+  max-height: 600px;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;

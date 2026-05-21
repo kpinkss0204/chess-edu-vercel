@@ -279,8 +279,8 @@ function getCurrentEnPassant() {
 // ===== RENDER BOARD =====
 function getActiveBoard() {
   const cbm = document.getElementById('chessboard-mobile');
-  // Check if cbm exists and is NOT hidden by display: none or parent visibility
-  if (cbm && (cbm.offsetWidth > 0 || cbm.offsetHeight > 0 || window.getComputedStyle(cbm).display !== 'none')) {
+  // cbm이 존재하고 화면에 보일 때만 모바일 보드로 간주
+  if (cbm && (cbm.offsetWidth > 0 || cbm.offsetHeight > 0)) {
     return cbm;
   }
   return document.getElementById('chessboard');
@@ -289,10 +289,11 @@ function getActiveBoard() {
 function renderBoard() {
   const cb = getActiveBoard();
   if (!cb) {
-    // If not found yet, retry once after a short delay
-    if (!window._retryRender) {
-      window._retryRender = true;
-      setTimeout(renderBoard, 300);
+    // 초기 로딩 시 요소를 못 찾을 수 있으므로 재시도
+    if (!window._retryCount) window._retryCount = 0;
+    if (window._retryCount < 5) {
+      window._retryCount++;
+      setTimeout(renderBoard, 200);
     }
     return;
   }
