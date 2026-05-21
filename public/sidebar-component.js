@@ -52,31 +52,62 @@
     </div>
   `;
 
+  const hamburgerHTML = `
+    <button id="hamburger-btn" aria-label="메뉴 열기">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+    <div id="sidebar-backdrop"></div>
+  `;
+
   function initSidebar() {
     const sidebarEl = document.getElementById('sidebar');
     if (!sidebarEl) return;
+
+    // 햄버거 버튼 및 백드롭 추가 (중복 방지)
+    if (!document.getElementById('hamburger-btn')) {
+      document.body.insertAdjacentHTML('beforeend', hamburgerHTML);
+      const btn = document.getElementById('hamburger-btn');
+      const backdrop = document.getElementById('sidebar-backdrop');
+
+      btn.addEventListener('click', () => {
+        sidebarEl.classList.add('mobile-open');
+        backdrop.classList.add('show');
+      });
+
+      backdrop.addEventListener('click', () => {
+        sidebarEl.classList.remove('mobile-open');
+        backdrop.classList.remove('show');
+      });
+    }
 
     sidebarEl.innerHTML = sidebarHTML;
 
     // 현재 페이지 활성화 표시
     const path = window.location.pathname;
-    if (path === '/' || path.endsWith('index.html')) {
-      document.getElementById('nav-analysis')?.classList.add('active');
-    } else if (path.includes('play.html')) {
-      document.getElementById('nav-play')?.classList.add('active');
-    } else if (path.includes('puzzle.html')) {
-      document.getElementById('nav-puzzle')?.classList.add('active');
-    } else if (path.includes('opening-explorer.html')) {
-      document.getElementById('nav-explorer')?.classList.add('active');
-    } else if (path.includes('records.html')) {
-      document.getElementById('nav-records')?.classList.add('active');
-    } else if (path.includes('study')) {
-      document.getElementById('nav-study')?.classList.add('active');
-    } else if (path.includes('practice.html')) {
-      document.getElementById('nav-practice')?.classList.add('active');
-    }
+    const items = sidebarEl.querySelectorAll('.sidebar-item');
+    items.forEach(item => {
+      item.classList.remove('active');
+      const href = item.getAttribute('href');
+      if (href === path || (path === '/' && href === '/') || (path.endsWith('index.html') && href === '/')) {
+        item.classList.add('active');
+      } else if (href !== '/' && path.includes(href.replace('.html', ''))) {
+        item.classList.add('active');
+      }
+    });
 
-    // Firebase 유저 정보 연동 (auth-check.js 의존)
+    // 메뉴 클릭 시 사이드바 닫기 (모바일용)
+    sidebarEl.querySelectorAll('.sidebar-item:not([onclick])').forEach(item => {
+      item.addEventListener('click', () => {
+        sidebarEl.classList.remove('mobile-open');
+        document.getElementById('sidebar-backdrop')?.classList.remove('show');
+      });
+    });
+
+    // Firebase 유저 정보 연동
     if (typeof firebase !== 'undefined') {
       firebase.auth().onAuthStateChanged(user => {
         const nameEl = document.getElementById('sidebar-username');
@@ -92,6 +123,8 @@
       });
     }
   }
+
+  window.initSidebar = initSidebar;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initSidebar);
