@@ -67,10 +67,10 @@
       <textarea id="pgn-input" rows="2" placeholder="PGN 붙여넣기 (예: 1.e4 e5 2.Nf3 ...)"></textarea>
       <button id="pgn-load-btn" onclick="loadPGN()">불러오기</button>
     </div>
-  </div>
+  </div><!-- /#main -->
 
-  <!-- RIGHT: EXPLORER PANEL -->
-  <div id="right-panel" style="overflow-y: auto;">
+  <!-- RIGHT: EXPLORER PANEL (Moved outside #main for correct mobile layering) -->
+  <div id="right-panel">
     <!-- Opening name -->
     <div id="opening-header">
       <div id="opening-name">시작 포지션</div>

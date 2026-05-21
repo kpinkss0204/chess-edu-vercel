@@ -114,7 +114,7 @@ body {
 
 @media (min-width: 769px) {
   #board-area {
-    padding-top: 100px !important; /* Move board down further on PC */
+    padding-top: 100px !important;
     justify-content: flex-start !important;
   }
 }
@@ -136,8 +136,8 @@ body {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  width: min(calc(100vh - 250px), calc(100vw - 650px));
-  height: min(calc(100vh - 250px), calc(100vw - 650px));
+  width: min(calc(100vh - 180px), calc(100vw - 420px));
+  height: min(calc(100vh - 180px), calc(100vw - 420px));
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -154,7 +154,7 @@ body {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
-  max-width: min(calc(100vh - 250px), calc(100vw - 650px));
+  max-width: min(calc(100vh - 180px), calc(100vw - 420px));
   background: var(--bg-secondary);
   padding: 8px 15px !important;
   border-radius: 12px;
@@ -176,66 +176,21 @@ body {
   transition: all 0.2s;
 }
 
-.ctrl-btn:hover {
-  background: var(--bg-hover);
-  transform: translateY(-2px);
+.ctrl-btn:hover { background: var(--bg-hover); transform: translateY(-2px); }
+.ctrl-divider { width: 1px; height: 20px; background: var(--border); margin: 0 5px; }
+.eval-score { font-size: 14px; font-weight: 800; min-width: 50px; text-align: center; color: var(--accent-green-bright); }
+
+/* ===== RIGHT PANEL ===== */
+#right-panel {
+  width: 320px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  flex-shrink: 0;
 }
 
-.ctrl-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 5px;
-}
-
-.eval-score {
-  font-size: 14px;
-  font-weight: 800;
-  min-width: 50px;
-  text-align: center;
-  color: var(--accent-green-bright);
-}
-
-@media (max-width: 768px) {
-  #main {
-    flex-direction: column;
-    height: 100vh;
-    overflow: hidden;
-  }
-  
-  #board-area {
-    padding: 10px 5px;
-    height: auto;
-    flex: none;
-  }
-
-  .pc-only {
-    display: none !important;
-  }
-
-  .mobile-only {
-    display: block !important;
-  }
-
-  #chessboard-mobile {
-    width: 94vw !important;
-    height: 94vw !important;
-  }
-
-  #board-controls, #pgn-input-row {
-    width: 94vw !important;
-    max-width: none !important;
-  }
-
-  #right-panel {
-    width: 100% !important;
-    flex: 1 !important;
-    border-left: none;
-    border-top: 1px solid var(--border);
-    overflow-y: auto !important; /* Enable scrolling for stats */
-    padding-bottom: 30px;
-  }
-}
 /* ===== OPENING NAME HEADER ===== */
 #opening-header {
   padding: 12px 16px 10px;
@@ -333,55 +288,29 @@ body {
 .move-row:hover { background: var(--bg-hover); }
 .move-row.active { background: rgba(80,144,208,0.15); }
 
-.move-san {
-  font-size: 14px; font-weight: 700; color: var(--text-primary);
-  display: flex; align-items: center; gap: 6px;
-}
-.move-san img { width: 18px; height: 18px; object-fit: contain; }
+.move-san { font-size: 14px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
 .move-san-text { font-family: monospace; letter-spacing: 0.3px; }
 
-.move-bar-cell {
-  display: flex; align-items: center; gap: 5px;
-}
-.move-mini-bar {
-  flex: 1; height: 6px; border-radius: 3px; overflow: hidden;
-  display: flex; background: var(--bg-tertiary); min-width: 40px;
-}
+.move-bar-cell { display: flex; align-items: center; gap: 5px; }
+.move-mini-bar { flex: 1; height: 6px; border-radius: 3px; overflow: hidden; display: flex; background: var(--bg-tertiary); min-width: 40px; }
 .move-mini-white { background: #ddd; transition: width 0.3s; }
 .move-mini-draw  { background: #888; transition: width 0.3s; }
 .move-mini-black { background: #444; transition: width 0.3s; }
 
-.move-games {
-  font-size: 11px; color: var(--text-muted); text-align: right;
-}
-.move-pct {
-  font-size: 11px; font-weight: 600; text-align: right;
-}
+.move-games { font-size: 11px; color: var(--text-muted); text-align: right; }
+.move-pct { font-size: 11px; font-weight: 600; text-align: right; }
 .move-pct.good  { color: #7fc880; }
 .move-pct.ok    { color: var(--text-secondary); }
 .move-pct.bad   { color: #e07070; }
-.move-avg-elo {
-  font-size: 11px; color: var(--text-muted); text-align: right;
-}
+.move-avg-elo { font-size: 11px; color: var(--text-muted); text-align: right; }
 
 /* top player section */
-#top-games-section {
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-  max-height: 200px; overflow-y: auto;
-}
+#top-games-section { border-top: 1px solid var(--border); flex-shrink: 0; max-height: 200px; overflow-y: auto; }
 .top-games-header {
-  padding: 8px 16px 4px;
-  font-size: 10px; font-weight: 700; color: var(--text-muted);
-  text-transform: uppercase; letter-spacing: 0.4px;
-  position: sticky; top: 0; background: var(--bg-secondary); z-index: 4;
+  padding: 8px 16px 4px; font-size: 10px; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.4px; position: sticky; top: 0; background: var(--bg-secondary); z-index: 4;
 }
-.top-game-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 16px; cursor: pointer; transition: background 0.1s;
-  border-bottom: 1px solid rgba(58,58,58,0.4);
-  font-size: 12px;
-}
+.top-game-row { display: flex; align-items: center; gap: 8px; padding: 5px 16px; cursor: pointer; transition: background 0.1s; border-bottom: 1px solid rgba(58,58,58,0.4); font-size: 12px; }
 .top-game-row:hover { background: var(--bg-hover); }
 .tg-players { flex: 1; color: var(--text-primary); font-weight: 500; }
 .tg-result { width: 28px; text-align: center; font-weight: 700; font-size: 11px; }
@@ -389,231 +318,56 @@ body {
 .tg-result.draw  { color: #888; }
 .tg-result.black { color: #aaa; }
 .tg-year { color: var(--text-muted); font-size: 11px; }
-.tg-elo { color: var(--text-muted); font-size: 10px; }
-.tg-opening { color: var(--accent-green-bright); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
 
 /* ===== MOVE HISTORY BREADCRUMB ===== */
-#move-history-bar {
-  padding: 6px 16px; border-bottom: 1px solid var(--border);
-  flex-shrink: 0; min-height: 36px;
-  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
-  background: var(--bg-primary);
-}
-.hist-move {
-  padding: 2px 7px; border-radius: 4px; font-size: 12px;
-  font-weight: 600; cursor: pointer; transition: background 0.1s;
-  color: var(--text-secondary); font-family: monospace;
-  border: 1px solid transparent;
-}
+#move-history-bar { padding: 6px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 36px; display: flex; align-items: center; gap: 2px; flex-wrap: wrap; background: var(--bg-primary); }
+.hist-move { padding: 2px 7px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.1s; color: var(--text-secondary); font-family: monospace; border: 1px solid transparent; }
 .hist-move:hover { background: var(--bg-hover); color: var(--text-primary); }
 .hist-move.active { background: var(--accent-green-dark); color: #fff; border-color: var(--accent-green); }
-.hist-sep { color: var(--text-muted); font-size: 11px; padding: 0 1px; }
 .hist-num { color: var(--text-muted); font-size: 11px; font-weight: 500; }
 
 /* ===== LOADING ===== */
-.loading-spinner-sm {
-  display: inline-block; width: 18px; height: 18px;
-  border: 2px solid var(--border-light); border-top-color: var(--accent-green);
-  border-radius: 50%; animation: spin 0.7s linear infinite;
-}
+.loading-spinner-sm { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border-light); border-top-color: var(--accent-green); border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-#explorer-loading {
-  display: none; align-items: center; justify-content: center;
-  gap: 10px; padding: 24px;
-  font-size: 13px; color: var(--text-muted);
-}
+#explorer-loading { display: none; align-items: center; justify-content: center; gap: 10px; padding: 24px; font-size: 13px; color: var(--text-muted); }
 #explorer-loading.show { display: flex; }
-.no-data-msg {
-  text-align: center; padding: 32px 16px;
-  color: var(--text-muted); font-size: 13px;
-}
+.no-data-msg { text-align: center; padding: 32px 16px; color: var(--text-muted); font-size: 13px; }
 
 /* ===== STATUS BAR ===== */
-#status-bar {
-  display: flex; align-items: center; gap: 10px; padding: 8px 16px;
-  border-top: 1px solid var(--border); font-size: 11px; color: var(--text-secondary);
-  background: var(--bg-primary); flex-shrink: 0;
-}
+#status-bar { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-secondary); background: var(--bg-primary); flex-shrink: 0; }
 .status-dot-sm { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); display: inline-block; margin-right: 4px; }
 
-/* ===== FLIP BUTTON ===== */
-#flip-btn { margin-left: 4px; }
-
 /* ===== RESPONSIVE ===== */
-@media (max-width: 900px) {
-  #main { flex-direction: column; }
-  #board-area { padding: 10px; flex-direction: row; flex-wrap: wrap; justify-content: center; }
-  #right-panel { width: 100%; flex-shrink: 0; border-left: none; border-top: 1px solid var(--border); }
-  #chessboard { width: min(90vw, 380px); height: min(90vw, 380px); }
-  #board-controls, #pgn-input-row { width: min(90vw, 380px); }
-}
-
-/* ===== MOBILE: 사이드바 숨기고 하단 내비 표시 ===== */
-#mobile-bottom-nav { display: none; }
-
 @media (max-width: 768px) {
-  #sidebar { display: none !important; }
-  body { padding-bottom: 0 !important; }
-  #main { margin-left: 0 !important; }
-  #mobile-bottom-nav {
-    display: flex !important;
-    position: fixed; bottom: 0; left: 0; right: 0;
-    height: 56px;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border);
-    z-index: 600;
-    align-items: center;
-    justify-content: space-around;
-    padding: 0 4px;
-  }
-}
+  #main { flex-direction: column !important; height: 100vh; overflow: hidden; }
+  #board-area { flex: none; padding: 10px 5px !important; }
+  .pc-only { display: none !important; }
+  .mobile-only { display: block !important; }
+  #chessboard-mobile { width: 94vw !important; height: 94vw !important; }
+  #board-controls, #pgn-input-row { width: 94vw !important; max-width: none !important; }
 
-.mob-nav-item {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 3px; flex: 1; padding: 6px 4px;
-  color: var(--text-muted); transition: color 0.15s;
-  text-decoration: none;
-}
-.mob-nav-item span { font-size: 9px; line-height: 1; }
-.mob-nav-item:hover, .mob-nav-item.active { color: var(--accent-green-bright); }
-
-/* ========================================
-   반응형 공통: 모바일 하단 내비 + 사이드바
-   ======================================== */
-#mobile-bottom-nav { display: none; }
-.mob-nav-item {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 3px; flex: 1; padding: 6px 4px;
-  color: var(--text-muted); transition: color 0.15s;
-  text-decoration: none;
-}
-.mob-nav-item span { font-size: 9px; line-height: 1; }
-.mob-nav-item:hover, .mob-nav-item.active { color: var(--accent-green-bright); }
-
-@media (max-width: 768px) {
-  #sidebar { display: none !important; }
-  #mobile-bottom-nav {
-    display: flex !important;
-    position: fixed; bottom: 0; left: 0; right: 0; height: 56px;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border);
-    z-index: 600;
-    align-items: center;
-    justify-content: space-around;
-    padding: 0 4px;
-  }
-}
-
-/* ====== opening-explorer 반응형 ====== */
-@media (max-width: 900px) and (min-width: 769px) {
-  #right-panel { width: 260px !important; }
-  #chessboard, .chessboard {
-    width: min(90vw, calc(100vh - 160px), calc(100vw - var(--sidebar-width,72px) - 280px)) !important;
-    height: min(90vw, calc(100vh - 160px), calc(100vw - var(--sidebar-width,72px) - 280px)) !important;
-  }
-}
-@media (max-width: 768px) {
-  :root {
-    --board-size: min(96vw, calc(100vh - 200px));
-  }
-  html, body { height: 100%; overflow: hidden; }
-  body { padding-bottom: 0; }
-  #main {
-    flex-direction: column !important;
-    height: 100vh;
-    overflow: hidden;
-  }
-  #board-area {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 8px 4px !important;
-    overflow: hidden;
-  }
-  #chessboard {
-    width: var(--board-size) !important;
-    height: var(--board-size) !important;
-  }
-  #board-controls, #pgn-input-row {
-    width: var(--board-size) !important;
-    max-width: var(--board-size) !important;
-  }
   #right-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0 !important;
-    width: min(320px, 90vw) !important;
-    z-index: 499;
-    transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
-    background: var(--bg-secondary);
-    display: flex;
-    flex-direction: column;
+    position: fixed; top: 0; right: 0; bottom: 0 !important;
+    width: min(320px, 90vw) !important; z-index: 2001 !important;
+    transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5); background: var(--bg-secondary);
+    display: flex; flex-direction: column;
   }
-  #right-panel.mobile-open {
-    transform: translateX(0);
-  }
+  #right-panel.mobile-open { transform: translateX(0); }
   #mobile-panel-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 498;
-    display: none;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(2px); z-index: 2000 !important;
+    display: none; opacity: 0; transition: opacity 0.3s ease;
   }
-  #mobile-panel-backdrop.show {
-    display: block;
+  #mobile-panel-backdrop.show { display: block !important; opacity: 1 !important; }
+  #mobile-panel-toggle {
+    display: flex !important; position: fixed; right: 16px; bottom: 72px;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--accent-green); border: none; color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4); z-index: 2005 !important;
+    align-items: center; justify-content: center; cursor: pointer;
   }
-  #moves-area {
-    flex: 1;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    min-height: 180px;
-  }  #chessboard, .chessboard {
-    width: min(90vw, 340px) !important;
-    height: min(90vw, 340px) !important;
-  }
-  #board-controls, #pgn-input-row {
-    width: min(90vw, 340px) !important;
-  }
-  #pgn-input-row { display: none; } /* 모바일에선 PGN 입력창 숨김으로 공간 절약 */
 }
-
 
 /* ── 우클릭 화살표 오버레이 ── */
-.board-arrow-overlay {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  pointer-events: none;
-  z-index: 20;
-  overflow: visible;
-}
-
-/* 모바일 패널 토글 버튼 */
-#mobile-panel-toggle {
-  display: none !important;
-}
-
-@media (max-width: 768px) {
-  #mobile-panel-toggle {
-    display: flex !important;
-    position: fixed;
-    right: 16px;
-    bottom: 72px;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: var(--accent-green);
-    border: none;
-    color: white;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    z-index: 501;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-}
+.board-arrow-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; overflow: visible; }

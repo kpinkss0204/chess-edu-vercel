@@ -280,13 +280,20 @@ function getCurrentEnPassant() {
 function getActiveBoard() {
   const cb = document.getElementById('chessboard');
   const cbm = document.getElementById('chessboard-mobile');
-  if (cbm && window.getComputedStyle(cbm).display !== 'none') return cbm;
+  if (cbm && (cbm.offsetWidth > 0 || cbm.offsetHeight > 0)) return cbm;
   return cb;
 }
 
 function renderBoard() {
   const cb = getActiveBoard();
-  if (!cb) return;
+  if (!cb) {
+    // If not found yet, retry once after a short delay
+    if (!window._retryRender) {
+      window._retryRender = true;
+      setTimeout(renderBoard, 300);
+    }
+    return;
+  }
   cb.innerHTML = '';
   const b = getCurrentBoard();
   const lastFrom = currentHistIdx >= 0 ? moveHistory[currentHistIdx].from : null;

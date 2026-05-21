@@ -774,7 +774,8 @@ function analyzePosition(force) {
   pendingCastling = {...game.castling};
   pendingEP       = game.enPassant;
 
-  document.getElementById('engine-dot').className = 'engine-dot thinking';
+  const edot = document.getElementById('engine-dot');
+  if (edot) edot.className = 'engine-dot thinking';
 
   // 캐시: force/설정변경 아닐 때만 즉시 표시 (재분석 루프 방지)
   const cachedEntry = evalCache[normFen(fen)];
@@ -787,15 +788,17 @@ function analyzePosition(force) {
     const bestEval = pvData[1] ? pvData[1].eval : null;
     const v = cachedEntry.cp / 100;
     const evalStr = bestEval || (v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2));
-    document.getElementById('eval-score').textContent = evalStr;
+    const escore = document.getElementById('eval-score');
+    if (escore) escore.textContent = evalStr;
     updateEvalBarFromCp(cachedEntry.cp, bestEval);
-    document.getElementById('depth-info').textContent =
-      `⚙ d${cachedEntry.depth} (재분석 중...)`;
+    const dinfo = document.getElementById('depth-info');
+    if (dinfo) dinfo.textContent = `⚙ d${cachedEntry.depth} (재분석 중...)`;
     renderTopMoves();
   } else {
     pvData = {};
     renderTopMoves('분석 중...');
-    document.getElementById('depth-info').textContent = '분석 시작 중...';
+    const dinfo = document.getElementById('depth-info');
+    if (dinfo) dinfo.textContent = '분석 시작 중...';
     // 새 분석 시작 시 UI 초기화 (0.0으로 보이지 않게 처리 가능)
     const es = document.getElementById('eval-score');
     if (es) es.textContent = '...';
