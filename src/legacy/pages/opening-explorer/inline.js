@@ -276,20 +276,14 @@ function getCurrentEnPassant() {
   return currentHistIdx >= 0 ? moveHistory[currentHistIdx].enPassant : null;
 }
 
-// ===== RENDER BOARD =====
-function getActiveBoard() {
-  const cbm = document.getElementById('chessboard-mobile');
-  // cbm이 존재하고 화면에 보일 때만 모바일 보드로 간주
-  if (cbm && (cbm.offsetWidth > 0 || cbm.offsetHeight > 0)) {
-    return cbm;
-  }
-  return document.getElementById('chessboard');
-}
-
 function renderBoard() {
-  const cb = getActiveBoard();
-  if (!cb) {
-    // 초기 로딩 시 요소를 못 찾을 수 있으므로 재시도
+  const pcBoard = document.getElementById('chessboard');
+  const mobileBoard = document.getElementById('chessboard-mobile');
+  
+  // Render to both if they exist and are visible
+  const targets = [pcBoard, mobileBoard].filter(el => el && (el.offsetWidth > 0 || el.offsetHeight > 0 || window.getComputedStyle(el).display !== 'none'));
+  
+  if (targets.length === 0) {
     if (!window._retryCount) window._retryCount = 0;
     if (window._retryCount < 5) {
       window._retryCount++;
@@ -297,41 +291,42 @@ function renderBoard() {
     }
     return;
   }
-  cb.innerHTML = '';
+
   const b = getCurrentBoard();
   const lastFrom = currentHistIdx >= 0 ? moveHistory[currentHistIdx].from : null;
   const lastTo   = currentHistIdx >= 0 ? moveHistory[currentHistIdx].to   : null;
 
-  for (let vi = 0; vi < 8; vi++) {
-    for (let vj = 0; vj < 8; vj++) {
-      const r = flipped ? 7-vi : vi;
-      const c = flipped ? 7-vj : vj;
-      const isLight = (r+c)%2===0;
-      const sq = document.createElement('div');
-      sq.className = 'square ' + (isLight?'light':'dark');
-      sq.dataset.r = r; sq.dataset.c = c;
+  targets.forEach(cb => {
+    cb.innerHTML = '';
+    for (let vi = 0; vi < 8; vi++) {
+      for (let vj = 0; vj < 8; vj++) {
+        const r = flipped ? 7-vi : vi;
+        const c = flipped ? 7-vj : vj;
+        const isLight = (r+c)%2===0;
+        const sq = document.createElement('div');
+        sq.className = 'square ' + (isLight?'light':'dark');
+        sq.dataset.r = r; sq.dataset.c = c;
 
-      if(lastFrom&&lastFrom[0]===r&&lastFrom[1]===c) sq.classList.add('last-from');
-      if(lastTo  &&lastTo[0]  ===r&&lastTo[1]  ===c) sq.classList.add('last-to');
+        if(lastFrom&&lastFrom[0]===r&&lastFrom[1]===c) sq.classList.add('last-from');
+        if(lastTo  &&lastTo[0]  ===r&&lastTo[1]  ===c) sq.classList.add('last-to');
 
-      // explorer hints
-      if(highlightedMoves.has(FILES[c]+(8-r))) sq.classList.add('explorer-hint');
+        if(highlightedMoves.has(FILES[c]+(8-r))) sq.classList.add('explorer-hint');
 
-      // coords
-      if(vj===0){const s=document.createElement('span');s.className='coord-rank';s.textContent=8-r;sq.appendChild(s);}
-      if(vi===7){const s=document.createElement('span');s.className='coord-file';s.textContent=FILES[c];sq.appendChild(s);}
+        if(vj===0){const s=document.createElement('span');s.className='coord-rank';s.textContent=8-r;sq.appendChild(s);}
+        if(vi===7){const s=document.createElement('span');s.className='coord-file';s.textContent=FILES[c];sq.appendChild(s);}
 
-      const piece = b[r][c];
-      if(piece){
-        const img=document.createElement('img');
-        img.src=pieceImg(piece);
-        img.className='piece-img'+(piece[0]==='b'?' black-piece':'');
-        sq.appendChild(img);
+        const piece = b[r][c];
+        if(piece){
+          const img=document.createElement('img');
+          img.src=pieceImg(piece);
+          img.className='piece-img'+(piece[0]==='b'?' black-piece':'');
+          sq.appendChild(img);
+        }
+        sq.addEventListener('click', () => onSquareClick(r, c));
+        cb.appendChild(sq);
       }
-      sq.addEventListener('click', () => onSquareClick(r, c));
-      cb.appendChild(sq);
     }
-  }
+  });
 }
 
 // ===== SQUARE CLICK → play move =====

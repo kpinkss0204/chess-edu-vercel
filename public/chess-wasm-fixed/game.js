@@ -1660,6 +1660,36 @@ class ChessGame {
     if (mc) mc.textContent = `${count} 수`;
     const mcb = document.getElementById('move-count-bar');
     if (mcb) mcb.textContent = `${count} 수`;
+
+    // ── 모바일 전용 수평 기보 업데이트 ──────────────────────
+    const mel = document.getElementById('move-list-horizontal');
+    if (mel) {
+      mel.innerHTML = '';
+      for (let i = 0; i < this.history.length; i += 2) {
+        const pair = document.createElement('div');
+        pair.className = 'move-pair';
+        const num = document.createElement('span');
+        num.className = 'move-num';
+        num.textContent = (Math.floor(i/2)+1) + '.';
+        pair.appendChild(num);
+        const wCell = document.createElement('div');
+        wCell.className = `move-cell${(this.currentVariation === null && this.historyIndex===i) ? ' active' : ''}`;
+        wCell.innerHTML = moveCellHTML(this.history[i]);
+        wCell.onclick = () => { this.currentVariation=null; this.gotoMove(i); };
+        pair.appendChild(wCell);
+        if (this.history[i+1]) {
+          const bCell = document.createElement('div');
+          bCell.className = `move-cell${(this.currentVariation === null && this.historyIndex===i+1) ? ' active' : ''}`;
+          bCell.innerHTML = moveCellHTML(this.history[i+1]);
+          bCell.onclick = () => { this.currentVariation=null; this.gotoMove(i+1); };
+          pair.appendChild(bCell);
+        }
+        mel.appendChild(pair);
+      }
+      // 자동 스크롤: 현재 활성화된 수가 화면에 보이도록
+      const activeCell = mel.querySelector('.move-cell.active');
+      if (activeCell) activeCell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
   }
 
   // ── 변화수 블록 빌더 (인라인 스타일) ──────────────────────
