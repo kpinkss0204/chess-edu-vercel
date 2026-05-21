@@ -704,7 +704,27 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 }
 .pal-turn-btn.pal-active-w { border-color: #ddd; background: rgba(240,240,240,0.15); color: #eee; }
 .pal-turn-btn.pal-active-b { border-color: #666; background: rgba(80,80,80,0.3); color: #aaa; }
-/* 편집 모드 보드 */
-#chessboard.pal-edit .square { cursor: crosshair !important; }
-#chessboard.pal-edit .square:hover { outline: 2px solid rgba(80,144,208,0.7); outline-offset: -2px; }
-.piece-img.pal-dragging { opacity: 0.3; }
+/* 모바일 패널 토글 버튼 */
+#mobile-panel-toggle {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  #mobile-panel-toggle {
+    display: flex !important;
+    position: fixed;
+    right: 16px;
+    bottom: 72px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 501;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+}
