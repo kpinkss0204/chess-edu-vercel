@@ -942,22 +942,58 @@
 
     // ── 미리 정의 질문 버튼 핸들러 ──
     function setCoachQuestion(text) {
-      const input = document.getElementById('coach-input');
-      if (input) {
-        input.value = text;
-        input.focus();
-        // 코치 패널이 닫혀있으면 열기
-        if (typeof openCoach === 'function' && !coachOpen) openCoach();
+      // 메인 패널과 탭 패널의 입력을 모두 업데이트
+      const inputs = [
+        document.getElementById('coach-input'),
+        document.getElementById('coach-input-tab')
+      ];
+      inputs.forEach(input => {
+        if (input) {
+          input.value = text;
+          input.focus();
+        }
+      });
+      
+      // 질문 입력 후 즉시 실행
+      if (typeof askCoach === 'function') {
+        // 현재 활성화된(보이는) 쪽에 맞춰 실행 (기본 askCoach는 #coach-input 기준)
+        const tabCoach = document.getElementById('tab-coach');
+        if (tabCoach && tabCoach.classList.contains('active')) {
+           askCoach('tab');
+        } else {
+           askCoach();
+        }
       }
     }
 
-    function setCoachQuestionMobile(text) {
-      const input = document.getElementById('coach-input-mobile');
-      if (input) {
-        input.value = text;
-        input.focus();
-      }
+    function syncApiKey(val) {
+      const inputs = [
+        document.getElementById('coach-api-input'),
+        document.getElementById('coach-api-input-tab')
+      ];
+      inputs.forEach(input => {
+        if (input) input.value = val;
+      });
     }
+
+    (function patchAskCoach() {
+      function tryPatch() {
+        if (typeof askCoach !== 'function') {
+          setTimeout(tryPatch, 100);
+          return;
+        }
+        const _origAsk = askCoach;
+        window.askCoach = function (mode) {
+          if (mode === 'tab') {
+            const inputTab = document.getElementById('coach-input-tab');
+            const mainInput = document.getElementById('coach-input');
+            if (inputTab && mainInput) mainInput.value = inputTab.value;
+          }
+          _origAsk.apply(this, arguments);
+        };
+      }
+      tryPatch();
+    })();
 
     // ── 모바일 코치 질문 ──
     async function askCoachMobile() {

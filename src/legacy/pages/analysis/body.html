@@ -303,8 +303,8 @@
             </div>
 
             <div class="coach-question-row">
-              <textarea id="coach-input" placeholder="체스 코치에게 질문하세요..." rows="2" style="width:100%;"></textarea>
-              <button id="coach-ask-btn" onclick="askCoach()" style="margin-top:8px;width:100%;justify-content:center;">
+              <textarea id="coach-input-tab" placeholder="체스 코치에게 질문하세요..." rows="2" style="width:100%;"></textarea>
+              <button id="coach-ask-btn-tab" onclick="askCoach('tab')" style="margin-top:8px;width:100%;justify-content:center;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
                 </svg>
@@ -624,30 +624,48 @@
       }
     }
 
+    /* 기본 유틸리티 */
+    .mobile-only { display: none !important; }
+    .pc-only { display: block !important; }
+
+    @media (max-width: 768px) {
+      .mobile-only { display: block !important; }
+      .pc-only { display: none !important; }
+    }
+
     /* 분석 페이지 특화 모바일 스타일 */
     @media (max-width: 768px) {
       :root {
-        --board-size: min(94vw, calc(100vh - 200px));
+        --board-size: min(96vw, 500px);
       }
 
       body {
-        overflow: hidden !important;
+        overflow-y: auto !important;
+        height: auto !important;
+        background-attachment: scroll !important;
       }
 
       #main {
-        display: block !important;
-        height: 100vh !important;
-        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        overflow-y: visible !important;
+        padding-top: 0 !important;
+        gap: 0 !important;
       }
 
       #board-area {
-        height: 100vh !important;
+        position: relative !important;
+        flex: none !important;
+        width: 100% !important;
+        height: auto !important;
+        padding: 8px 4px !important;
+        padding-top: 55px !important;
+        background: var(--bg-primary) !important;
+        z-index: 10 !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
-        justify-content: center !important;
-        padding-top: 50px !important;
-        background: var(--bg-primary) !important;
       }
 
       #chessboard, .chessboard {
@@ -663,7 +681,104 @@
         height: var(--board-size) !important;
       }
 
-      /* 드로우 레이아웃: 오른쪽에서 슬라이드 */
+      /* 기보 영역: 가로로 늘어뜨리고 자동 줄바꿈 (Wrapped Flow) */
+      #move-list-mobile {
+        display: block !important;
+        width: var(--board-size) !important;
+        max-width: var(--board-size) !important;
+        margin: 12px auto !important;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      #move-list-horizontal {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 8px 10px !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+      }
+      #move-list-horizontal .move-pair {
+        display: inline-flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 4px !important;
+        background: var(--bg-tertiary) !important;
+        padding: 4px 8px !important;
+        border-radius: 6px !important;
+        white-space: nowrap !important;
+      }
+      #move-list-horizontal .move-num {
+        font-size: 11px !important;
+        color: var(--text-muted) !important;
+        font-weight: 700 !important;
+        margin-right: 2px !important;
+      }
+      #move-list-horizontal .move-cell {
+        font-size: 13px !important;
+        padding: 2px 4px !important;
+        cursor: pointer !important;
+        border-radius: 4px !important;
+      }
+      #move-list-horizontal .move-cell.active {
+        background: var(--accent-green) !important;
+        color: white !important;
+      }
+
+      /* AI 코치 패널: 모바일에서 기보 아래에 상시 노출 */
+      #coach-panel {
+        display: flex !important;
+        position: relative !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        border: none !important;
+        border-top: 1px solid var(--border) !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        background: var(--bg-secondary) !important;
+        order: 2;
+      }
+
+      #coach-body {
+        max-height: none !important;
+        overflow: visible !important;
+        padding: 16px !important;
+      }
+
+      #coach-input {
+        min-height: 100px !important;
+        font-size: 16px !important;
+        padding: 12px !important;
+        line-height: 1.5 !important;
+      }
+
+      .coach-question-row {
+        flex-direction: column !important;
+        gap: 10px !important;
+      }
+      
+      #coach-ask-btn {
+        width: 100% !important;
+        height: 48px !important;
+        font-size: 15px !important;
+        font-weight: 700 !important;
+      }
+
+      #coach-response {
+        display: block !important;
+        max-height: none !important;
+        overflow: visible !important;
+        margin-top: 15px !important;
+      }
+
+      /* 드로우(오른쪽 패널): 유지하되 레이어만 조정 */
       #right-panel {
         position: fixed !important;
         top: 0 !important;
@@ -678,6 +793,7 @@
         flex-direction: column !important;
         background: var(--bg-secondary) !important;
         border-left: 1px solid var(--border) !important;
+        order: 3;
       }
 
       #right-panel.mobile-open {
@@ -689,19 +805,7 @@
         position: fixed !important;
         bottom: 20px !important;
         right: 20px !important;
-        z-index: 601 !important;
-      }
-
-      /* 모바일에서는 PC용 개별 패널 숨김 */
-      #coach-panel {
-        display: none !important;
-      }
-
-      /* 탭 내부 스크롤 허용 */
-      .tab-panel {
-        flex: 1 !important;
-        overflow-y: auto !important;
-        height: auto !important;
+        z-index: 1200 !important;
       }
 
       #player-black, #player-white {
