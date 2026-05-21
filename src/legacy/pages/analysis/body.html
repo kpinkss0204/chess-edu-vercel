@@ -27,7 +27,6 @@
           <div id="eval-bar-fill" style="height:50%"></div>
           <span id="eval-score-black">0.0</span>
           <span id="eval-score-white">0.0</span>
-          <span id="eval-score-mobile-bar">0.0</span>
         </div>
         <div id="board-wrap">
           <div id="chessboard"></div>
@@ -478,6 +477,59 @@
   <div id="toast"></div>
 
   <style>
+    /* PC UI 복구 및 레이아웃 조정 */
+    @media (min-width: 769px) {
+      #main {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        align-items: flex-start !important;
+        padding: 20px 40px !important;
+        gap: 40px !important;
+        max-width: 1600px;
+        margin: 0 auto;
+      }
+
+      #board-area {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0 !important;
+      }
+
+      #board-controls {
+        width: 100% !important;
+        max-width: min(calc(100vh - 160px), calc(100vw - 450px)) !important;
+        display: flex !important;
+        justify-content: center !important;
+        gap: 8px !important;
+        margin-top: 15px !important;
+      }
+
+      #right-panel {
+        width: 340px !important;
+        height: min(800px, calc(100vh - 80px)) !important;
+        margin-left: 0 !important;
+        position: relative !important;
+        transform: none !important;
+        box-shadow: var(--shadow-panel) !important;
+        border-radius: 16px !important;
+        overflow: hidden !important;
+        flex-shrink: 0 !important;
+      }
+
+      .overlay-ctrl-btn, #coach-open-btn {
+        display: flex !important; /* Ensure buttons are visible on PC */
+      }
+
+      .player-info {
+        width: 100% !important;
+        max-width: min(calc(100vh - 160px), calc(100vw - 450px)) !important;
+      }
+    }
+
     /* 분석 페이지 특화 모바일 스타일 */
     @media (max-width: 768px) {
       :root {
