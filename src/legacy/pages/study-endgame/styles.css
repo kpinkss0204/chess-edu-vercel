@@ -90,7 +90,7 @@ body{font-family:var(--font-main);background:var(--bg-primary);color:var(--text-
 
 /* ====== study 반응형 ====== */
 @media (max-width: 768px) {
-  body { padding-bottom: 56px; }
+  body { padding-bottom: 0 !important; }
   #hub { padding: 24px 16px; gap: 28px; }
   .hub-cards { flex-direction: column !important; align-items: stretch !important; }
   .hub-card { max-width: 100% !important; }

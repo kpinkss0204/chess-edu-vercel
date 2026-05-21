@@ -193,7 +193,7 @@ body{font-family:var(--font-main);background:var(--bg-primary);color:var(--text-
     background:var(--bg-secondary);border-top:1px solid var(--border);
     z-index:600;align-items:center;justify-content:space-around;padding:0 4px;
   }
-  body{padding-bottom:56px}
+  body{padding-bottom:0 !important}
   #study-scroll{padding:16px 16px 80px !important}
   .study-top{padding:16px 16px 0 !important}
   .card-grid{grid-template-columns:1fr !important}

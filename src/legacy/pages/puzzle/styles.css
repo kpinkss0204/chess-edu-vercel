@@ -1042,7 +1042,7 @@ body {
     position: fixed;
     top: 0;
     right: 0;
-    bottom: 56px;
+    bottom: 0 !important;
     width: min(320px, 90vw) !important;
     z-index: 499;
     transform: translateX(100%);

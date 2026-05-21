@@ -48,7 +48,7 @@
         min-height: 100vh;
         overflow-x: hidden;
         overflow-y: auto;
-        padding-bottom: 56px;
+        padding-bottom: 0 !important;
       }
     }
 
@@ -1537,7 +1537,7 @@
       }
 
       body {
-        padding-bottom: 56px;
+        padding-bottom: 0 !important;
       }
 
       #main {
@@ -1640,7 +1640,7 @@
         --board-size: min(96vw, calc(100vh - 250px));
       }
       #sidebar { display: none !important; }
-      body { padding-bottom: 56px; }
+      body { padding-bottom: 0 !important; }
       #main { margin-left: 0 !important; height: 100vh; overflow: hidden; flex-direction: column !important; }
 
       #list-panel {
@@ -1653,7 +1653,7 @@
         position: fixed;
         top: 0;
         right: 0;
-        bottom: 56px;
+        bottom: 0 !important;
         width: min(420px, 90vw) !important;
         z-index: 499;
         transform: translateX(100%);

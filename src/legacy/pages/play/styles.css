@@ -460,7 +460,7 @@ body {
   :root {
     --board-size: min(96vw, calc(100vh - 250px));
   }
-  body { padding-bottom: 56px; }
+  body { padding-bottom: 0 !important; }
   #play-board-wrap {
     width: var(--board-size) !important;
     height: var(--board-size) !important;

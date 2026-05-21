@@ -409,7 +409,7 @@ body {
 
 @media (max-width: 768px) {
   #sidebar { display: none !important; }
-  body { padding-bottom: 56px; }
+  body { padding-bottom: 0 !important; }
   #main { margin-left: 0 !important; }
   #mobile-bottom-nav {
     display: flex !important;
@@ -500,7 +500,7 @@ body {
     position: fixed;
     top: 0;
     right: 0;
-    bottom: 56px;
+    bottom: 0 !important;
     width: min(320px, 90vw) !important;
     z-index: 499;
     transform: translateX(100%);
