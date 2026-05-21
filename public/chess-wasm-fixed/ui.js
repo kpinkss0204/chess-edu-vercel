@@ -58,13 +58,27 @@ if (document.readyState === 'loading') {
 }
 
 function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach((b,i) => {
-    const tabs = ['analysis','pgn','settings'];
-    b.classList.toggle('active', tabs[i]===tab);
+  // 탭 버튼 활성화 상태 업데이트
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    // b.onclick에서 'analysis', 'coach', 'pgn', 'settings' 등을 추출해 현재 탭과 비교
+    const onClickStr = b.getAttribute('onclick') || '';
+    const isActive = onClickStr.includes(`'${tab}'`);
+    b.classList.toggle('active', isActive);
   });
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  document.getElementById(`tab-${tab}`).classList.add('active');
-  if (tab === 'pgn') { setTimeout(loadSavedGames, 150); setTimeout(loadGameRecords, 200); }
+  
+  // 모든 탭 패널 숨기기
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  
+  // 선택한 패널 보이기
+  const targetPanel = document.getElementById(`tab-${tab}`);
+  if (targetPanel) {
+    targetPanel.classList.add('active');
+  }
+  
+  if (tab === 'pgn') { 
+    setTimeout(loadSavedGames, 150); 
+    setTimeout(loadGameRecords, 200); 
+  }
 }
 
 function loadPGN() {

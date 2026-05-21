@@ -815,10 +815,10 @@
 
         window.openCoach = function () {
           if (window.innerWidth <= 768) {
-            // 모바일: 패널이 항상 보이므로 스크롤 이동만 고려하거나 단순히 원본 로직(분석 실행) 호출
+            // 모바일: 드로우를 열고 'coach' 탭으로 전환
+            if (typeof toggleMobilePanel === 'function') toggleMobilePanel(true);
+            if (typeof switchTab === 'function') switchTab('coach');
             _origOpen.apply(this, arguments);
-            const coachPanel = document.getElementById('coach-panel');
-            if (coachPanel) coachPanel.scrollIntoView({ behavior: 'smooth' });
             return;
           }
           _origOpen.apply(this, arguments);
@@ -836,7 +836,7 @@
 
         window.closeCoach = function () {
           if (window.innerWidth <= 768) {
-            // 모바일에서는 닫기 버튼을 눌러도 구조상 유지 (또는 필요시 숨김 처리 가능하지만 기본은 유지)
+            if (typeof toggleMobilePanel === 'function') toggleMobilePanel(false);
             _origClose.apply(this, arguments);
             return;
           }
@@ -856,7 +856,12 @@
         // toggleCoachPanel도 새 함수에 연결
         window.toggleCoachPanel = function () {
           if (window.innerWidth <= 768) {
-            window.openCoach();
+            const rp = document.getElementById('right-panel');
+            if (rp && rp.classList.contains('mobile-open')) {
+              if (typeof toggleMobilePanel === 'function') toggleMobilePanel(false);
+            } else {
+              window.openCoach();
+            }
             return;
           }
           const panel = document.getElementById('coach-panel');
@@ -873,6 +878,25 @@
       } else {
         tryPatch();
       }
+    })();
+
+    // ── API 키 동기화 및 관리 ──
+    window.syncApiKey = function(val) {
+      const mainInput = document.getElementById('coach-api-input');
+      const tabInput = document.getElementById('coach-api-input-tab');
+      if (mainInput) mainInput.value = val;
+      if (tabInput) tabInput.value = val;
+    };
+
+    (function initApiKeySync() {
+      function apply() {
+        const savedKey = localStorage.getItem('groq_api_key');
+        if (savedKey) {
+          window.syncApiKey(savedKey);
+        }
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+      else apply();
     })();
 
     // ── 모바일에서 AI코치 탭 버튼 표시 ──

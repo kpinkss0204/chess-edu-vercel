@@ -2848,37 +2848,30 @@
       overflow: visible;
     }
 
-    /* 모바일 기보: 가로 레이아웃 */
-    #move-list-mobile {
-      width: var(--board-size) !important;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px;
-      margin: 10px 0;
-      overflow-x: auto;
-      white-space: nowrap;
-      -webkit-overflow-scrolling: touch;
-    }
-    #move-list-horizontal {
-      display: inline-flex;
-      gap: 6px;
-      align-items: center;
-    }
-    #move-list-horizontal .move-pair {
-      display: flex;
-      gap: 4px;
-      background: var(--bg-tertiary);
-      padding: 4px 8px;
-      border-radius: 6px;
-      align-items: center;
-    }
-    #move-list-horizontal .move-num {
-      font-size: 11px;
-      color: var(--text-muted);
-      padding: 0;
-    }
-    #move-list-horizontal .move-cell {
-      font-size: 13px;
-      padding: 2px 4px;
+    /* 분석 페이지 특화 모바일 스타일 */
+    @media (max-width: 768px) {
+      :root {
+        --board-size: min(94vw, 450px);
+      }
+      #chessboard, .chessboard {
+        width: var(--board-size) !important;
+        height: var(--board-size) !important;
+      }
+      .player-info, #eval-container, #board-controls {
+        width: var(--board-size) !important;
+        max-width: var(--board-size) !important;
+      }
+      #eval-bar-wrap {
+        height: var(--board-size) !important;
+      }
+
+      .tab-panel {
+        height: 100% !important;
+        overflow-y: auto !important;
+      }
+
+      #move-list-wrap {
+        max-height: none !important;
+        flex: 1 !important;
+      }
     }
