@@ -815,9 +815,10 @@
 
         window.openCoach = function () {
           if (window.innerWidth <= 768) {
-            // 모바일: right-panel을 열고 AI코치 탭으로 전환
-            toggleMobilePanel(true);
-            switchTab('coach-mobile');
+            // 모바일: 패널이 항상 보이므로 스크롤 이동만 고려하거나 단순히 원본 로직(분석 실행) 호출
+            _origOpen.apply(this, arguments);
+            const coachPanel = document.getElementById('coach-panel');
+            if (coachPanel) coachPanel.scrollIntoView({ behavior: 'smooth' });
             return;
           }
           _origOpen.apply(this, arguments);
@@ -835,7 +836,8 @@
 
         window.closeCoach = function () {
           if (window.innerWidth <= 768) {
-            toggleMobilePanel(false);
+            // 모바일에서는 닫기 버튼을 눌러도 구조상 유지 (또는 필요시 숨김 처리 가능하지만 기본은 유지)
+            _origClose.apply(this, arguments);
             return;
           }
           _origClose.apply(this, arguments);
@@ -854,13 +856,7 @@
         // toggleCoachPanel도 새 함수에 연결
         window.toggleCoachPanel = function () {
           if (window.innerWidth <= 768) {
-            const rp = document.getElementById('right-panel');
-            if (rp && rp.classList.contains('mobile-open')) {
-              toggleMobilePanel(false);
-            } else {
-              toggleMobilePanel(true);
-              switchTab('coach-mobile');
-            }
+            window.openCoach();
             return;
           }
           const panel = document.getElementById('coach-panel');

@@ -575,14 +575,39 @@
       :root {
         --board-size: min(94vw, calc(100vh - 250px));
       }
+
+      body {
+        height: 100vh !important;
+        overflow: hidden !important;
+      }
+
+      #main {
+        display: flex !important;
+        flex-direction: column !important;
+        height: 100vh !important;
+        overflow-y: auto !important;
+        padding-top: 0 !important;
+        gap: 0 !important;
+      }
+
+      #board-area {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 100 !important;
+        flex: none !important;
+        background: var(--bg-primary) !important;
+        padding: 8px 4px !important;
+        padding-top: 50px !important; /* 햄버거 버튼 및 상단 여백 */
+        margin-top: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+      }
+
       #chessboard, .chessboard {
         width: var(--board-size) !important;
         height: var(--board-size) !important;
       }
-      #board-area {
-        padding: 8px 4px !important;
-        margin-top: 50px; /* 햄버거 버튼 공간 */
-      }
+
       .player-info, #eval-container, #board-controls {
         width: var(--board-size) !important;
         max-width: var(--board-size) !important;
@@ -591,25 +616,72 @@
         height: var(--board-size) !important;
       }
 
-      #right-panel {
-        position: fixed;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        width: min(320px, 90vw) !important;
-        z-index: 499;
-        transform: translateX(100%);
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+      /* AI 코치 패널: 모바일에서 상시 노출 및 스크롤 플로우 포함 */
+      #coach-panel {
+        display: flex !important;
+        position: relative !important;
+        transform: none !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        border: none !important;
+        border-top: 1px solid var(--border) !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        order: 2;
       }
 
-      #right-panel.mobile-open {
-        transform: translateX(0);
+      #coach-body {
+        max-height: none !important;
+        overflow: visible !important;
+      }
+
+      #coach-response {
+        display: block !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+
+      /* 우측 패널: 모바일에서 코치 패널 아래에 배치 */
+      #right-panel {
+        display: flex !important;
+        position: relative !important;
+        top: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        transform: none !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-top: 1px solid var(--border) !important;
+        border-radius: 0 !important;
+        overflow: visible !important;
+        order: 3;
+      }
+
+      #tab-analysis, .tab-panel {
+        height: auto !important;
+        min-height: auto !important;
+        overflow: visible !important;
+      }
+
+      #move-list-wrap {
+        max-height: 400px !important; /* 기보는 적절히 제한 */
+        overflow-y: auto !important;
+      }
+
+      /* 최선수 찾기 및 설명 패널 상시 노출 */
+      #threat-panel, #best-explain-panel {
+        display: block !important;
+        margin-bottom: 12px !important;
       }
 
       #mobile-panel-toggle {
-        display: flex !important;
-        bottom: 20px; /* 하단바가 없으므로 아래로 조정 */
+        display: none !important; /* 항상 보이므로 토글 불필요 */
       }
 
       #player-black, #player-white {

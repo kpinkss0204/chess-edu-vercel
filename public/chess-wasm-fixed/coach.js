@@ -28,7 +28,7 @@ function loadApiKey() {
 // 패널 열기/닫기
 function openCoach() {
   coachOpen = true;
-  const panel = document.getElementById('coach-inline');
+  const panel = document.getElementById('coach-panel');
   if (panel) panel.classList.add('visible');
   const btn = document.getElementById('coach-open-btn');
   if (btn) btn.classList.add('active');
@@ -41,7 +41,7 @@ function openCoach() {
 
 function closeCoach() {
   coachOpen = false;
-  const panel = document.getElementById('coach-inline');
+  const panel = document.getElementById('coach-panel');
   if (panel) panel.classList.remove('visible');
   const btn = document.getElementById('coach-open-btn');
   if (btn) btn.classList.remove('active');
