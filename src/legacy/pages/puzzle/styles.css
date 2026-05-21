@@ -1020,7 +1020,7 @@ body {
 }
 @media (max-width: 768px) {
   :root {
-    --board-size: min(96vw, calc(100vh - 250px));
+    --board-size: min(98vw, calc(100vh - 200px));
   }
   body { padding-bottom: 0; }
   #main { margin-left: 0 !important; height: 100vh; overflow: hidden; }
@@ -1030,8 +1030,9 @@ body {
     width: var(--board-size) !important;
     height: var(--board-size) !important;
   }
-  #puzzle-board-col > div {
-    width: var(--board-size) !important;
+  #puzzle-board-col > div, #puzzle-chessboard {
+    width: 100% !important;
+    height: 100% !important;
   }
   #puzzle-side-panel {
     position: fixed;
