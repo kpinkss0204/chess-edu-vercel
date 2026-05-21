@@ -278,10 +278,12 @@ function getCurrentEnPassant() {
 
 // ===== RENDER BOARD =====
 function getActiveBoard() {
-  const cb = document.getElementById('chessboard');
   const cbm = document.getElementById('chessboard-mobile');
-  if (cbm && (cbm.offsetWidth > 0 || cbm.offsetHeight > 0)) return cbm;
-  return cb;
+  // Check if cbm exists and is NOT hidden by display: none or parent visibility
+  if (cbm && (cbm.offsetWidth > 0 || cbm.offsetHeight > 0 || window.getComputedStyle(cbm).display !== 'none')) {
+    return cbm;
+  }
+  return document.getElementById('chessboard');
 }
 
 function renderBoard() {

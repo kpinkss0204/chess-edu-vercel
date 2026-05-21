@@ -482,11 +482,6 @@ window.toggleMobilePanel = toggleMobilePanel;
 
         if (san.includes('#') && isMe) result.checkmates++;
       }
-          }
-        } else if (san.includes('#') && isMe) {
-          result.checkmates++;
-        }
-      }
 
       return result;
     }
@@ -524,21 +519,6 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         new Promise((_, reject) => setTimeout(() => reject(new Error('요청 시간 초과 (' + ms / 1000 + '초)')), ms))
       ]);
     }
-
-  function toggleMobilePanel(forceClose) {
-    const panel     = document.getElementById('viewer-panel');
-    const backdrop  = document.getElementById('mobile-panel-backdrop');
-    const iconOpen  = document.getElementById('mpanel-icon-open');
-    const iconClose = document.getElementById('mpanel-icon-close');
-    if (!panel || !backdrop) return;
-    const isOpen    = panel.classList.contains('mobile-open');
-    const shouldOpen = forceClose === false ? false : !isOpen;
-    panel.classList.toggle('mobile-open', shouldOpen);
-    backdrop.classList.toggle('show', shouldOpen);
-    if (iconOpen) iconOpen.style.display  = shouldOpen ? 'none' : '';
-    if (iconClose) iconClose.style.display = shouldOpen ? ''      : 'none';
-  }
-  window.toggleMobilePanel = toggleMobilePanel;
 
   let _loadingRecords = false;
     async function loadRecords() {
