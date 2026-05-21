@@ -185,16 +185,110 @@ body {
   overflow: hidden;
 }
 
+/* ===== PIECE PALETTE (EDITOR) ===== */
+#palette-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+  max-width: min(calc(100vh - 250px), calc(100vw - 650px));
+  box-shadow: var(--shadow-sm);
+}
+
+.palette-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.pal-group {
+  display: flex;
+  gap: 8px;
+  background: rgba(0,0,0,0.1);
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.pal-piece {
+  width: 42px;
+  height: 42px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.pal-piece:hover {
+  background: var(--bg-hover);
+  transform: scale(1.1);
+}
+
+.pal-piece.active {
+  background: var(--accent-green-dark);
+  box-shadow: 0 0 0 2px var(--accent-green-bright);
+}
+
+.palette-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.pal-turn-row {
+  display: flex;
+  gap: 5px;
+}
+
+.pal-turn-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pal-turn-btn.active {
+  background: var(--accent-green);
+  color: white;
+  border-color: var(--accent-green-bright);
+}
+
+.pal-action-btn {
+  height: 34px;
+  padding: 0 15px;
+  border-radius: 8px;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pal-action-btn.delete { background: rgba(220, 80, 75, 0.15); color: #ff6b6b; border: 1px solid rgba(220, 80, 75, 0.3); }
+.pal-action-btn.clear { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border); }
+.pal-action-btn.done { background: var(--accent-green); color: white; margin-left: auto; }
+
+.pal-action-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
 @media (max-width: 768px) {
-  #main {
-    flex-direction: column !important;
+  #palette-panel {
+    max-width: 94vw;
   }
-  
-  #board-area {
-    padding: 10px 5px !important;
-    height: auto;
-    flex: none !important;
+  .pal-piece {
+    width: 36px;
+    height: 36px;
   }
+}
 
   #eval-bar-wrap {
     height: 94vw !important;

@@ -114,7 +114,8 @@ body {
 
 @media (min-width: 769px) {
   #board-area {
-    padding-top: 60px !important; /* Fix board too high on PC */
+    padding-top: 100px !important; /* Move board down further on PC */
+    justify-content: flex-start !important;
   }
 }
 

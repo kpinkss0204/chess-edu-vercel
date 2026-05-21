@@ -35,15 +35,15 @@
     </div>
 
     <div id="board-controls">
-      <button class="ctrl-btn" onclick="game.prevMove()" title="이전 수">
+      <button class="ctrl-btn" onclick="goBack()" title="이전 수">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 19L7 12L15.5 5V19Z"/></svg>
       </button>
-      <button class="ctrl-btn" onclick="game.nextMove()" title="다음 수">
+      <button class="ctrl-btn" onclick="goForward()" title="다음 수">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 5L17 12L8.5 19V5Z"/></svg>
       </button>
       <div class="ctrl-divider"></div>
       <div class="eval-score" id="eval-score" title="엔진 평가">0.0</div>
-      <button class="ctrl-btn" onclick="game.flipBoard()" title="보드 뒤집기">
+      <button class="ctrl-btn" onclick="flipBoard()" title="보드 뒤집기">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
           <polyline points="17 1 21 5 17 9" />
@@ -52,7 +52,7 @@
           <path d="M21 13v2a4 4 0 0 1-4 4H3" />
         </svg>
       </button>
-      <button class="ctrl-btn" onclick="game.resetBoard()" title="초기화">
+      <button class="ctrl-btn" onclick="resetBoard()" title="초기화">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path
             d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
