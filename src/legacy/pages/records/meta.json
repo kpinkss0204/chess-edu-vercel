@@ -16,6 +16,7 @@
     "chess-wasm-fixed/lichess-judgment.js",
     "chess-wasm-fixed/chess-tactics.js",
     "chess-wasm-fixed/analysis-cache.js",
-    "auth-check.js"
+    "auth-check.js",
+    "sidebar-component.js"
   ]
 }
