@@ -397,13 +397,8 @@ window.toggleMobilePanel = toggleMobilePanel;
         }
       }
 
-      // 큐에 담긴 지점들을 2초 간격으로 순차 분석 (Rate Limit 준수)
+      // 큐에 담긴 지점들을 순차 분석 (ChessTactics 내부의 RequestQueue가 2초 간격 보장)
       for (const task of analyzeQueue) {
-        if (analyzeQueue.indexOf(task) > 0) {
-          // 30 req/min 제한을 지키기 위해 2.1초 대기
-          await new Promise(resolve => setTimeout(resolve, 2100));
-        }
-
         try {
           const prevFen = CT.snapshotFromState(task.stBefore);
           const bestMv = uciToMoveFromState(task.bestUci, task.stBefore);
@@ -411,7 +406,7 @@ window.toggleMobilePanel = toggleMobilePanel;
 
           // 최선의 수를 두었을 때의 FEN 생성
           const bestAfterFen = CT.applyMoveSnapshot(prevFen, bestMv);
-          // FEN 분석 API 호출 (이것은 분당 30회 제한만 있음)
+          // FEN 분석 API 호출 (내부적으로 Rate Limit 및 캐시 처리됨)
           const bestT = await CT.detectTactics(bestAfterFen, { depth: 'l2', withSequence: true });
 
           if (bestT) {
@@ -841,8 +836,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         if (rb) rb.classList.remove('active');
         if (lp) lp.style.display = 'none';
         if (vp) vp.style.display = 'none';
-        // 통계 탭 전환 시 항상 최신 상태 반영 (캐시 무효화 → 새 기보 자동 감지)
-        _statsCache = null;
+        // 통계 탭 전환 시 캐시가 있으면 그대로 사용 (무분별한 재분석 방지)
         if (sp) { sp.style.display = 'block'; renderStats(); }
       }
     }
@@ -851,174 +845,217 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
     // 통계 분석
     // ════════════════════════════════════════
     let _statsCache = null;
+    let _statsBusy = false;
     let _statsGameDetails = [];  // 게임별 전술 상세 [{doc, tacticEvents}]
 
     async function renderStats() {
       const contentEl = document.getElementById('stats-content'), subEl = document.getElementById('stats-sub');
       if (_statsCache) { renderStatsHTML(_statsCache); return; }
+      if (_statsBusy) return;
 
-      let docs = [];
+      _statsBusy = true;
       try {
-        let snap = null;
-        try { snap = await _fbDb.collection('game_records').where('uid', '==', _user.uid).orderBy('playedAt', 'desc').limit(50).get(); }
-        catch (e) { snap = await _fbDb.collection('game_records').where('uid', '==', _user.uid).limit(50).get(); }
-        const seenIds = new Set();
-        snap.forEach(d => { if (!seenIds.has(d.id)) { seenIds.add(d.id); docs.push({ id: d.id, ...d.data() }); } });
-      } catch (e) { contentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>불러오기 실패: ${e.message}</div></div>`; return; }
-
-      if (!docs.length) { contentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><div>분석할 기록이 없습니다</div></div>`; return; }
-
-      let wins = 0, losses = 0, draws = 0, winsW = 0, lossesW = 0, drawsW = 0, winsB = 0, lossesB = 0, drawsB = 0;
-      let endCheckmate = 0, endResign = 0, endDraw = 0, endTimeout = 0;
-      const myColor_counts = { w: 0, b: 0 }; let totalMovesSum = 0;
-      let sumMyBlunders = 0, sumMyMistakes = 0, sumMyInaccuracies = 0;
-      let sumOppBlunders = 0, sumOppMistakes = 0, sumOppInaccuracies = 0, sumOppBF = 0, sumOppBM = 0;
-      let sumCheckmates = 0, sumAbsPinFound = 0, sumAbsPinMissed = 0, sumRelPinFound = 0, sumRelPinMissed = 0;
-      let sumSkewerFound = 0, sumSkewerMissed = 0, sumDiscoveredFound = 0, sumDiscoveredMissed = 0;
-      let sumTrapFound = 0, sumTrapMissed = 0, sumDecoyFound = 0, sumDecoyMissed = 0;
-      let sumForkFound = { P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 }, sumForkMissed = { P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 }, sumOppForkCreated = { P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 };
-      let sumCp = 0, sumMoves = 0;
-      const total = docs.length;
-      _statsGameDetails = [];
-      // 오프닝별 통계 맵: key -> {eco, name, variation, w:{wins,draws,losses}, b:{wins,draws,losses}}
-      const openingStatsMap = new Map();
-
-      // ── tacticAnalysis 캐시가 있으면 Stockfish 재분석 생략
-      let newlyAnalyzedCount = 0;
-      let cachedAnalysisCount = 0;
-      let sumMyAccuracy = 0, accuracyCount = 0;
-
-      function accumulateFromAnalysis(doc, a) {
-        sumMyBlunders += a.myBlunders || 0;
-        sumMyMistakes += a.myMistakes || 0;
-        sumMyInaccuracies += a.myInaccuracies || 0;
-        sumOppBlunders += a.oppBlunders || 0;
-        sumOppMistakes += a.oppMistakes || 0;
-        sumOppInaccuracies += a.oppInaccuracies || 0;
-        sumOppBF += a.oppBlunderFound || 0;
-        sumOppBM += a.oppBlunderMissed || 0;
-        sumCheckmates += a.checkmates || 0;
-        sumAbsPinFound += a.absPinFound || 0;
-        sumAbsPinMissed += a.absPinMissed || 0;
-        sumRelPinFound += a.relPinFound || 0;
-        sumRelPinMissed += a.relPinMissed || 0;
-        sumSkewerFound += a.skewerFound || 0;
-        sumSkewerMissed += a.skewerMissed || 0;
-        sumDiscoveredFound += a.discoveredFound || 0;
-        sumDiscoveredMissed += a.discoveredMissed || 0;
-        sumTrapFound += a.trapFound || 0;
-        sumTrapMissed += a.trapMissed || 0;
-        sumDecoyFound += a.decoyFound || 0;
-        sumDecoyMissed += a.decoyMissed || 0;
-        sumCp += a.myCpSum || 0;
-        sumMoves += a.myMoveCount || 0;
-        totalMovesSum += a.totalMoves || 0;
-        for (const k of ['P', 'N', 'B', 'R', 'Q', 'K']) {
-          sumForkFound[k] += (a.forkFound && a.forkFound[k]) || 0;
-          sumForkMissed[k] += (a.forkMissed && a.forkMissed[k]) || 0;
-          sumOppForkCreated[k] += (a.oppForkCreated && a.oppForkCreated[k]) || 0;
-        }
-        if ((a.tacticEvents && a.tacticEvents.length) || (a.moveJudgments && a.moveJudgments.length)) {
-          _statsGameDetails.push({ doc, tacticEvents: a.tacticEvents, moveJudgments: a.moveJudgments });
-        }
-        if (a.myAccuracy > 0) { sumMyAccuracy += a.myAccuracy; accuracyCount++; }
-      }
-
-      for (let gi = 0; gi < docs.length; gi++) {
-        const doc = docs[gi];
-        const myColor = resolveMyColor(doc), result = doc.result || '*';
-        myColor_counts[myColor]++;
-        const myWin = (result === '1-0' && myColor === 'w') || (result === '0-1' && myColor === 'b');
-        const myLose = (result === '0-1' && myColor === 'w') || (result === '1-0' && myColor === 'b');
-        if (myWin) { wins++; if (myColor === 'w') winsW++; else winsB++; }
-        else if (myLose) { losses++; if (myColor === 'w') lossesW++; else lossesB++; }
-        else { draws++; if (myColor === 'w') drawsW++; else drawsB++; }
-        const term = (doc.termination || '').toLowerCase();
-        if (term.includes('checkmate') || term.includes('체크메이트')) endCheckmate++;
-        else if (term.includes('resign') || term.includes('기권')) endResign++;
-        else if (term.includes('time') || term.includes('시간')) endTimeout++;
-        else endDraw++;
-
-        // 오프닝 감지
-        if (doc.pgn) {
-          try {
-            const uciArr = pgnToUciMoves(doc.pgn);
-            const op = detectOpening(uciArr);
-            if (op) {
-              const k = openingKey(op);
-              if (!openingStatsMap.has(k)) openingStatsMap.set(k, { eco: op.eco, name: op.name, variation: op.variation, w: { wins: 0, draws: 0, losses: 0, total: 0 }, b: { wins: 0, draws: 0, losses: 0, total: 0 } });
-              const entry = openingStatsMap.get(k);
-              const colorStats = entry[myColor];
-              colorStats.total++;
-              if (myWin) colorStats.wins++;
-              else if (myLose) colorStats.losses++;
-              else colorStats.draws++;
-            }
-          } catch (e) { }
-        }
-
-        if (!doc.pgn) { if (doc.moveCount) totalMovesSum += doc.moveCount; continue; }
-
-        let expectedMoves = 0;
-        try { expectedMoves = Math.max(0, parsePgnToStates(doc.pgn).length - 1); } catch (e) { /* ignore */ }
-        const ta = doc.tacticAnalysis;
-        const AC = typeof AnalysisCache !== 'undefined' ? AnalysisCache : null;
-        if (AC && AC.isTacticAnalysisComplete(ta, expectedMoves)) {
-          accumulateFromAnalysis(doc, ta);
-          cachedAnalysisCount++;
-          continue;
-        }
-
-        // ── Stockfish 분석 (리체스 CpAdvice와 동일한 wc·임계값으로 수 분류)
-        const pct = Math.round(gi / total * 100);
-        contentEl.innerHTML = `<div class="stats-loading"><div class="stats-spinner"></div><div class="stats-progress-wrap">
-      <div style="font-size:13px;color:var(--text-secondary)">Stockfish 분석 중… (${gi + 1} / ${total})</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">깊이 ${__RC.SF_DEPTH} · 수 분류 = 리체스 CpAdvice(winningChances)</div>
-      <div class="stats-progress-bar-outer"><div class="stats-progress-bar-fill" style="width:${pct}%"></div></div>
-      <div class="stats-progress-label">포지션 분석 중…</div>
-    </div></div>`;
-
+        let docs = [];
         try {
-          const a = await window.analyzeGame(doc.pgn, myColor, (cur, tot) => {
-            const ip = Math.round(cur / Math.max(tot, 1) * 100);
-            const fill = contentEl.querySelector('.stats-progress-bar-fill');
-            if (fill) fill.style.width = Math.round(gi / total * 100 + ip / total) + '%';
-          });
+          let snap = null;
+          try { snap = await _fbDb.collection('game_records').where('uid', '==', _user.uid).orderBy('playedAt', 'desc').limit(50).get(); }
+          catch (e) { snap = await _fbDb.collection('game_records').where('uid', '==', _user.uid).limit(50).get(); }
+          const seenIds = new Set();
+          snap.forEach(d => { if (!seenIds.has(d.id)) { seenIds.add(d.id); docs.push({ id: d.id, ...d.data() }); } });
+        } catch (e) {
+          contentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>불러오기 실패: ${e.message}</div></div>`;
+          return;
+        }
 
-          accumulateFromAnalysis(doc, a);
-          newlyAnalyzedCount++;
+        if (!docs.length) {
+          contentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><div>분석할 기록이 없습니다</div></div>`;
+          return;
+        }
 
-          // ── Firestore 덮어씌움
+        let wins = 0, losses = 0, draws = 0, winsW = 0, lossesW = 0, drawsW = 0, winsB = 0, lossesB = 0, drawsB = 0;
+        let endCheckmate = 0, endResign = 0, endDraw = 0, endTimeout = 0;
+        const myColor_counts = { w: 0, b: 0 }; let totalMovesSum = 0;
+        let sumMyBlunders = 0, sumMyMistakes = 0, sumMyInaccuracies = 0;
+        let sumOppBlunders = 0, sumOppMistakes = 0, sumOppInaccuracies = 0, sumOppBF = 0, sumOppBM = 0;
+        let sumCheckmates = 0, sumAbsPinFound = 0, sumAbsPinMissed = 0, sumRelPinFound = 0, sumRelPinMissed = 0;
+        let sumSkewerFound = 0, sumSkewerMissed = 0, sumDiscoveredFound = 0, sumDiscoveredMissed = 0;
+        let sumTrapFound = 0, sumTrapMissed = 0, sumDecoyFound = 0, sumDecoyMissed = 0;
+        let sumForkFound = { P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 }, sumForkMissed = { P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 }, sumOppForkCreated = { P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 };
+        let sumCp = 0, sumMoves = 0;
+        const total = docs.length;
+        _statsGameDetails = [];
+        const openingStatsMap = new Map();
+
+        let newlyAnalyzedCount = 0;
+        let cachedAnalysisCount = 0;
+        let sumMyAccuracy = 0, accuracyCount = 0;
+
+        function accumulateFromAnalysis(doc, a) {
+          sumMyBlunders += a.myBlunders || 0;
+          sumMyMistakes += a.myMistakes || 0;
+          sumMyInaccuracies += a.myInaccuracies || 0;
+          sumOppBlunders += a.oppBlunders || 0;
+          sumOppMistakes += a.oppMistakes || 0;
+          sumOppInaccuracies += a.oppInaccuracies || 0;
+          sumOppBF += a.oppBlunderFound || 0;
+          sumOppBM += a.oppBlunderMissed || 0;
+          sumCheckmates += a.checkmates || 0;
+          sumAbsPinFound += a.absPinFound || 0;
+          sumAbsPinMissed += a.absPinMissed || 0;
+          sumRelPinFound += a.relPinFound || 0;
+          sumRelPinMissed += a.relPinMissed || 0;
+          sumSkewerFound += a.skewerFound || 0;
+          sumSkewerMissed += a.skewerMissed || 0;
+          sumDiscoveredFound += a.discoveredFound || 0;
+          sumDiscoveredMissed += a.discoveredMissed || 0;
+          sumTrapFound += a.trapFound || 0;
+          sumTrapMissed += a.trapMissed || 0;
+          sumDecoyFound += a.decoyFound || 0;
+          sumDecoyMissed += a.decoyMissed || 0;
+          sumCp += a.myCpSum || 0;
+          sumMoves += a.myMoveCount || 0;
+          totalMovesSum += a.totalMoves || 0;
+          for (const k of ['P', 'N', 'B', 'R', 'Q', 'K']) {
+            sumForkFound[k] += (a.forkFound && a.forkFound[k]) || 0;
+            sumForkMissed[k] += (a.forkMissed && a.forkMissed[k]) || 0;
+            sumOppForkCreated[k] += (a.oppForkCreated && a.oppForkCreated[k]) || 0;
+          }
+          if ((a.tacticEvents && a.tacticEvents.length) || (a.moveJudgments && a.moveJudgments.length)) {
+            _statsGameDetails.push({ doc, tacticEvents: a.tacticEvents, moveJudgments: a.moveJudgments });
+          }
+          if (a.myAccuracy > 0) { sumMyAccuracy += a.myAccuracy; accuracyCount++; }
+        }
+
+        for (let gi = 0; gi < docs.length; gi++) {
+          const doc = docs[gi];
+          const myColor = resolveMyColor(doc), result = doc.result || '*';
+          myColor_counts[myColor]++;
+          const myWin = (result === '1-0' && myColor === 'w') || (result === '0-1' && myColor === 'b');
+          const myLose = (result === '0-1' && myColor === 'w') || (result === '1-0' && myColor === 'b');
+          if (myWin) { wins++; if (myColor === 'w') winsW++; else winsB++; }
+          else if (myLose) { losses++; if (myColor === 'w') lossesW++; else lossesB++; }
+          else { draws++; if (myColor === 'w') drawsW++; else drawsB++; }
+          const term = (doc.termination || '').toLowerCase();
+          if (term.includes('checkmate') || term.includes('체크메이트')) endCheckmate++;
+          else if (term.includes('resign') || term.includes('기권')) endResign++;
+          else if (term.includes('time') || term.includes('시간')) endTimeout++;
+          else endDraw++;
+
+          if (doc.pgn) {
+            try {
+              const uciArr = pgnToUciMoves(doc.pgn);
+              const op = detectOpening(uciArr);
+              if (op) {
+                const k = openingKey(op);
+                if (!openingStatsMap.has(k)) openingStatsMap.set(k, { eco: op.eco, name: op.name, variation: op.variation, w: { wins: 0, draws: 0, losses: 0, total: 0 }, b: { wins: 0, draws: 0, losses: 0, total: 0 } });
+                const entry = openingStatsMap.get(k);
+                const colorStats = entry[myColor];
+                colorStats.total++;
+                if (myWin) colorStats.wins++;
+                else if (myLose) colorStats.losses++;
+                else colorStats.draws++;
+              }
+            } catch (e) { }
+          }
+
+          if (!doc.pgn) { if (doc.moveCount) totalMovesSum += doc.moveCount; continue; }
+
+          let expectedMoves = 0;
+          try { expectedMoves = Math.max(0, parsePgnToStates(doc.pgn).length - 1); } catch (e) { }
+          const ta = doc.tacticAnalysis;
+          const AC = typeof AnalysisCache !== 'undefined' ? AnalysisCache : null;
+          if (AC && AC.isTacticAnalysisComplete(ta, expectedMoves)) {
+            accumulateFromAnalysis(doc, ta);
+            cachedAnalysisCount++;
+            continue;
+          }
+
+          const pct = Math.round(gi / total * 100);
+          contentEl.innerHTML = `<div class="stats-loading"><div class="stats-spinner"></div><div class="stats-progress-wrap">
+        <div style="font-size:13px;color:var(--text-secondary)">Stockfish 분석 중… (${gi + 1} / ${total})</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">깊이 ${__RC.SF_DEPTH} · 수 분류 = 리체스 Accuracy%식</div>
+        <div class="stats-progress-bar-outer"><div class="stats-progress-bar-fill" style="width:${pct}%"></div></div>
+        <div class="stats-progress-label">포지션 분석 중…</div>
+      </div></div>`;
+
           try {
-            const savePayload = {
-              myBest: a.myBest || 0, myGood: a.myGood || 0,
-              myBlunders: a.myBlunders, myMistakes: a.myMistakes, myInaccuracies: a.myInaccuracies,
-              oppBlunders: a.oppBlunders, oppMistakes: a.oppMistakes, oppInaccuracies: a.oppInaccuracies,
-              oppBlunderFound: a.oppBlunderFound, oppBlunderMissed: a.oppBlunderMissed,
-              checkmates: a.checkmates,
-              absPinFound: a.absPinFound || 0, absPinMissed: a.absPinMissed || 0,
-              relPinFound: a.relPinFound || 0, relPinMissed: a.relPinMissed || 0,
-              skewerFound: a.skewerFound || 0, skewerMissed: a.skewerMissed || 0,
-              discoveredFound: a.discoveredFound || 0, discoveredMissed: a.discoveredMissed || 0,
-              trapFound: a.trapFound || 0, trapMissed: a.trapMissed || 0,
-              decoyFound: a.decoyFound || 0, decoyMissed: a.decoyMissed || 0,
-              myCpSum: a.myCpSum, myMoveCount: a.myMoveCount, totalMoves: a.totalMoves,
-              myAccuracy: a.myAccuracy || 0,
-              forkFound: a.forkFound, forkMissed: a.forkMissed, oppForkCreated: a.oppForkCreated || {},
-              tacticEvents: (a.tacticEvents || []).map(ev => ({
-                type: ev.type, subtype: ev.subtype, piece: ev.piece || '',
-                moveNum: ev.moveNum || 0, san: ev.san || '',
-                plyIdx: ev.plyIdx || 0, bestMove: ev.bestMove || null
-              })),
-              moveJudgments: a.moveJudgments || [],
-              analyzedAt: firebase.firestore.FieldValue.serverTimestamp(),
-              sfDepth: __RC.SF_DEPTH,
-              analysisVersion: 5  // chess-tactics.js 합법 수 기반 전술 감지
-            };
-            await _fbDb.collection('game_records').doc(doc.id).update({ tacticAnalysis: savePayload });
-          } catch (saveErr) { console.warn('[stats] 저장 실패:', saveErr); }
-        } catch (e) { console.warn('게임 분석 실패:', e); if (doc.moveCount) totalMovesSum += doc.moveCount; }
+            const a = await window.analyzeGame(doc.pgn, myColor, (cur, tot) => {
+              const ip = Math.round(cur / Math.max(tot, 1) * 100);
+              const fill = contentEl.querySelector('.stats-progress-bar-fill');
+              if (fill) fill.style.width = Math.round(gi / total * 100 + ip / total) + '%';
+            });
+
+            accumulateFromAnalysis(doc, a);
+            newlyAnalyzedCount++;
+
+            try {
+              const savePayload = {
+                myBest: a.myBest || 0, myGood: a.myGood || 0,
+                myBlunders: a.myBlunders, myMistakes: a.myMistakes, myInaccuracies: a.myInaccuracies,
+                oppBlunders: a.oppBlunders, oppMistakes: a.oppMistakes, oppInaccuracies: a.oppInaccuracies,
+                oppBlunderFound: a.oppBlunderFound, oppBlunderMissed: a.oppBlunderMissed,
+                checkmates: a.checkmates,
+                absPinFound: a.absPinFound || 0, absPinMissed: a.absPinMissed || 0,
+                relPinFound: a.relPinFound || 0, relPinMissed: a.relPinMissed || 0,
+                skewerFound: a.skewerFound || 0, skewerMissed: a.skewerMissed || 0,
+                discoveredFound: a.discoveredFound || 0, discoveredMissed: a.discoveredMissed || 0,
+                trapFound: a.trapFound || 0, trapMissed: a.trapMissed || 0,
+                decoyFound: a.decoyFound || 0, decoyMissed: a.decoyMissed || 0,
+                myCpSum: a.myCpSum, myMoveCount: a.myMoveCount, totalMoves: a.totalMoves,
+                myAccuracy: a.myAccuracy || 0,
+                forkFound: a.forkFound, forkMissed: a.forkMissed, oppForkCreated: a.oppForkCreated || {},
+                tacticEvents: (a.tacticEvents || []).map(ev => ({
+                  type: ev.type, subtype: ev.subtype, piece: ev.piece || '',
+                  moveNum: ev.moveNum || 0, san: ev.san || '',
+                  plyIdx: ev.plyIdx || 0, bestMove: ev.bestMove || null
+                })),
+                moveJudgments: a.moveJudgments || [],
+                analyzedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                sfDepth: __RC.SF_DEPTH,
+                analysisVersion: 5
+              };
+              await _fbDb.collection('game_records').doc(doc.id).update({ tacticAnalysis: savePayload });
+            } catch (saveErr) { console.warn('[stats] 저장 실패:', saveErr); }
+          } catch (e) {
+            console.warn('게임 분석 실패:', e);
+            if (doc.moveCount) totalMovesSum += doc.moveCount;
+          }
+        }
+
+        const avgMyAccuracy = accuracyCount > 0 ? Math.round(sumMyAccuracy / accuracyCount) : 0;
+
+        _statsCache = {
+          total, wins, losses, draws, winsW, lossesW, drawsW, winsB, lossesB, drawsB, myColor_counts,
+          avgMoves: total > 0 ? Math.round(totalMovesSum / total) : 0,
+          winRate: total > 0 ? Math.round(wins / total * 100) : 0,
+          endCheckmate, endResign, endDraw, endTimeout,
+          myBlunders: sumMyBlunders, myMistakes: sumMyMistakes, myInaccuracies: sumMyInaccuracies,
+          oppBlunders: sumOppBlunders, oppMistakes: sumOppMistakes, oppInaccuracies: sumOppInaccuracies,
+          oppBlunderFound: sumOppBF, oppBlunderMissed: sumOppBM,
+          checkmates: sumCheckmates,
+          forkFound: sumForkFound, forkMissed: sumForkMissed, oppForkCreated: sumOppForkCreated,
+          absPinFound: sumAbsPinFound, absPinMissed: sumAbsPinMissed,
+          relPinFound: sumRelPinFound, relPinMissed: sumRelPinMissed,
+          skewerFound: sumSkewerFound, skewerMissed: sumSkewerMissed,
+          discoveredFound: sumDiscoveredFound, discoveredMissed: sumDiscoveredMissed,
+          trapFound: sumTrapFound, trapMissed: sumTrapMissed,
+          decoyFound: sumDecoyFound, decoyMissed: sumDecoyMissed,
+          pinFound: sumAbsPinFound + sumRelPinFound,
+          pinMissed: sumAbsPinMissed + sumRelPinMissed,
+          avgCpLoss: sumMoves > 0 ? Math.round(sumCp / sumMoves) : 0,
+          myAccuracy: avgMyAccuracy,
+          openingStats: Array.from(openingStatsMap.values())
+            .sort((a, b) => (b.w.total + b.b.total) - (a.w.total + a.b.total))
+        };
+        subEl.textContent = `총 ${total}게임 · Stockfish + 리체스 Accuracy% (${newlyAnalyzedCount}게임 신규 분석)`;
+        renderStatsHTML(_statsCache);
+      } catch (err) {
+        console.error('[stats] Critical Stats Error:', err);
+        contentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>통계 분석 중 오류 발생: ${err.message}</div></div>`;
+      } finally {
+        _statsBusy = false;
       }
+    }
 
       // 평균 게임 정확도
       const avgMyAccuracy = accuracyCount > 0 ? Math.round(sumMyAccuracy / accuracyCount) : 0;

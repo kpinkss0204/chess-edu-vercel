@@ -37,31 +37,35 @@
       game.history[i].tactics = null;
     }
     game._preAnalyzedFromCache = true;
+    game._cachedTacticAnalysis = ta; // 나중에 다시 표시할 수 있도록 보관
     if (typeof game.renderMoveList === 'function') game.renderMoveList();
     return true;
   }
 
-  function displayTacticAnalysisPanel(ta) {
+  function displayTacticAnalysisPanel(ta, game) {
+    const targetTa = ta || (game && game._cachedTacticAnalysis);
+    if (!targetTa) return;
+
     const statusEl = document.getElementById('sf-analysis-status');
     const resultEl = document.getElementById('sf-analysis-result');
     const depthBadge = document.getElementById('sf-analysis-depth-badge');
 
-    const myBlunders = ta.myBlunders || 0;
-    const myMistakes = ta.myMistakes || 0;
-    const myInaccuracies = ta.myInaccuracies || 0;
-    const oppBlunders = ta.oppBlunders || 0;
-    const oppMistakes = ta.oppMistakes || 0;
-    const oppInaccuracies = ta.oppInaccuracies || 0;
-    const myAccuracy = ta.myAccuracy || 0;
+    const myBlunders = targetTa.myBlunders || 0;
+    const myMistakes = targetTa.myMistakes || 0;
+    const myInaccuracies = targetTa.myInaccuracies || 0;
+    const oppBlunders = targetTa.oppBlunders || 0;
+    const oppMistakes = targetTa.oppMistakes || 0;
+    const oppInaccuracies = targetTa.oppInaccuracies || 0;
+    const myAccuracy = targetTa.myAccuracy || 0;
 
     if (statusEl) {
       statusEl.style.display = 'block';
       statusEl.innerHTML =
         '<span style="color:var(--accent-green-bright)">✓ 저장된 분석 결과 불러옴' +
-        (ta.sfDepth ? ` (깊이 ${ta.sfDepth})` : '') +
+        (targetTa.sfDepth ? ` (깊이 ${targetTa.sfDepth})` : '') +
         '</span>';
     }
-    if (depthBadge && ta.sfDepth) depthBadge.textContent = `깊이 ${ta.sfDepth}`;
+    if (depthBadge && targetTa.sfDepth) depthBadge.textContent = `깊이 ${targetTa.sfDepth}`;
 
     const STAT_COLOR = { blunder: '#cc3333', mistake: '#e08c3a', inaccuracy: '#f6c94a' };
     let statsHtml = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:6px;">';

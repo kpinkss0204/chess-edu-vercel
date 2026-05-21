@@ -1308,7 +1308,23 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
     async function analyzeCurrentGameWithSF(opts) {
       opts = opts || {};
       if (_sfAnalysisBusy) return;
-      if (typeof AnalysisCache !== 'undefined' && AnalysisCache.isGamePreAnalyzed(game)) return;
+
+      // 이미 분석된 게임인지 확인
+      const isPreAnalyzed = typeof AnalysisCache !== 'undefined' && AnalysisCache.isGamePreAnalyzed(game);
+      
+      if (isPreAnalyzed) {
+        // 이미 분석됨: 캐시된 결과 표시 및 알림
+        if (!opts.silent) {
+          showToast('✅ 이미 분석된 게임입니다. 캐시된 결과를 불러옵니다.');
+          if (typeof AnalysisCache !== 'undefined') {
+            AnalysisCache.displayTacticAnalysisPanel(null, game);
+            // 분석 탭으로 자동 이동 (UI UX 개선)
+            if (typeof switchTab === 'function') switchTab('analysis');
+          }
+        }
+        return;
+      }
+
       if (!game || !game.history || game.history.length < 2) {
         if (!opts.silent && typeof showToast === 'function') showToast('수가 너무 짧습니다 (최소 2수 이상).');
         return;
@@ -1334,133 +1350,123 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
       if (resultEl) resultEl.style.display = 'none';
       if (depthBadge) depthBadge.textContent = '';
 
-      const pgn = typeof game.generatePgn === 'function' ? game.generatePgn() : '';
-      const states = parsePgnToStates(pgn);
-      if (states.length < 2) {
-        setStatus('<span style="color:#e07070">❌ 기보를 해석할 수 없습니다.</span>');
-        _sfAnalysisBusy = false;
-        return;
-      }
-      const total = states.length;
-
-      setStatus(`<span style="color:var(--text-secondary)">⏳ [1단계] Stockfish 수 평가… (0 / ${total})</span>`);
-
-      const { evalRows, error } = await stockfishEvalStates(states, {
-        depth: SF_ANA_DEPTH,
-        onProgress: (cur, tot) => {
-          setStatus(
-            `<span style="color:var(--text-secondary)">⏳ 분석 중… (${cur} / ${tot})</span>` +
-            `<div style="margin-top:6px;height:4px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden;">` +
-            `<div style="height:100%;width:${Math.round((cur - 1) / tot * 100)}%;background:var(--accent-green-bright);border-radius:2px;transition:width .3s;"></div></div>`
-          );
-        },
-      });
-
-      if (error) {
-        setStatus(`<span style="color:#e07070">❌ Stockfish Worker 초기화 실패: ${error.message}</span>`);
-        _sfAnalysisBusy = false;
-        return;
-      }
-
-      const myAccuracy = gameAccuracyFromEvals(evalRows, myColor);
-      const j = summarizeMoveJudgments(evalRows, states, myColor);
-      const myBlunders = j.myBlunders, myMistakes = j.myMistakes, myInaccuracies = j.myInaccuracies;
-      const oppBlunders = j.oppBlunders, oppMistakes = j.oppMistakes, oppInaccuracies = j.oppInaccuracies;
-
-      let grammarCalls = 0;
-      for (const row of j.byPly) {
-        if (game.history[row.plyIndex]) {
-          game.history[row.plyIndex].annotation = row.cls || null;
-          game.history[row.plyIndex].tactics = null;
+      try {
+        const pgn = typeof game.generatePgn === 'function' ? game.generatePgn() : '';
+        const states = parsePgnToStates(pgn);
+        if (states.length < 2) {
+          setStatus('<span style="color:#e07070">❌ 기보를 해석할 수 없습니다.</span>');
+          return;
         }
-      }
+        const total = states.length;
 
-      if (CT && typeof CT.detectTacticsGame === 'function') {
-        setStatus('<span style="color:var(--text-secondary)">⏳ [2단계] 전술 분석 (ChessGrammar)…</span>');
-        try {
-          // 게임 전체 전술 분석을 한 번에 가져옴 (모든 수 분석 지원)
-          const gameTacticsMap = await CT.detectTacticsGame(pgn, { mode: 'available', depth: 'l2' });
-          if (gameTacticsMap) {
-            for (let i = 1; i < states.length; i++) {
-              const move = states[i].move;
-              if (!move) continue;
-              const uci = (moveToUci(move) || '').toLowerCase();
-              
-              // ply i-1에서 uci를 두어 발생하는 전술 확인
-              const availableTactics = gameTacticsMap[i - 1];
-              const playedTList = (availableTactics && availableTactics.raw) ? 
-                                  availableTactics.raw.filter(t => t.trigger_move === uci) : [];
-              
-              if (playedTList.length > 0) {
-                const tactics = CT.parseTacticList(playedTList);
-                if (game.history[i - 1]) game.history[i - 1].tactics = tactics;
-                grammarCalls++;
+        setStatus(`<span style="color:var(--text-secondary)">⏳ [1단계] Stockfish 수 평가… (0 / ${total})</span>`);
+
+        const { evalRows, error } = await stockfishEvalStates(states, {
+          depth: SF_ANA_DEPTH,
+          onProgress: (cur, tot) => {
+            setStatus(
+              `<span style="color:var(--text-secondary)">⏳ 분석 중… (${cur} / ${tot})</span>` +
+              `<div style="margin-top:6px;height:4px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden;">` +
+              `<div style="height:100%;width:${Math.round((cur - 1) / tot * 100)}%;background:var(--accent-green-bright);border-radius:2px;transition:width .3s;"></div></div>`
+            );
+          },
+        });
+
+        if (error) {
+          setStatus(`<span style="color:#e07070">❌ Stockfish Worker 초기화 실패: ${error.message}</span>`);
+          return;
+        }
+
+        const myAccuracy = gameAccuracyFromEvals(evalRows, myColor);
+        const j = summarizeMoveJudgments(evalRows, states, myColor);
+        const myBlunders = j.myBlunders, myMistakes = j.myMistakes, myInaccuracies = j.myInaccuracies;
+        const oppBlunders = j.oppBlunders, oppMistakes = j.oppMistakes, oppInaccuracies = j.oppInaccuracies;
+
+        let grammarCalls = 0;
+        for (const row of j.byPly) {
+          if (game.history[row.plyIndex]) {
+            game.history[row.plyIndex].annotation = row.cls || null;
+            game.history[row.plyIndex].tactics = null;
+          }
+        }
+
+        if (CT && typeof CT.detectTacticsGame === 'function') {
+          setStatus('<span style="color:var(--text-secondary)">⏳ [2단계] 전술 분석 (ChessGrammar)…</span>');
+          try {
+            // 게임 전체 전술 분석을 한 번에 가져옴 (모든 수 분석 지원)
+            const gameTacticsMap = await CT.detectTacticsGame(pgn, { mode: 'available', depth: 'l2' });
+            if (gameTacticsMap) {
+              for (let i = 1; i < states.length; i++) {
+                const move = states[i].move;
+                if (!move) continue;
+                const uci = (moveToUci(move) || '').toLowerCase();
+                
+                // ply i-1에서 uci를 두어 발생하는 전술 확인
+                const availableTactics = gameTacticsMap[i - 1];
+                const playedTList = (availableTactics && availableTactics.raw) ? 
+                                    availableTactics.raw.filter(t => t.trigger_move === uci) : [];
+                
+                if (playedTList.length > 0) {
+                  const tactics = CT.parseTacticList(playedTList);
+                  if (game.history[i - 1]) game.history[i - 1].tactics = tactics;
+                  grammarCalls++;
+                }
               }
             }
+          } catch (e) {
+            console.warn('[analyze] Game Grammar Error:', e.message);
           }
-        } catch (e) {
-          console.warn('[analyze] Game Grammar Error:', e.message);
-          // 폴백: 개별 분석 (단, 모든 수 분석 시 속도 및 요율 제한 주의)
-          // 여기서는 게임 분석 시 실패하면 통과하도록 함
         }
-      } else if (CT && typeof CT.analyzeMoveWorkflow === 'function') {
-        setStatus('<span style="color:var(--text-secondary)">⏳ [2단계] 전술 분석 (ChessGrammar)…</span>');
-        for (let i = 1; i < states.length; i++) {
-          const afterFen = CT.snapshotFromState(states[i]);
-          if (!afterFen) continue;
-          try {
-            const wf = await CT.analyzeMoveWorkflow(evalRows[i - 1].cpw, evalRows[i].cpw, states[i - 1].turn, afterFen);
-            if (wf && wf.grammarCalled) grammarCalls++;
-            if (game.history[i - 1]) game.history[i - 1].tactics = wf ? wf.tactics : null;
-          } catch (e) { console.warn('[analyze] Grammar', i, e.message); }
+
+        if (typeof game.renderMoveList === 'function') game.renderMoveList();
+
+        _lastAutoAnalyzedPgnKey = pgn + '|' + myColor;
+
+        setStatus(
+          `<span style="color:var(--accent-green-bright)">✅ 자동 분석 완료 — 깊이 ${SF_ANA_DEPTH}` +
+          (grammarCalls ? ` · Grammar ${grammarCalls}수` : '') + `</span>`
+        );
+        if (depthBadge) depthBadge.textContent = `깊이 ${SF_ANA_DEPTH}`;
+
+        const STAT_COLOR = { blunder: '#cc3333', mistake: '#e08c3a', inaccuracy: '#f6c94a' };
+
+        let statsHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:6px;">`;
+        const myStats = [['블런더 ??', myBlunders, 'blunder'], ['실수 ?', myMistakes, 'mistake'], ['부정확 ?!', myInaccuracies, 'inaccuracy']];
+        for (const [label, count, key] of myStats) {
+          statsHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 4px;text-align:center;">
+            <div style="font-size:9px;font-weight:800;color:${STAT_COLOR[key]};">나 · ${label}</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${count}</div>
+          </div>`;
         }
+        statsHtml += `</div>`;
+
+        let oppHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:6px;">`;
+        const oppStats = [['블런더', oppBlunders, 'blunder'], ['실수', oppMistakes, 'mistake'], ['부정확', oppInaccuracies, 'inaccuracy']];
+        for (const [label, count, key] of oppStats) {
+          oppHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 4px;text-align:center;">
+            <div style="font-size:9px;font-weight:800;color:${STAT_COLOR[key]};opacity:.7;">상대 · ${label}</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${count}</div>
+          </div>`;
+        }
+        oppHtml += `</div>`;
+
+        const accColor = myAccuracy >= 85 ? 'var(--accent-green-bright)' : myAccuracy >= 70 ? '#e0b040' : '#e07070';
+        const accHtml = myAccuracy > 0
+          ? `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:8px 12px;display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-size:11px;color:var(--text-muted);">내 정확도</span>
+              <span style="font-size:16px;font-weight:900;color:${accColor};">${myAccuracy}%</span>
+            </div>` : '';
+
+        if (resultEl) {
+          resultEl.style.display = 'block';
+          resultEl.innerHTML = accHtml + statsHtml + oppHtml;
+        }
+      } catch (err) {
+        console.error('[analyze] Critical Error:', err);
+        setStatus(`<span style="color:#e07070">❌ 분석 중 오류 발생: ${err.message}</span>`);
+      } finally {
+        _sfAnalysisBusy = false;
       }
-
-      if (typeof game.renderMoveList === 'function') game.renderMoveList();
-
-      _lastAutoAnalyzedPgnKey = pgn + '|' + myColor;
-
-      setStatus(
-        `<span style="color:var(--accent-green-bright)">✅ 자동 분석 완료 — 깊이 ${SF_ANA_DEPTH}` +
-        (grammarCalls ? ` · Grammar ${grammarCalls}수` : '') + `</span>`
-      );
-      if (depthBadge) depthBadge.textContent = `깊이 ${SF_ANA_DEPTH}`;
-
-      const STAT_COLOR = { blunder: '#cc3333', mistake: '#e08c3a', inaccuracy: '#f6c94a' };
-
-      let statsHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:6px;">`;
-      const myStats = [['블런더 ??', myBlunders, 'blunder'], ['실수 ?', myMistakes, 'mistake'], ['부정확 ?!', myInaccuracies, 'inaccuracy']];
-      for (const [label, count, key] of myStats) {
-        statsHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 4px;text-align:center;">
-          <div style="font-size:9px;font-weight:800;color:${STAT_COLOR[key]};">나 · ${label}</div>
-          <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${count}</div>
-        </div>`;
-      }
-      statsHtml += `</div>`;
-
-      let oppHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:6px;">`;
-      const oppStats = [['블런더', oppBlunders, 'blunder'], ['실수', oppMistakes, 'mistake'], ['부정확', oppInaccuracies, 'inaccuracy']];
-      for (const [label, count, key] of oppStats) {
-        oppHtml += `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 4px;text-align:center;">
-          <div style="font-size:9px;font-weight:800;color:${STAT_COLOR[key]};opacity:.7;">상대 · ${label}</div>
-          <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${count}</div>
-        </div>`;
-      }
-      oppHtml += `</div>`;
-
-      const accColor = myAccuracy >= 85 ? 'var(--accent-green-bright)' : myAccuracy >= 70 ? '#e0b040' : '#e07070';
-      const accHtml = myAccuracy > 0
-        ? `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:8px 12px;display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-            <span style="font-size:11px;color:var(--text-muted);">내 정확도</span>
-            <span style="font-size:16px;font-weight:900;color:${accColor};">${myAccuracy}%</span>
-          </div>` : '';
-
-      if (resultEl) {
-        resultEl.style.display = 'block';
-        resultEl.innerHTML = accHtml + statsHtml + oppHtml;
-      }
-
-      _sfAnalysisBusy = false;
     }
 
     window.analyzeCurrentGameWithSF = analyzeCurrentGameWithSF;

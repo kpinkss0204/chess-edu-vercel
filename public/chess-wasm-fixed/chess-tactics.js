@@ -7,7 +7,7 @@
   'use strict';
 
   const API_BASE = 'https://chessgrammar.com/api/v1';
-  const MIN_ANALYSIS_INTERVAL = 2000; // 30 req/min (2초 간격)
+  const MIN_ANALYSIS_INTERVAL = 2050; // 30 req/min (약 2초 간격, 안전하게 2.05초)
   const BAD_JUDGMENTS = ['blunder', 'mistake', 'inaccuracy'];
   const JUDGMENT_LABEL = {
     blunder: '블런더 (??)',
@@ -15,11 +15,53 @@
     inaccuracy: '부정확 (?!)',
   };
 
-  let lastAnalyzedMoveKey = null;
-  let lastAnalyzedFen = null;
-  let lastAnalysisTime = 0;
-  let isAnalyzing = false;
-  let pendingAnalysisTimer = null;
+  // ── 단순 인메모리 캐시 ──────────────────────────────────────────
+  const _cache = {
+    fen: new Map(), // fen -> tactics
+    pgn: new Map()  // pgn -> mappedResult
+  };
+
+  // ── 요청 큐 (전역 Rate Limit 보장) ────────────────────────────────
+  class RequestQueue {
+    constructor(interval) {
+      this.queue = [];
+      this.interval = interval;
+      this.lastExecution = 0;
+      this.timer = null;
+    }
+
+    add(fn) {
+      return new Promise((resolve, reject) => {
+        this.queue.push({ fn, resolve, reject });
+        this.process();
+      });
+    }
+
+    process() {
+      if (this.timer || this.queue.length === 0) return;
+
+      const now = Date.now();
+      const elapsed = now - this.lastExecution;
+      const wait = Math.max(0, this.interval - elapsed);
+
+      this.timer = setTimeout(async () => {
+        this.timer = null;
+        if (this.queue.length === 0) return;
+
+        const { fn, resolve, reject } = this.queue.shift();
+        this.lastExecution = Date.now();
+        try {
+          const result = await fn();
+          resolve(result);
+        } catch (e) {
+          reject(e);
+        }
+        this.process();
+      }, wait);
+    }
+  }
+
+  const _apiQueue = new RequestQueue(MIN_ANALYSIS_INTERVAL);
 
   function isBadJudgment(j) {
     return BAD_JUDGMENTS.indexOf(j) >= 0;
@@ -47,29 +89,48 @@
    */
   async function detectTactics(fen, options = {}) {
     if (!fen) return null;
-    try {
-      const response = await fetch(`${API_BASE}/extract`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fen: fen,
-          depth: options.depth || 'l2',
-          with_sequence: options.withSequence !== undefined ? options.withSequence : true,
-          patterns: options.patterns || null
-        }),
-      });
+    
+    // 캐시 확인
+    const cacheKey = `${fen}|${options.depth || 'l2'}`;
+    if (_cache.fen.has(cacheKey)) return _cache.fen.get(cacheKey);
 
-      if (!response.ok) {
-        console.warn(`[ChessGrammar API] HTTP ${response.status}`);
+    return _apiQueue.add(async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const response = await fetch(`${API_BASE}/extract`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fen: fen,
+            depth: options.depth || 'l2',
+            with_sequence: options.withSequence !== undefined ? options.withSequence : true,
+            patterns: options.patterns || null
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          console.warn(`[ChessGrammar API] HTTP ${response.status}`);
+          return null;
+        }
+
+        const data = await response.json();
+        const tactics = parseTacticResponse(data);
+        if (tactics) _cache.fen.set(cacheKey, tactics); // 성공 시 캐시 저장
+        return tactics;
+      } catch (error) {
+        clearTimeout(timeout);
+        if (error.name === 'AbortError') {
+          console.error('[ChessGrammar] 전술 분석 타임아웃 (10초)');
+        } else {
+          console.error('[ChessGrammar] 전술 분석 실패:', error.message);
+        }
         return null;
       }
-
-      const data = await response.json();
-      return parseTacticResponse(data);
-    } catch (error) {
-      console.error('[ChessGrammar] 전술 분석 실패:', error.message);
-      return null;
-    }
+    });
   }
 
   /**
@@ -77,47 +138,65 @@
    */
   async function detectTacticsGame(pgn, options = {}) {
     if (!pgn) return null;
-    try {
-      const response = await fetch(`${API_BASE}/extract_game`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pgn: pgn,
-          mode: options.mode || 'available', // 'available'은 모든 전술 기회 포함
-          depth: options.depth || 'l2',
-          with_sequence: options.withSequence !== undefined ? options.withSequence : false,
-          patterns: options.patterns || null
-        }),
-      });
 
-      if (!response.ok) {
-        console.warn(`[ChessGrammar API] HTTP ${response.status}`);
+    // 캐시 확인
+    const cacheKey = `${pgn}|${options.mode || 'available'}|${options.depth || 'l2'}`;
+    if (_cache.pgn.has(cacheKey)) return _cache.pgn.get(cacheKey);
+
+    return _apiQueue.add(async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const response = await fetch(`${API_BASE}/extract_game`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pgn: pgn,
+            mode: options.mode || 'available',
+            depth: options.depth || 'l2',
+            with_sequence: options.withSequence !== undefined ? options.withSequence : false,
+            patterns: options.patterns || null
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          console.warn(`[ChessGrammar API] HTTP ${response.status}`);
+          return null;
+        }
+
+        const data = await response.json();
+        const result = {};
+        if (data && data.tactics && Array.isArray(data.tactics)) {
+          data.tactics.forEach(t => {
+            const ply = t.ply;
+            if (ply == null) return;
+            if (!result[ply]) result[ply] = [];
+            result[ply].push(t);
+          });
+        }
+
+        const mappedResult = {};
+        Object.keys(result).forEach(ply => {
+          mappedResult[ply] = parseTacticList(result[ply]);
+        });
+
+        if (Object.keys(mappedResult).length > 0) {
+          _cache.pgn.set(cacheKey, mappedResult); // 성공 시 캐시 저장
+        }
+        return mappedResult;
+      } catch (error) {
+        clearTimeout(timeout);
+        if (error.name === 'AbortError') {
+          console.error('[ChessGrammar] 게임 전술 분석 타임아웃 (10초)');
+        } else {
+          console.error('[ChessGrammar] 게임 전술 분석 실패:', error.message);
+        }
         return null;
       }
-
-      const data = await response.json();
-      // ply(반수)별로 맵핑하여 반환
-      const result = {};
-      if (data && data.tactics && Array.isArray(data.tactics)) {
-        data.tactics.forEach(t => {
-          const ply = t.ply;
-          if (ply == null) return;
-          if (!result[ply]) result[ply] = [];
-          result[ply].push(t);
-        });
-      }
-
-      // 개별 ply 데이터를 ChessTactics 표준 객체로 변환하는 유틸리티 맵핑
-      const mappedResult = {};
-      Object.keys(result).forEach(ply => {
-        mappedResult[ply] = parseTacticList(result[ply]);
-      });
-
-      return mappedResult;
-    } catch (error) {
-      console.error('[ChessGrammar] 게임 전술 분석 실패:', error.message);
-      return null;
-    }
+    });
   }
 
   function parseTacticResponse(data) {
