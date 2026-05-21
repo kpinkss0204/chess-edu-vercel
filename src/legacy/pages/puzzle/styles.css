@@ -644,14 +644,16 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12px;
-  gap: 10px;
+  padding: 16px;
+  gap: 12px;
   min-width: 0;
+  overflow-y: auto;
 }
 
 #puzzle-board-wrap {
-  width: min(680px, calc(100vh - 160px), calc(100vw - 340px));
-  height: min(680px, calc(100vh - 160px), calc(100vw - 340px));
+  width: 100%;
+  max-width: min(640px, calc(100vh - 200px));
+  aspect-ratio: 1 / 1;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -660,6 +662,7 @@ body {
   justify-content: center;
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .puzzle-board-placeholder {
@@ -1025,12 +1028,13 @@ body {
   body { padding-bottom: 0; }
   #main { margin-left: 0 !important; height: 100vh; overflow: hidden; }
   #puzzle-board-view { flex-direction: column !important; height: 100vh; overflow: hidden; }
-  #puzzle-board-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px !important; }
+  #puzzle-board-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px !important; overflow-y: auto; }
   #puzzle-board-wrap {
     width: var(--board-size) !important;
     height: var(--board-size) !important;
+    flex-shrink: 0;
   }
-  #puzzle-board-col > div, #puzzle-chessboard {
+  #puzzle-chessboard {
     width: 100% !important;
     height: 100% !important;
   }

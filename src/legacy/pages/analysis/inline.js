@@ -1310,11 +1310,37 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
         }
       }
 
-      if (CT && typeof CT.analyzeMoveWorkflow === 'function') {
-        setStatus('<span style="color:var(--text-secondary)">⏳ [2단계] 실수 수 전술 분석 (ChessGrammar)…</span>');
+      if (CT && typeof CT.detectTacticsGame === 'function') {
+        setStatus('<span style="color:var(--text-secondary)">⏳ [2단계] 전술 분석 (ChessGrammar)…</span>');
+        try {
+          // 게임 전체 전술 분석을 한 번에 가져옴 (모든 수 분석 지원)
+          const gameTacticsMap = await CT.detectTacticsGame(pgn, { mode: 'available', depth: 'l2' });
+          if (gameTacticsMap) {
+            for (let i = 1; i < states.length; i++) {
+              const move = states[i].move;
+              if (!move) continue;
+              const uci = (moveToUci(move) || '').toLowerCase();
+              
+              // ply i-1에서 uci를 두어 발생하는 전술 확인
+              const availableTactics = gameTacticsMap[i - 1];
+              const playedTList = (availableTactics && availableTactics.raw) ? 
+                                  availableTactics.raw.filter(t => t.trigger_move === uci) : [];
+              
+              if (playedTList.length > 0) {
+                const tactics = CT.parseTacticList(playedTList);
+                if (game.history[i - 1]) game.history[i - 1].tactics = tactics;
+                grammarCalls++;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[analyze] Game Grammar Error:', e.message);
+          // 폴백: 개별 분석 (단, 모든 수 분석 시 속도 및 요율 제한 주의)
+          // 여기서는 게임 분석 시 실패하면 통과하도록 함
+        }
+      } else if (CT && typeof CT.analyzeMoveWorkflow === 'function') {
+        setStatus('<span style="color:var(--text-secondary)">⏳ [2단계] 전술 분석 (ChessGrammar)…</span>');
         for (let i = 1; i < states.length; i++) {
-          const bad = lichessCpAdviceJudgment(evalRows[i - 1].cpw, evalRows[i].cpw, states[i - 1].turn);
-          if (!bad) continue;
           const afterFen = CT.snapshotFromState(states[i]);
           if (!afterFen) continue;
           try {

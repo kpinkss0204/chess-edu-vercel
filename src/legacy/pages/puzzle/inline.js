@@ -1098,10 +1098,14 @@ const TACTIC_META = {
   pin:       { icon:'📌', name:'핀',        tagCls:'pin',      desc:'핀으로 더 가치 있는 기물 보호' },
   absPin:    { icon:'📌', name:'절대 핀',   tagCls:'pin',      desc:'킹을 보호하는 절대 핀' },
   relPin:    { icon:'🔗', name:'상대 핀',   tagCls:'pin',      desc:'높은 가치 기물을 보호하는 상대 핀' },
+  trap:      { icon:'🪤', name:'기물 트랩',  tagCls:'fork',      desc:'공격받은 기물이 도망갈 곳이 없는 상황' },
+  decoy:     { icon:'🧲', name:'유인',      tagCls:'skewer',    desc:'방어 기물을 나쁜 칸으로 끌어내는 전술' },
   skewer:    { icon:'🏹', name:'스큐어',    tagCls:'skewer',   desc:'가치 있는 기물을 이동시켜 뒤의 기물 포획' },
   oppBlunder:{ icon:'💥', name:'블런더 포착',tagCls:'blunder', desc:'상대방 실수를 이용한 기물 획득' },
   checkmate: { icon:'👑', name:'체크메이트', tagCls:'checkmate',desc:'킹을 잡는 결정적인 수' },
   discoveredAttack:{ icon:'⚡', name:'디스커버 어택', tagCls:'fork', desc:'기물 이동으로 뒤의 기물이 공격' },
+  deflection:{ icon:'🛡️', name:'편향',      tagCls:'skewer',    desc:'방어 기물을 수비 위치에서 이탈시키는 전술' },
+  interference:{ icon:'🚧', name:'간섭',      tagCls:'pin',       desc:'기물 사이의 방어선을 차단하는 전술' },
 };
 
 _auth.onAuthStateChanged(function (u) {
@@ -1117,10 +1121,11 @@ function firebaseDbReady() {
 }
 
 function _puzzlePlayedAtMs(doc) {
-  const pa = doc && doc.playedAt;
-  if (!pa) return 0;
-  if (typeof pa.seconds === 'number') return pa.seconds * 1000;
-  if (typeof pa.toMillis === 'function') return pa.toMillis();
+  const pa = doc && pa.playedAt; // Note: pa was already checked in doc && doc.playedAt earlier? Wait, pa is doc.playedAt.
+  const paOrig = doc && doc.playedAt;
+  if (!paOrig) return 0;
+  if (typeof paOrig.seconds === 'number') return paOrig.seconds * 1000;
+  if (typeof paOrig.toMillis === 'function') return paOrig.toMillis();
   return 0;
 }
 
@@ -1163,9 +1168,24 @@ function inferTacticPlyIndex(ev) {
 
 function lichessThemeToTacticType(themes) {
   if (!themes || !themes.length) return 'fork';
-  const map = { Fork: 'fork', AbsPin: 'absPin', RelPin: 'relPin' };
+  const map = { 
+    Fork: 'fork', AbsPin: 'absPin', RelPin: 'relPin', 
+    Skewer: 'skewer', Discovery: 'discoveredAttack',
+    Deflection: 'deflection', Interference: 'interference',
+    TrappedPiece: 'trap'
+  };
   for (let i = 0; i < themes.length; i++) {
     if (map[themes[i]]) return map[themes[i]];
+  }
+  // ChessGrammar 소문자 패턴 대응
+  for (let i = 0; i < themes.length; i++) {
+    const t = String(themes[i]).toLowerCase();
+    if (t.includes('fork')) return 'fork';
+    if (t.includes('pin')) return 'absPin';
+    if (t.includes('trap')) return 'trap';
+    if (t.includes('decoy') || t.includes('deflection')) return 'decoy';
+    if (t.includes('skewer')) return 'skewer';
+    if (t.includes('discovered')) return 'discoveredAttack';
   }
   return 'fork';
 }

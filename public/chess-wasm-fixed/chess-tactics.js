@@ -1,278 +1,345 @@
-/**
- * ChessGrammar API 전술 분석 + Lichess CpAdvice 수 평가
- * [1단계] blunder / mistake / inaccuracy 판정
- * [2단계] 위 판정일 때만 ChessGrammar API 호출
- */
-(function (global) {
-  'use strict';
-
-  const API_BASE = 'https://chessgrammar.com/api/v1';
-  const MIN_ANALYSIS_INTERVAL = 500;
-  const BAD_JUDGMENTS = ['blunder', 'mistake', 'inaccuracy'];
-  const JUDGMENT_LABEL = {
-    blunder: '블런더 (??)',
-    mistake: '실수 (?)',
-    inaccuracy: '부정확 (?!)',
-  };
-
-  let lastAnalyzedMoveKey = null;
-  let lastAnalyzedFen = null;
-  let lastAnalysisTime = 0;
-  let isAnalyzing = false;
-  let pendingAnalysisTimer = null;
-
-  function isBadJudgment(j) {
-    return BAD_JUDGMENTS.indexOf(j) >= 0;
-  }
-
-  function evaluateMoveJudgment(cpBeforeWhite, cpAfterWhite, mover) {
-    if (typeof global.lichessCpAdviceJudgment !== 'function') return null;
-    return global.lichessCpAdviceJudgment(cpBeforeWhite, cpAfterWhite, mover);
-  }
-
-  /**
-   * [1단계] 수 평가만 (API 호출 없음)
-   */
-  function evaluateMove(cpBeforeWhite, cpAfterWhite, mover) {
-    const judgment = evaluateMoveJudgment(cpBeforeWhite, cpAfterWhite, mover);
-    return {
-      judgment,
-      isBad: isBadJudgment(judgment),
-      label: judgment ? JUDGMENT_LABEL[judgment] : null,
-    };
-  }
-
-  /**
-   * [2단계] ChessGrammar API — 판정과 무관하게 FEN 전술 추출
-   */
-  async function detectTactics(fen) {
-    if (!fen) return null;
-    try {
-      const response = await fetch(`${API_BASE}/extract`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fen: fen }),
-      });
-
-      if (!response.ok) {
-        console.warn(`[ChessGrammar API] HTTP ${response.status}`);
-        return null;
-      }
-
-      const data = await response.json();
-      const tactics = {
-        fork: false,
-        absPin: false,
-        relPin: false,
-        pin: false,
-        discovered: false,
-        checkmate: false,
-        trap: false,
-        decoy: false,
-        skewer: false,
-      };
-
-      if (data && data.tactics && Array.isArray(data.tactics)) {
-        data.tactics.forEach(t => {
-          const patternName = (t.pattern || '').toLowerCase();
-          if (patternName.includes('fork')) tactics.fork = true;
-          if (patternName.includes('pin') && patternName.includes('absolute')) tactics.absPin = true;
-          if (patternName.includes('pin') && patternName.includes('relative')) tactics.relPin = true;
-          if (patternName.includes('pin')) tactics.pin = true;
-          if (patternName.includes('discovered')) tactics.discovered = true;
-          if (patternName.includes('checkmate') || patternName.includes('mate')) tactics.checkmate = true;
-          if (patternName.includes('trap')) tactics.trap = true;
-          if (patternName.includes('decoy')) tactics.decoy = true;
-          if (patternName.includes('skewer')) tactics.skewer = true;
-        });
-      }
-
-      return tactics;
-    } catch (error) {
-      console.error('[ChessGrammar] 전술 분석 실패:', error.message);
-      return null;
-    }
-  }
-
-  /**
-   * [1단계] → [2단계] 통합 (판정 있을 때만 Grammar API)
-   */
-  async function analyzeMoveWorkflow(cpBeforeWhite, cpAfterWhite, mover, fenAfter) {
-    const step1 = evaluateMove(cpBeforeWhite, cpAfterWhite, mover);
-    if (!step1.isBad) {
-      return { judgment: step1.judgment, tactics: null, grammarCalled: false };
-    }
-    const tactics = await detectTactics(fenAfter);
-    return { judgment: step1.judgment, tactics, grammarCalled: true };
-  }
-
-  /** @deprecated — analyzeMoveWorkflow 사용 권장 */
-  async function detectTacticsIfBlunder(cpBeforeWhite, cpAfterWhite, mover, fen) {
-    const step1 = evaluateMove(cpBeforeWhite, cpAfterWhite, mover);
-    if (!step1.isBad) return null;
-    return detectTactics(fen);
-  }
-
-  function buildMoveKey(opts) {
-    if (opts.moveKey) return opts.moveKey;
-    const fen = opts.fenAfter || opts.currentFen || '';
-    const ply = opts.plyIndex != null ? opts.plyIndex : '';
-    return `${fen}|${ply}`;
-  }
-
-  /**
-   * 새 수/포지션당 1회 — debounce + moveKey 중복 방지
-   * @param {object} opts
-   * @param {number} opts.cpBeforeWhite
-   * @param {number} opts.cpAfterWhite
-   * @param {string} opts.mover 'w'|'b'
-   * @param {string} opts.fenAfter
-   * @param {string} [opts.moveKey]
-   * @param {number} [opts.debounceMs]
-   * @param {boolean} [opts.force]
-   * @param {function} [onComplete]
-   */
-  function scheduleAutoAnalyzeMove(opts, onComplete) {
-    if (pendingAnalysisTimer) clearTimeout(pendingAnalysisTimer);
-    const debounceMs = opts.debounceMs != null ? opts.debounceMs : 450;
-
-    pendingAnalysisTimer = setTimeout(() => {
-      autoAnalyzeMove(opts, onComplete);
-    }, debounceMs);
-  }
-
-  async function autoAnalyzeMove(opts, onComplete) {
-    const moveKey = buildMoveKey(opts);
-    const fenAfter = opts.fenAfter || opts.currentFen;
-
-    if (!opts.force && moveKey === lastAnalyzedMoveKey) {
-      return null;
-    }
-
-    const now = Date.now();
-    if (!opts.force && now - lastAnalysisTime < MIN_ANALYSIS_INTERVAL) {
-      if (pendingAnalysisTimer) clearTimeout(pendingAnalysisTimer);
-      pendingAnalysisTimer = setTimeout(() => {
-        autoAnalyzeMove(opts, onComplete);
-      }, MIN_ANALYSIS_INTERVAL - (now - lastAnalysisTime));
-      return null;
-    }
-
-    if (isAnalyzing) {
-      return null;
-    }
-
-    if (opts.cpBeforeWhite == null || opts.cpAfterWhite == null || !opts.mover || !fenAfter) {
-      console.warn('[ChessTactics] 평가치/ FEN 부족 — 분석 스킵');
-      return null;
-    }
-
-    isAnalyzing = true;
-    lastAnalysisTime = now;
-    lastAnalyzedMoveKey = moveKey;
-    lastAnalyzedFen = fenAfter;
-
-    try {
-      console.log('[ChessTactics] [1단계] 수 평가:', moveKey);
-      const result = await analyzeMoveWorkflow(
-        opts.cpBeforeWhite,
-        opts.cpAfterWhite,
-        opts.mover,
-        fenAfter
-      );
-
-      if (result.judgment) {
-        console.log('[ChessTactics] 판정:', result.judgment, result.grammarCalled ? '(Grammar API 호출)' : '(Grammar 스킵)');
-      } else {
-        console.log('[ChessTactics] 양호한 수 — Grammar API 미호출');
-      }
-
-      if (typeof onComplete === 'function') {
-        onComplete(result);
-      }
-      return result;
-    } catch (e) {
-      console.error('[ChessTactics] 자동 분석 오류:', e);
-      return null;
-    } finally {
-      isAnalyzing = false;
-    }
-  }
-
-  /** @deprecated — scheduleAutoAnalyzeMove 사용 */
-  async function autoAnalyzePosition(cpBeforeWhite, cpAfterWhite, mover, currentFen, onAnalysisComplete) {
-    return scheduleAutoAnalyzeMove({
-      cpBeforeWhite,
-      cpAfterWhite,
-      mover,
-      fenAfter: currentFen,
-      currentFen,
-    }, onAnalysisComplete);
-  }
-
-  function snapshotFromState(st) {
-    if (!st) return null;
-    if (typeof st === 'string') return st;
-    if (st.fen) return st.fen;
-    if (typeof global.boardToFen === 'function' && st.board) {
-      return global.boardToFen(st.board, st.turn, st.castling, st.enPassant, st.halfMove || 0, st.fullMove || 1);
-    }
-    return null;
-  }
-
-  function applyMoveSnapshot(prevFen, move) {
-    if (!prevFen || !move) return null;
-    if (typeof global.parseFen !== 'function' || typeof global.applyMoveToBoard !== 'function' || typeof global.boardToFen !== 'function') {
-      return null;
-    }
-    const st = global.parseFen(prevFen);
-    if (!st) return null;
-    const board = st.board.map(r => [...r]);
-    const afterBoard = global.applyMoveToBoard(board, move, st.turn);
-    const nextTurn = st.turn === 'w' ? 'b' : 'w';
-    const ep = move.doublePush ? [move.to[0] - (st.turn === 'w' ? -1 : 1), move.to[1]] : null;
-    return global.boardToFen(afterBoard, nextTurn, st.castling, ep, st.halfMove || 0, (st.fullMove || 1) + (nextTurn === 'w' ? 1 : 0));
-  }
-
-  function resetAnalysisState() {
-    lastAnalyzedMoveKey = null;
-    lastAnalyzedFen = null;
-    lastAnalysisTime = 0;
-    isAnalyzing = false;
-    if (pendingAnalysisTimer) clearTimeout(pendingAnalysisTimer);
-    pendingAnalysisTimer = null;
-  }
-
-  function formatTacticsSummary(tactics) {
-    if (!tactics) return '';
-    const names = [];
-    if (tactics.fork) names.push('포크');
-    if (tactics.absPin) names.push('절대 핀');
-    if (tactics.relPin) names.push('상대 핀');
-    if (tactics.pin && !tactics.absPin && !tactics.relPin) names.push('핀');
-    if (tactics.skewer) names.push('스큐어');
-    if (tactics.discovered) names.push('디스커버드 어택');
-    if (tactics.trap) names.push('트랩');
-    if (tactics.decoy) names.push('유인');
-    if (tactics.checkmate) names.push('체크메이트');
-    return names.join(', ');
-  }
-
-  global.ChessTactics = {
-    evaluateMove,
-    evaluateMoveJudgment,
-    isBadJudgment,
-    detectTactics,
-    analyzeMoveWorkflow,
-    detectTacticsIfBlunder,
-    scheduleAutoAnalyzeMove,
-    autoAnalyzeMove,
-    autoAnalyzePosition,
-    snapshotFromState,
-    applyMoveSnapshot,
-    resetAnalysisState,
-    formatTacticsSummary,
-    BAD_JUDGMENTS,
-  };
-})(typeof window !== 'undefined' ? window : globalThis);
+/**
+ * ChessGrammar API 전술 분석 + Lichess CpAdvice 수 평가
+ * [1단계] blunder / mistake / inaccuracy 판정
+ * [2단계] 위 판정일 때만 ChessGrammar API 호출
+ */
+(function (global) {
+  'use strict';
+
+  const API_BASE = 'https://chessgrammar.com/api/v1';
+  const MIN_ANALYSIS_INTERVAL = 2000; // 30 req/min (2초 간격)
+  const BAD_JUDGMENTS = ['blunder', 'mistake', 'inaccuracy'];
+  const JUDGMENT_LABEL = {
+    blunder: '블런더 (??)',
+    mistake: '실수 (?)',
+    inaccuracy: '부정확 (?!)',
+  };
+
+  let lastAnalyzedMoveKey = null;
+  let lastAnalyzedFen = null;
+  let lastAnalysisTime = 0;
+  let isAnalyzing = false;
+  let pendingAnalysisTimer = null;
+
+  function isBadJudgment(j) {
+    return BAD_JUDGMENTS.indexOf(j) >= 0;
+  }
+
+  function evaluateMoveJudgment(cpBeforeWhite, cpAfterWhite, mover) {
+    if (typeof global.lichessCpAdviceJudgment !== 'function') return null;
+    return global.lichessCpAdviceJudgment(cpBeforeWhite, cpAfterWhite, mover);
+  }
+
+  /**
+   * [1단계] 수 평가만 (API 호출 없음)
+   */
+  function evaluateMove(cpBeforeWhite, cpAfterWhite, mover) {
+    const judgment = evaluateMoveJudgment(cpBeforeWhite, cpAfterWhite, mover);
+    return {
+      judgment,
+      isBad: isBadJudgment(judgment),
+      label: judgment ? JUDGMENT_LABEL[judgment] : null,
+    };
+  }
+
+  /**
+   * [2단계] ChessGrammar API — 판정과 무관하게 FEN 전술 추출
+   */
+  async function detectTactics(fen, options = {}) {
+    if (!fen) return null;
+    try {
+      const response = await fetch(`${API_BASE}/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fen: fen,
+          depth: options.depth || 'l2',
+          with_sequence: options.withSequence !== undefined ? options.withSequence : true,
+          patterns: options.patterns || null
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn(`[ChessGrammar API] HTTP ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      return parseTacticResponse(data);
+    } catch (error) {
+      console.error('[ChessGrammar] 전술 분석 실패:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * PGN 전체 게임 분석 (1회 호출로 모든 전술 기회 파악)
+   */
+  async function detectTacticsGame(pgn, options = {}) {
+    if (!pgn) return null;
+    try {
+      const response = await fetch(`${API_BASE}/extract_game`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pgn: pgn,
+          mode: options.mode || 'available', // 'available'은 모든 전술 기회 포함
+          depth: options.depth || 'l2',
+          with_sequence: options.withSequence !== undefined ? options.withSequence : false,
+          patterns: options.patterns || null
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn(`[ChessGrammar API] HTTP ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      // ply(반수)별로 맵핑하여 반환
+      const result = {};
+      if (data && data.tactics && Array.isArray(data.tactics)) {
+        data.tactics.forEach(t => {
+          const ply = t.ply;
+          if (ply == null) return;
+          if (!result[ply]) result[ply] = [];
+          result[ply].push(t);
+        });
+      }
+
+      // 개별 ply 데이터를 ChessTactics 표준 객체로 변환하는 유틸리티 맵핑
+      const mappedResult = {};
+      Object.keys(result).forEach(ply => {
+        mappedResult[ply] = parseTacticList(result[ply]);
+      });
+
+      return mappedResult;
+    } catch (error) {
+      console.error('[ChessGrammar] 게임 전술 분석 실패:', error.message);
+      return null;
+    }
+  }
+
+  function parseTacticResponse(data) {
+    if (!data || !data.tactics || !Array.isArray(data.tactics)) return null;
+    return parseTacticList(data.tactics);
+  }
+
+  function parseTacticList(tacticList) {
+    const tactics = {
+      fork: false,
+      absPin: false,
+      relPin: false,
+      pin: false,
+      discovered: false,
+      checkmate: false,
+      trap: false,
+      decoy: false,
+      skewer: false,
+      raw: tacticList // 원본 데이터 보관
+    };
+
+    tacticList.forEach(t => {
+      const pattern = (t.pattern || '').toLowerCase();
+      const targets = t.targets || [];
+      const hasKingTarget = targets.some(tgt => tgt.piece_name === 'king');
+
+      if (pattern.includes('fork')) tactics.fork = true;
+      if (pattern === 'pin') {
+        tactics.pin = true;
+        if (hasKingTarget) tactics.absPin = true;
+        else tactics.relPin = true;
+      }
+      if (pattern.includes('skewer')) tactics.skewer = true;
+      if (pattern.includes('discovered')) tactics.discovered = true;
+      if (pattern.includes('mate') || pattern.includes('double_check')) tactics.checkmate = true;
+      if (pattern.includes('trap')) tactics.trap = true;
+      if (pattern.includes('deflection') || pattern.includes('decoy')) tactics.decoy = true;
+      if (pattern.includes('interference')) tactics.pin = true; // 간섭도 핀의 일종으로 분류하거나 무시
+    });
+
+    return tactics;
+  }
+
+  /**
+   * [1단계] → [2단계] 통합 (모든 수에 대해 전술 분석 호출)
+   */
+  async function analyzeMoveWorkflow(cpBeforeWhite, cpAfterWhite, mover, fenAfter) {
+    const step1 = evaluateMove(cpBeforeWhite, cpAfterWhite, mover);
+    // 모든 수에 대해 판별하도록 변경됨 (기존 step1.isBad 체크 제거)
+    const tactics = await detectTactics(fenAfter);
+    return { judgment: step1.judgment, tactics, grammarCalled: true };
+  }
+
+  /** @deprecated — analyzeMoveWorkflow 사용 권장 */
+  async function detectTacticsIfBlunder(cpBeforeWhite, cpAfterWhite, mover, fen) {
+    const step1 = evaluateMove(cpBeforeWhite, cpAfterWhite, mover);
+    if (!step1.isBad) return null;
+    return detectTactics(fen);
+  }
+
+  function buildMoveKey(opts) {
+    if (opts.moveKey) return opts.moveKey;
+    const fen = opts.fenAfter || opts.currentFen || '';
+    const ply = opts.plyIndex != null ? opts.plyIndex : '';
+    return `${fen}|${ply}`;
+  }
+
+  /**
+   * 새 수/포지션당 1회 — debounce + moveKey 중복 방지
+   * @param {object} opts
+   * @param {number} opts.cpBeforeWhite
+   * @param {number} opts.cpAfterWhite
+   * @param {string} opts.mover 'w'|'b'
+   * @param {string} opts.fenAfter
+   * @param {string} [opts.moveKey]
+   * @param {number} [opts.debounceMs]
+   * @param {boolean} [opts.force]
+   * @param {function} [onComplete]
+   */
+  function scheduleAutoAnalyzeMove(opts, onComplete) {
+    if (pendingAnalysisTimer) clearTimeout(pendingAnalysisTimer);
+    const debounceMs = opts.debounceMs != null ? opts.debounceMs : 450;
+
+    pendingAnalysisTimer = setTimeout(() => {
+      autoAnalyzeMove(opts, onComplete);
+    }, debounceMs);
+  }
+
+  async function autoAnalyzeMove(opts, onComplete) {
+    const moveKey = buildMoveKey(opts);
+    const fenAfter = opts.fenAfter || opts.currentFen;
+
+    if (!opts.force && moveKey === lastAnalyzedMoveKey) {
+      return null;
+    }
+
+    const now = Date.now();
+    if (!opts.force && now - lastAnalysisTime < MIN_ANALYSIS_INTERVAL) {
+      if (pendingAnalysisTimer) clearTimeout(pendingAnalysisTimer);
+      pendingAnalysisTimer = setTimeout(() => {
+        autoAnalyzeMove(opts, onComplete);
+      }, MIN_ANALYSIS_INTERVAL - (now - lastAnalysisTime));
+      return null;
+    }
+
+    if (isAnalyzing) {
+      return null;
+    }
+
+    if (opts.cpBeforeWhite == null || opts.cpAfterWhite == null || !opts.mover || !fenAfter) {
+      console.warn('[ChessTactics] 평가치/ FEN 부족 — 분석 스킵');
+      return null;
+    }
+
+    isAnalyzing = true;
+    lastAnalysisTime = now;
+    lastAnalyzedMoveKey = moveKey;
+    lastAnalyzedFen = fenAfter;
+
+    try {
+      console.log('[ChessTactics] [1단계] 수 평가:', moveKey);
+      const result = await analyzeMoveWorkflow(
+        opts.cpBeforeWhite,
+        opts.cpAfterWhite,
+        opts.mover,
+        fenAfter
+      );
+
+      if (result.judgment) {
+        console.log('[ChessTactics] 판정:', result.judgment, result.grammarCalled ? '(Grammar API 호출)' : '(Grammar 스킵)');
+      } else {
+        console.log('[ChessTactics] 양호한 수 — Grammar API 미호출');
+      }
+
+      if (typeof onComplete === 'function') {
+        onComplete(result);
+      }
+      return result;
+    } catch (e) {
+      console.error('[ChessTactics] 자동 분석 오류:', e);
+      return null;
+    } finally {
+      isAnalyzing = false;
+    }
+  }
+
+  /** @deprecated — scheduleAutoAnalyzeMove 사용 */
+  async function autoAnalyzePosition(cpBeforeWhite, cpAfterWhite, mover, currentFen, onAnalysisComplete) {
+    return scheduleAutoAnalyzeMove({
+      cpBeforeWhite,
+      cpAfterWhite,
+      mover,
+      fenAfter: currentFen,
+      currentFen,
+    }, onAnalysisComplete);
+  }
+
+  function snapshotFromState(st) {
+    if (!st) return null;
+    if (typeof st === 'string') return st;
+    if (st.fen) return st.fen;
+    if (typeof global.boardToFen === 'function' && st.board) {
+      return global.boardToFen(st.board, st.turn, st.castling, st.enPassant, st.halfMove || 0, st.fullMove || 1);
+    }
+    return null;
+  }
+
+  function applyMoveSnapshot(prevFen, move) {
+    if (!prevFen || !move) return null;
+    if (typeof global.parseFen !== 'function' || typeof global.applyMoveToBoard !== 'function' || typeof global.boardToFen !== 'function') {
+      return null;
+    }
+    const st = global.parseFen(prevFen);
+    if (!st) return null;
+    const board = st.board.map(r => [...r]);
+    const afterBoard = global.applyMoveToBoard(board, move, st.turn);
+    const nextTurn = st.turn === 'w' ? 'b' : 'w';
+    const ep = move.doublePush ? [move.to[0] - (st.turn === 'w' ? -1 : 1), move.to[1]] : null;
+    return global.boardToFen(afterBoard, nextTurn, st.castling, ep, st.halfMove || 0, (st.fullMove || 1) + (nextTurn === 'w' ? 1 : 0));
+  }
+
+  function resetAnalysisState() {
+    lastAnalyzedMoveKey = null;
+    lastAnalyzedFen = null;
+    lastAnalysisTime = 0;
+    isAnalyzing = false;
+    if (pendingAnalysisTimer) clearTimeout(pendingAnalysisTimer);
+    pendingAnalysisTimer = null;
+  }
+
+  function formatTacticsSummary(tactics) {
+    if (!tactics) return '';
+    const names = [];
+    if (tactics.fork) names.push('포크');
+    if (tactics.absPin) names.push('절대 핀');
+    if (tactics.relPin) names.push('상대 핀');
+    if (tactics.pin && !tactics.absPin && !tactics.relPin) names.push('핀');
+    if (tactics.skewer) names.push('스큐어');
+    if (tactics.discovered) names.push('디스커버드 어택');
+    if (tactics.trap) names.push('트랩');
+    if (tactics.decoy) names.push('유인');
+    if (tactics.checkmate) names.push('체크메이트');
+    return names.join(', ');
+  }
+
+  global.ChessTactics = {
+    evaluateMove,
+    evaluateMoveJudgment,
+    isBadJudgment,
+    detectTactics,
+    detectTacticsGame,
+    parseTacticList,
+    analyzeMoveWorkflow,
+    detectTacticsIfBlunder,
+    scheduleAutoAnalyzeMove,
+    autoAnalyzeMove,
+    autoAnalyzePosition,
+    snapshotFromState,
+    applyMoveSnapshot,
+    resetAnalysisState,
+    formatTacticsSummary,
+    BAD_JUDGMENTS,
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
 
