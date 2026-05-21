@@ -104,10 +104,12 @@
     items.forEach(item => {
       item.classList.remove('active');
       const href = item.getAttribute('href');
-      if (href === path || (path === '/' && href === '/') || (path.endsWith('index.html') && href === '/')) {
-        item.classList.add('active');
-      } else if (href !== '/' && path.includes(href.replace('.html', ''))) {
-        item.classList.add('active');
+      if (href) {
+        if (href === path || (path === '/' && href === '/') || (path.endsWith('index.html') && href === '/')) {
+          item.classList.add('active');
+        } else if (href !== '/' && path.includes(href.replace('.html', ''))) {
+          item.classList.add('active');
+        }
       }
     });
 

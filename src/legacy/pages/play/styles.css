@@ -83,202 +83,94 @@ body {
 
 /* ── 메인 레이아웃 ── */
 #main {
-  width: 100vw; height: 100vh;
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden; position: relative;
-}
-
-/* ── 배경 체스판 패턴 ── */
-#main::before {
-  content: '';
-  position: absolute; inset: 0;
-  background-image: repeating-conic-gradient(rgba(255,255,255,0.015) 0% 25%, transparent 0% 50%);
-  background-size: 56px 56px;
-  pointer-events: none;
+  flex: 1;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
 }
 
 /* ══════════ 로비 화면 ══════════ */
 #screen-lobby {
   position: relative; z-index: 1;
   display: flex; flex-direction: column; align-items: center;
-  gap: 32px; padding: 24px;
-  animation: fadeUp 0.5s ease both;
+  gap: 40px; padding: 40px;
+  animation: fadeUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
-.lobby-header { text-align: center; }
-.lobby-icon {
-  width: 72px; height: 72px; border-radius: 20px;
-  background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
-  display: flex; align-items: center; justify-content: center;
-  font-size: 36px; margin: 0 auto 16px;
-  box-shadow: 0 8px 32px rgba(127,166,80,0.35);
-}
-.lobby-title {
-  font-family: var(--font-display);
-  font-size: 2rem; font-weight: 900; color: var(--text-primary);
-  margin-bottom: 6px;
-}
-.lobby-sub { font-size: 0.8rem; color: var(--text-muted); letter-spacing: 0.15em; text-transform: uppercase; }
 
 .lobby-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 20px; padding: 28px;
-  width: 340px;
+  border-radius: 24px; padding: 40px;
+  width: 420px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
 }
-.lobby-card-title {
-  font-size: 11px; font-weight: 700; color: var(--text-muted);
-  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px;
-}
-.time-badge {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--bg-tertiary); border: 1px solid var(--border);
-  border-radius: 12px; padding: 12px 16px; margin-bottom: 20px;
-}
-.time-badge-icon { font-size: 22px; }
-.time-badge-info { flex: 1; }
-.time-badge-main { font-size: 15px; font-weight: 700; color: var(--text-primary); }
-.time-badge-sub  { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 
-.btn-find {
-  width: 100%; padding: 14px;
-  background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
-  border: none; border-radius: 12px; color: #fff;
-  font-family: var(--font-main); font-size: 1rem; font-weight: 700;
-  cursor: pointer; transition: opacity 0.2s, transform 0.15s;
-  box-shadow: 0 4px 20px rgba(127,166,80,0.35);
-  display: flex; align-items: center; justify-content: center; gap: 8px;
+.lobby-title {
+  font-family: var(--font-display);
+  font-size: 2.8rem; font-weight: 900; color: var(--text-primary);
+  margin-bottom: 8px;
 }
-.btn-find:hover { opacity: 0.9; transform: translateY(-1px); }
-
-/* ══════════ 매칭 대기 화면 ══════════ */
-#screen-searching {
-  display: none; position: relative; z-index: 1;
-  flex-direction: column; align-items: center; justify-content: center;
-  gap: 24px; padding: 24px;
-  animation: fadeUp 0.4s ease both;
-}
-.search-spinner {
-  width: 80px; height: 80px; border-radius: 50%;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent-green);
-  animation: spin 1s linear infinite;
-}
-.search-title { font-size: 18px; font-weight: 700; color: var(--text-primary); }
-.search-elapsed { font-size: 13px; color: var(--text-muted); }
-.btn-cancel {
-  padding: 11px 32px;
-  background: transparent; border: 1px solid var(--border-light);
-  border-radius: 10px; color: var(--text-secondary);
-  font-family: var(--font-main); font-size: 0.875rem; cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-cancel:hover { border-color: #c04040; color: #e07070; background: rgba(192,64,64,0.08); }
 
 /* ══════════ 대국 화면 ══════════ */
 #screen-playing {
   display: none; position: relative; z-index: 1;
   width: 100%; height: 100%;
   flex-direction: column; align-items: center; justify-content: center;
-  gap: 12px; padding: 16px;
+  gap: 20px; padding: 40px;
+  background: rgba(0,0,0,0.03);
 }
 
 .player-bar {
-  width: min(calc(100vh - 216px), calc(100vw - 32px));
+  width: min(calc(100vh - 250px), calc(100vw - 450px));
   display: flex; align-items: center; justify-content: space-between;
   background: var(--bg-secondary); border: 1px solid var(--border);
-  border-radius: 12px; padding: 10px 16px;
+  border-radius: 16px; padding: 12px 20px;
+  box-shadow: var(--shadow-sm);
 }
-.player-bar.my-bar { border-color: var(--accent-green-dark); }
-.player-info-wrap { display: flex; align-items: center; gap: 10px; }
-.p-avatar {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: var(--bg-hover);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 700; color: var(--text-primary);
-}
-.p-avatar.me { background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark)); color: #fff; }
-.p-name  { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.p-color { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
-.p-timer {
-  font-size: 22px; font-weight: 700; font-family: monospace;
-  color: var(--text-primary); min-width: 60px; text-align: right;
-}
-.p-timer.active { color: var(--accent-green-bright); }
-.p-timer.low    { color: #e07070; }
 
-/* ── 체스보드 ── */
 #play-board-wrap {
-  /* 세로: 100vh - 플레이어바2개 - gap - 버튼행 - 패딩 약 216px */
-  /* 가로: 100vw - 좌우패딩 32px */
-  width: min(calc(100vh - 216px), calc(100vw - 32px));
-  height: min(calc(100vh - 216px), calc(100vw - 32px));
+  width: min(calc(100vh - 250px), calc(100vw - 450px));
+  height: min(calc(100vh - 250px), calc(100vw - 450px));
   flex-shrink: 0;
   position: relative;
-}
-#play-board {
-  width: 100%; height: 100%;
-  display: grid; grid-template-columns: repeat(8, 1fr);
-  border: 2px solid var(--border-light); border-radius: 4px; overflow: hidden;
-  user-select: none;
+  box-shadow: 0 15px 50px rgba(0,0,0,0.4);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-/* ── 화살표 오버레이 ── */
-.board-arrow-overlay {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  pointer-events: none; z-index: 10;
-}
-.sq {
-  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
-  font-size: clamp(18px, 5vw, 42px);
-  cursor: pointer; position: relative;
-  transition: background 0.1s;
-}
-.sq.light { background: var(--board-light); }
-.sq.dark  { background: var(--board-dark); }
-.sq.selected { background: rgba(127,166,80,0.6) !important; }
-.sq.possible::after {
-  content: ''; position: absolute;
-  width: 30%; height: 30%; border-radius: 50%;
-  background: rgba(0,0,0,0.18);
-}
-.sq.possible.has-piece::after {
-  width: 100%; height: 100%; border-radius: 0;
-  background: none;
-  box-shadow: inset 0 0 0 4px rgba(0,0,0,0.2);
-}
-.sq.last-from { background: rgba(205,210,106,0.5) !important; }
-.sq.last-to   { background: rgba(205,210,106,0.7) !important; }
-.sq.in-check  { background: rgba(220,50,50,0.55) !important; }
-
-.sq .piece { pointer-events: none; line-height: 1; }
-.sq {
-  will-change: background-color;
-}
-.sq .piece-img {
-  width: 88%; height: 88%; object-fit: contain;
-  position: relative; z-index: 1; pointer-events: none;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
-}
-.sq .piece-img.black-piece {
-  filter: drop-shadow(0 0 1px rgba(180,180,180,0.9))
-          drop-shadow(0 0 1px rgba(150,150,150,0.7))
-          drop-shadow(0 1px 2px rgba(0,0,0,0.5));
-}
-
-/* 좌표 표시 */
-.rank-label {
-  position: absolute; left: 2px; top: 1px;
-  font-size: 9px; font-weight: 700; opacity: 0.5; pointer-events: none;
-}
-.file-label {
-  position: absolute; right: 2px; bottom: 0px;
-  font-size: 9px; font-weight: 700; opacity: 0.5; pointer-events: none;
-}
-
-/* ── 하단 버튼 ── */
 .play-actions {
-  display: flex; gap: 8px;
-  width: min(calc(100vh - 216px), calc(100vw - 32px));
+  display: flex; gap: 12px;
+  width: min(calc(100vh - 250px), calc(100vw - 450px));
+}
+
+.btn-resign, .btn-draw {
+  height: 48px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .lobby-card {
+    width: 320px;
+    padding: 24px;
+  }
+  
+  #screen-playing {
+    padding: 10px;
+    gap: 12px;
+  }
+
+  .player-bar, #play-board-wrap, .play-actions {
+    width: 94vw !important;
+  }
+  
+  #play-board-wrap {
+    height: 94vw !important;
+  }
 }
 .btn-resign {
   flex: 1; padding: 10px;

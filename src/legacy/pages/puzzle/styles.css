@@ -248,54 +248,42 @@ body {
 .theme-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px 14px 14px;
+  border-radius: 20px;
+  padding: 24px 20px 20px;
   cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   user-select: none;
-}
-
-.theme-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: var(--card-accent, var(--accent-green));
-  opacity: 0;
-  transition: opacity 0.18s;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
 
 .theme-card:hover {
-  border-color: var(--card-accent, var(--accent-green));
+  border-color: var(--accent-green);
   background: var(--bg-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  transform: translateY(-5px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.35);
 }
-.theme-card:hover::before { opacity: 1; }
-
-.theme-card:active { transform: translateY(0); }
 
 .theme-card-icon {
-  font-size: 26px;
+  font-size: 32px;
   line-height: 1;
 }
 
 .theme-card-name {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
   color: var(--text-primary);
   line-height: 1.2;
 }
 
 .theme-card-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.5;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
   flex: 1;
 }
 

@@ -67,6 +67,14 @@ html[data-color-mode="light"] body {
   display: none;
 }
 
+#hamburger-btn {
+  display: none;
+}
+
+.sidebar-mobile-header {
+  display: none;
+}
+
 #sidebar {
   position: fixed !important;
   top: 0 !important;
@@ -81,7 +89,125 @@ html[data-color-mode="light"] body {
   flex-direction: column;
   align-items: center;
   z-index: 2000; /* Force above everything on all pages */
-  padding: 20px 0;
+  padding: 15px 0;
+}
+
+.sidebar-logo {
+  width: 48px;
+  height: 48px;
+  background: var(--accent-green);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  font-size: 26px;
+  color: white;
+  text-decoration: none;
+  box-shadow: 0 4px 15px rgba(127,166,80,0.3);
+  transition: all 0.2s;
+}
+
+.sidebar-logo:hover {
+  background: var(--accent-green-bright);
+  transform: scale(1.05);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  flex: 1;
+}
+
+.sidebar-item {
+  width: 64px !important;
+  height: 64px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  gap: 5px !important;
+  border-radius: 14px !important;
+  margin-bottom: 2px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.sidebar-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.sidebar-item.active {
+  background: var(--bg-tertiary);
+  color: var(--accent-green-bright);
+  box-shadow: inset 0 0 0 1px rgba(139, 198, 86, 0.25);
+}
+
+.sidebar-icon svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.sidebar-label {
+  font-size: 10px !important;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sidebar-divider {
+  width: 30px;
+  height: 1px;
+  background: var(--border);
+  margin: 10px 0;
+  opacity: 0.5;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 0 25px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-user {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.sidebar-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.sidebar-username {
+  font-size: 10px;
+  color: var(--text-muted);
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 body {
@@ -99,12 +225,35 @@ body {
   background-attachment: fixed;
 }
 
-html[data-color-mode="light"] #sidebar {
-  background: linear-gradient(198deg, var(--bg-secondary) 0%, #e1e7f4 100%);
-  box-shadow: 4px 0 22px rgba(40, 70, 120, 0.07);
+/* Global PC Layout Reset */
+#main {
+  max-width: 100% !important; /* Allow full width */
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: row;
 }
 
 @media (max-width: 768px) {
+  #hamburger-btn {
+    display: flex;
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    width: 44px;
+    height: 44px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-primary);
+    z-index: 1500;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    cursor: pointer;
+  }
+
   body {
     padding-left: 0 !important;
   }
@@ -137,88 +286,53 @@ html[data-color-mode="light"] #sidebar {
     margin-bottom: 10px;
   }
 
-  .sidebar-mobile-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--accent-green-bright);
-  }
-
-  .sidebar-mobile-close {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 20px;
-    cursor: pointer;
-  }
-
-  .sidebar-nav {
-    padding: 0 10px;
-    overflow-y: auto;
-    flex: 1;
-  }
-
   .sidebar-item {
-    width: 60px !important;
-    height: 60px !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;
-    gap: 4px !important;
-    border-radius: 12px !important;
-    margin-bottom: 8px;
-    transition: all 0.2s ease;
-    color: var(--text-secondary);
+    width: 100% !important;
+    height: auto !important;
+    flex-direction: row !important;
+    justify-content: flex-start !important;
+    padding: 12px 20px !important;
+    gap: 15px !important;
+    border-radius: 0 !important;
+    margin-bottom: 0;
+  }
+
+  .sidebar-icon svg {
+    width: 22px !important;
+    height: 22px !important;
   }
 
   .sidebar-label {
-    font-size: 10px !important;
+    font-size: 15px !important;
     font-weight: 600;
   }
 
   .sidebar-footer {
     margin-top: auto;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    padding-bottom: 20px;
+    padding: 20px !important;
+    align-items: stretch;
+    gap: 8px;
   }
 
   .sidebar-user {
-    display: none; /* Hide full user info on thin PC sidebar */
+    flex-direction: row;
+    gap: 12px;
+    margin-bottom: 10px;
+    display: flex;
+  }
+
+  .sidebar-username {
+    font-size: 14px;
+    max-width: none;
   }
 
   .sidebar-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: var(--accent-green);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    margin-bottom: 10px;
+    width: 36px;
+    height: 36px;
   }
 
-  .pc-only {
-    display: none !important;
-  }
-
-  /* 하단바 제거 여백 정리 */
-  #mobile-bottom-nav {
-    display: none !important;
-  }
-
-  body {
-    padding-bottom: 0 !important;
-  }
-
-  #right-panel {
-    bottom: 0 !important;
+  #main {
+    flex-direction: column;
   }
 }
 

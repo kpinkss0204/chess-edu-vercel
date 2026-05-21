@@ -482,51 +482,86 @@
       #main {
         display: flex !important;
         flex-direction: row !important;
-        justify-content: space-between !important;
-        align-items: flex-start !important;
-        padding: 20px 40px !important;
-        gap: 40px !important;
-        max-width: 1600px;
-        margin: 0 auto;
+        justify-content: center !important;
+        align-items: stretch !important;
+        height: 100vh !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        gap: 0 !important;
       }
 
       #board-area {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 0 !important;
+        flex: 1 !important;
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: rgba(0,0,0,0.05);
+        padding: 20px !important;
+        min-width: 0;
+      }
+
+      #board-wrap {
+        width: min(calc(100vh - 220px), calc(100vw - 550px)) !important;
+        height: min(calc(100vh - 220px), calc(100vw - 550px)) !important;
+      }
+
+      #chessboard, .chessboard {
+        width: 100% !important;
+        height: 100% !important;
       }
 
       #board-controls {
         width: 100% !important;
-        max-width: min(calc(100vh - 160px), calc(100vw - 450px)) !important;
+        max-width: min(calc(100vh - 220px), calc(100vw - 550px)) !important;
         display: flex !important;
-        justify-content: center !important;
-        gap: 8px !important;
-        margin-top: 15px !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 10px !important;
+        margin-top: 20px !important;
+        background: var(--bg-secondary);
+        padding: 8px 15px !important;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-sm);
       }
 
       #right-panel {
-        width: 340px !important;
-        height: min(800px, calc(100vh - 80px)) !important;
-        margin-left: 0 !important;
+        width: 400px !important;
+        height: 100% !important;
         position: relative !important;
         transform: none !important;
-        box-shadow: var(--shadow-panel) !important;
-        border-radius: 16px !important;
-        overflow: hidden !important;
+        border-radius: 0 !important;
+        border-left: 1px solid var(--border);
+        box-shadow: none !important;
         flex-shrink: 0 !important;
+        background: var(--bg-secondary) !important;
       }
 
       .overlay-ctrl-btn, #coach-open-btn {
-        display: flex !important; /* Ensure buttons are visible on PC */
+        display: flex !important;
+        height: 38px !important;
+        padding: 0 12px !important;
+        font-size: 12px !important;
       }
 
       .player-info {
         width: 100% !important;
-        max-width: min(calc(100vh - 160px), calc(100vw - 450px)) !important;
+        max-width: min(calc(100vh - 220px), calc(100vw - 550px)) !important;
+        margin-bottom: 10px !important;
+      }
+      
+      #player-white {
+        margin-top: 10px !important;
+        margin-bottom: 0 !important;
+      }
+
+      .eval-score {
+        font-size: 16px !important;
+        font-weight: 800 !important;
+        min-width: 50px;
+        text-align: center;
       }
     }
 

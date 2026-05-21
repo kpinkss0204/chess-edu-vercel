@@ -205,176 +205,72 @@
     #main {
       flex: 1;
       display: flex;
+      flex-direction: row;
       overflow: hidden;
-      min-height: 0
-    }
-
-    .list-tab-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 12px
-    }
-
-    .list-tab-btn {
-      flex: 1;
-      padding: 8px 6px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg-card);
-      color: var(--text-secondary);
-      font-size: 12px;
-      font-family: var(--font-main);
-      cursor: pointer;
-      font-weight: 600;
-      transition: background .15s, border-color .15s, color .15s
-    }
-
-    .list-tab-btn:hover {
-      background: var(--bg-hover);
-      color: var(--text-primary)
-    }
-
-    .list-tab-btn.active {
-      border-color: var(--accent-green-dark);
-      background: var(--bg-tertiary);
-      color: var(--accent-green-bright)
+      min-height: 0;
+      height: 100vh;
     }
 
     /* LIST PANEL */
     #list-panel {
-      width: 320px;
+      width: 400px;
       flex-shrink: 0;
       background: var(--bg-secondary);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      overflow: hidden
+      overflow: hidden;
+      z-index: 10;
     }
 
-    @media (min-width: 1100px) {
+    @media (min-width: 1400px) {
       #list-panel {
-        width: 360px
+        width: 450px;
       }
     }
 
     .list-header {
-      padding: 18px 18px 14px;
+      padding: 24px 20px 18px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0
     }
 
     .list-title {
       font-family: var(--font-display);
-      font-size: 1.3rem;
+      font-size: 1.6rem;
       font-weight: 900;
       color: var(--text-primary);
-      margin-bottom: 2px
+      margin-bottom: 4px
     }
 
     .list-sub {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-muted)
     }
 
     #records-list {
       flex: 1;
       overflow-y: auto;
-      padding: 12px
-    }
-
-    #records-list::-webkit-scrollbar {
-      width: 4px
-    }
-
-    #records-list::-webkit-scrollbar-thumb {
-      background: var(--border-light);
-      border-radius: 2px
+      padding: 15px
     }
 
     .record-item {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 8px;
+      border-radius: 14px;
+      padding: 15px 18px;
+      margin-bottom: 10px;
       cursor: pointer;
-      transition: border-color .15s, background .15s;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       display: flex;
       align-items: center;
-      gap: 12px
+      gap: 15px;
     }
 
     .record-item:hover {
-      border-color: var(--accent-green-dark);
-      background: var(--bg-hover)
-    }
-
-    .record-item.active {
       border-color: var(--accent-green);
-      background: var(--bg-tertiary)
-    }
-
-    .record-result-badge {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      font-weight: 900
-    }
-
-    .record-result-badge.win {
-      background: rgba(127, 166, 80, .2);
-      color: var(--accent-green-bright)
-    }
-
-    .record-result-badge.lose {
-      background: rgba(192, 64, 64, .15);
-      color: #e07070
-    }
-
-    .record-result-badge.draw {
-      background: rgba(160, 160, 160, .15);
-      color: var(--text-secondary)
-    }
-
-    .record-info {
-      flex: 1;
-      min-width: 0
-    }
-
-    .record-players {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-bottom: 3px
-    }
-
-    .record-meta {
-      font-size: 10px;
-      color: var(--text-muted);
-      display: flex;
-      gap: 8px
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 48px 20px;
-      color: var(--text-muted);
-      font-size: 13px;
-      line-height: 1.7
-    }
-
-    .empty-icon {
-      font-size: 36px;
-      margin-bottom: 12px;
-      opacity: .5
+      background: var(--bg-hover);
+      transform: translateX(4px);
     }
 
     /* VIEWER PANEL */
@@ -384,55 +280,9 @@
       align-items: center;
       justify-content: center;
       position: relative;
-      overflow-y: auto; /* Allow vertical scroll */
-      overflow-x: hidden;
+      overflow: hidden;
       min-width: 0;
-    }
-
-    @media (max-width: 768px) {
-      #viewer-panel {
-        height: auto;
-        min-height: 500px;
-        padding: 20px 0;
-        overflow: visible;
-      }
-      
-      #viewer-container {
-        height: auto !important;
-        justify-content: flex-start !important;
-      }
-
-      #viewer-board-wrap {
-        width: 92vw;
-        max-width: 92vw;
-        height: 92vw;
-      }
-    }
-
-    #viewer-panel::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background-image: repeating-conic-gradient(rgba(255, 255, 255, .015) 0% 25%, transparent 0% 50%);
-      background-size: 56px 56px;
-      pointer-events: none
-    }
-
-    #viewer-empty {
-      position: relative;
-      z-index: 1;
-      text-align: center;
-      color: var(--text-muted)
-    }
-
-    .viewer-empty-icon {
-      font-size: 52px;
-      margin-bottom: 16px;
-      opacity: .3
-    }
-
-    .viewer-empty-text {
-      font-size: 14px
+      background: rgba(0,0,0,0.02);
     }
 
     #viewer-container {
@@ -441,63 +291,75 @@
       z-index: 1;
       flex-direction: column;
       align-items: center;
-      gap: 12px;
-      padding: 16px;
+      gap: 20px;
+      padding: 30px;
       width: 100%;
       height: 100%;
-      justify-content: center
+      justify-content: center;
     }
 
-    .viewer-player-bar {
-      width: 100%;
-      max-width: 480px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px 16px
+    #viewer-board-wrap {
+      width: min(calc(100vh - 250px), 800px);
+      height: min(calc(100vh - 250px), 800px);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      border-radius: 8px;
+      overflow: hidden;
     }
 
-    .vp-info {
+    .viewer-main {
       display: flex;
-      align-items: center;
-      gap: 10px
-    }
-
-    .vp-avatar {
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      background: var(--bg-hover);
-      display: flex;
+      gap: 30px;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--text-primary)
+      width: 100%;
     }
 
-    .vp-avatar.me {
-      background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
-      color: #fff
+    .viewer-side {
+      width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      height: min(calc(100vh - 250px), 800px);
     }
 
-    .vp-name {
-      font-size: 13px;
-      font-weight: 600
+    @media (max-width: 1200px) {
+      .viewer-main {
+        flex-direction: column;
+      }
+      .viewer-side {
+        width: 100%;
+        max-width: 500px;
+        height: auto;
+      }
     }
 
-    .vp-color {
-      font-size: 10px;
-      color: var(--text-muted);
-      margin-top: 1px
-    }
+    @media (max-width: 768px) {
+      #main {
+        flex-direction: column;
+        height: auto;
+      }
 
-    .vp-result-label {
-      font-size: 11px;
-      font-weight: 700;
+      #list-panel {
+        width: 100% !important;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+
+      #viewer-panel {
+        padding: 20px 0;
+      }
+
+      #viewer-board-wrap {
+        width: 94vw !important;
+        height: 94vw !important;
+      }
+
+      .viewer-main {
+        flex-direction: column;
+        gap: 15px;
+      }
+    }
       padding: 3px 8px;
       border-radius: 6px
     }
