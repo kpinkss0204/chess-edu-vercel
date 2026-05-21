@@ -1725,3 +1725,8 @@
         cursor: pointer;
       }
     }
+
+    /* 모바일 패널 토글 버튼 */
+    #mobile-panel-toggle {
+      display: none !important;
+    }
