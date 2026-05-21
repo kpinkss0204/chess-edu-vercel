@@ -481,6 +481,146 @@ function loadPositionFromInput() {
       var img = sqEls[sq.row*8+sq.col] && sqEls[sq.row*8+sq.col].querySelector('.piece-img');
       if (img) img.classList.add('pal-dragging');
     }, true);
+
+    /* ── 터치 지원: 팔레트 기물 배치 + 보드→보드 이동 + 길게 눌러 삭제 ── */
+    var _touchDragSq = null;   // 터치 드래그 출발 칸
+    var _touchGhost  = null;   // 터치 고스트 이미지
+    var _longPressTimer = null; // 길게 누르기 타이머
+    var _touchMoved = false;   // 터치 중 이동 여부
+
+    function sqAtTouch(touch) {
+      var fakeEv = { clientX: touch.clientX, clientY: touch.clientY };
+      return sqAt(fakeEv);
+    }
+
+    function startTouchGhost(src, clientX, clientY) {
+      if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
+      _touchGhost = document.createElement('img');
+      _touchGhost.src = src;
+      _touchGhost.style.cssText = 'position:fixed;width:70px;height:70px;pointer-events:none;z-index:9999;opacity:0.88;transform:translate(-50%,-80%);transition:none;';
+      _touchGhost.style.left = clientX + 'px';
+      _touchGhost.style.top  = clientY + 'px';
+      document.body.appendChild(_touchGhost);
+    }
+
+    function highlightSq(sq, on) {
+      if (!sq) return;
+      var sqEls = board.querySelectorAll('.square');
+      var el = sqEls[sq.row * 8 + sq.col];
+      if (!el) return;
+      if (on) el.classList.add('pal-touch-target');
+      else    el.classList.remove('pal-touch-target');
+    }
+
+    board.addEventListener('touchstart', function(e) {
+      if (!_open) return;
+      if (e.touches.length !== 1) return;
+      var touch = e.touches[0];
+      var sq = sqAtTouch(touch);
+      if (!sq) return;
+
+      _touchMoved = false;
+
+      // 길게 누르기 → 삭제 (500ms)
+      _longPressTimer = setTimeout(function() {
+        if (!_touchMoved) {
+          e.preventDefault();
+          set(sq.col, sq.row, null);
+          if (navigator.vibrate) navigator.vibrate(40);
+          _touchDragSq = null;
+          if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
+        }
+      }, 500);
+
+      var p = get(sq.col, sq.row);
+      if (p) {
+        // 기존 기물 위 터치: 드래그 준비
+        e.preventDefault();
+        _touchDragSq = sq;
+        var type = (p.type || '').toUpperCase();
+        startTouchGhost(IMG + p.color + type + '.svg', touch.clientX, touch.clientY);
+        var sqEls = board.querySelectorAll('.square');
+        var pImg = sqEls[sq.row * 8 + sq.col] && sqEls[sq.row * 8 + sq.col].querySelector('.piece-img');
+        if (pImg) pImg.classList.add('pal-dragging');
+      } else if (_sel && _sel !== 'erase') {
+        // 빈 칸 탭: 선택된 팔레트 기물 배치 (touchend에서 처리)
+        e.preventDefault();
+      } else if (_sel === 'erase') {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    board.addEventListener('touchmove', function(e) {
+      if (!_open) return;
+      if (e.touches.length !== 1) return;
+      _touchMoved = true;
+      if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+
+      var touch = e.touches[0];
+      if (_touchGhost) {
+        _touchGhost.style.left = touch.clientX + 'px';
+        _touchGhost.style.top  = touch.clientY + 'px';
+        e.preventDefault();
+      }
+
+      // 현재 칸 하이라이트
+      if (_touchDragSq) {
+        var sq = sqAtTouch(touch);
+        board.querySelectorAll('.pal-touch-target').forEach(function(el) { el.classList.remove('pal-touch-target'); });
+        if (sq && (sq.col !== _touchDragSq.col || sq.row !== _touchDragSq.row)) {
+          highlightSq(sq, true);
+        }
+      }
+    }, { passive: false });
+
+    board.addEventListener('touchend', function(e) {
+      if (!_open) return;
+      if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+      board.querySelectorAll('.pal-touch-target').forEach(function(el) { el.classList.remove('pal-touch-target'); });
+
+      var touch = e.changedTouches[0];
+      var sq = sqAtTouch(touch);
+
+      if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
+
+      if (_touchDragSq) {
+        // 보드→보드 이동
+        var from = _touchDragSq; _touchDragSq = null;
+        var sqEls = board.querySelectorAll('.square');
+        var pImg = sqEls[from.row * 8 + from.col] && sqEls[from.row * 8 + from.col].querySelector('.piece-img');
+        if (pImg) pImg.classList.remove('pal-dragging');
+
+        if (sq && (sq.col !== from.col || sq.row !== from.row)) {
+          var p = get(from.col, from.row);
+          set(from.col, from.row, null);
+          if (p) set(sq.col, sq.row, p);
+        } else {
+          refresh();
+        }
+        return;
+      }
+
+      if (!sq || _touchMoved) return;
+
+      // 탭: 선택 기물 배치 또는 지우개
+      if (_sel === 'erase') {
+        set(sq.col, sq.row, null);
+      } else if (_sel) {
+        set(sq.col, sq.row, _sel);
+      }
+    }, { passive: false });
+
+    board.addEventListener('touchcancel', function() {
+      if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+      if (_touchGhost) { _touchGhost.remove(); _touchGhost = null; }
+      board.querySelectorAll('.pal-touch-target').forEach(function(el) { el.classList.remove('pal-touch-target'); });
+      if (_touchDragSq) {
+        var sqEls = board.querySelectorAll('.square');
+        var pImg = sqEls[_touchDragSq.row * 8 + _touchDragSq.col] && sqEls[_touchDragSq.row * 8 + _touchDragSq.col].querySelector('.piece-img');
+        if (pImg) pImg.classList.remove('pal-dragging');
+        _touchDragSq = null;
+      }
+    });
   }
 
   /* mousemove / mouseup 전역 */
