@@ -819,6 +819,15 @@
             if (typeof toggleMobilePanel === 'function') toggleMobilePanel(true);
             if (typeof switchTab === 'function') switchTab('coach');
             _origOpen.apply(this, arguments);
+
+            // [추가] 모바일에서도 버튼 클릭 시 즉시 기본 답변 요청
+            setTimeout(() => {
+              const responseDiv = document.getElementById('coach-response');
+              const isAlreadyLoading = responseDiv && responseDiv.classList.contains('loading');
+              if (!isAlreadyLoading) {
+                setCoachQuestion('현재 포지션에 대해 전반적으로 분석하고 가장 중요한 위협과 계획을 설명해 주세요.');
+              }
+            }, 300);
             return;
           }
           _origOpen.apply(this, arguments);
