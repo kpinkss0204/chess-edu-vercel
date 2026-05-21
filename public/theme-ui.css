@@ -120,6 +120,19 @@ html[data-color-mode="light"] body {
   gap: 8px;
   width: 100%;
   flex: 1;
+  overflow-y: auto; /* Prevent overflow on small screens */
+  overflow-x: hidden;
+  padding: 0 5px;
+}
+
+/* Hide scrollbar for sidebar nav but keep functionality */
+.sidebar-nav::-webkit-scrollbar {
+  width: 3px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 10px;
 }
 
 .sidebar-item {

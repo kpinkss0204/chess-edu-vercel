@@ -237,23 +237,23 @@
 
     .list-tab-row {
       display: flex;
-      gap: 8px;
+      gap: 10px;
       margin-top: 15px;
       background: var(--bg-tertiary);
-      padding: 4px;
+      padding: 5px;
       border-radius: 12px;
       border: 1px solid var(--border);
     }
 
     .list-tab-btn {
       flex: 1;
-      padding: 8px 10px;
+      padding: 10px;
       border: none;
       border-radius: 8px;
       background: transparent;
       color: var(--text-secondary);
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 13px;
+      font-weight: 700;
       cursor: pointer;
       transition: all 0.2s;
     }

@@ -112,6 +112,16 @@ body {
   overflow: hidden;
 }
 
+@media (min-width: 769px) {
+  #board-area {
+    padding-top: 60px !important; /* Fix board too high on PC */
+  }
+}
+
+.mobile-only {
+  display: none !important;
+}
+
 /* ===== CHESSBOARD ===== */
 #chessboard-wrap {
   position: relative;
@@ -121,7 +131,7 @@ body {
   gap: 15px;
 }
 
-#chessboard {
+#chessboard, #chessboard-mobile {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
@@ -145,40 +155,51 @@ body {
   width: 100%;
   max-width: min(calc(100vh - 250px), calc(100vw - 650px));
   background: var(--bg-secondary);
-  padding: 10px 15px;
+  padding: 8px 15px !important;
   border-radius: 12px;
   border: 1px solid var(--border);
+  margin-top: 15px !important;
 }
 
-/* PGN 입력 */
-#pgn-input-row {
+.ctrl-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   display: flex;
-  gap: 8px;
   align-items: center;
-  width: 100%;
-  max-width: min(calc(100vh - 250px), calc(100vw - 650px));
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-/* ===== RIGHT PANEL ===== */
-#right-panel {
-  width: 450px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
-  overflow: hidden;
+.ctrl-btn:hover {
+  background: var(--bg-hover);
+  transform: translateY(-2px);
 }
 
-@media (max-width: 1200px) {
-  #right-panel {
-    width: 380px;
-  }
+.ctrl-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 5px;
+}
+
+.eval-score {
+  font-size: 14px;
+  font-weight: 800;
+  min-width: 50px;
+  text-align: center;
+  color: var(--accent-green-bright);
 }
 
 @media (max-width: 768px) {
   #main {
     flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
   }
   
   #board-area {
@@ -187,7 +208,15 @@ body {
     flex: none;
   }
 
-  #chessboard {
+  .pc-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: block !important;
+  }
+
+  #chessboard-mobile {
     width: 94vw !important;
     height: 94vw !important;
   }
@@ -199,8 +228,11 @@ body {
 
   #right-panel {
     width: 100% !important;
+    flex: 1 !important;
     border-left: none;
     border-top: 1px solid var(--border);
+    overflow-y: auto !important; /* Enable scrolling for stats */
+    padding-bottom: 30px;
   }
 }
 /* ===== OPENING NAME HEADER ===== */
