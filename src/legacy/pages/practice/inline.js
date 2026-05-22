@@ -897,10 +897,31 @@ function switchTab(tab) {
     else panel.classList.remove('active');
   });
 
+  // 편집 모드 상태 동기화
+  var isPalette = (tab === 'palette');
+  var board = document.getElementById('chessboard');
+  var btn = document.getElementById('edit-mode-btn');
+  var backdrop = document.getElementById('mobile-panel-backdrop');
+
+  if (isPalette) {
+    if (!window._open) {
+       window._open = true;
+       if (board) board.classList.add('pal-edit');
+       if (btn) { btn.style.background='rgba(80,144,208,0.25)'; btn.style.borderColor='#5090d0'; }
+       window._editorSavedPracticeMode = window._enginePracticeMode;
+       window._enginePracticeMode = null;
+    }
+    if (backdrop) backdrop.classList.add('no-backdrop');
+  } else {
+    // 다른 탭으로 이동 시 편집 모드 유지 여부는 사용자 선택이지만, 
+    // 모바일 배경막은 다시 불투명하게 (조작 방지)
+    if (backdrop) backdrop.classList.remove('no-backdrop');
+  }
+
   // 모바일 전용: 편집 탭에서만 '보드 보기' 버튼 표시
   var minBtn = document.getElementById('btn-minimize-pal');
   if (minBtn) {
-    minBtn.style.display = (tab === 'palette' && window.innerWidth <= 768) ? 'flex' : 'none';
+    minBtn.style.display = (isPalette && window.innerWidth <= 768) ? 'flex' : 'none';
   }
 }
 
@@ -911,7 +932,16 @@ function toggleMobilePanel(forceOpen) {
   
   if (isOpening) {
     panel.classList.add('mobile-open');
-    if (backdrop) backdrop.classList.add('show');
+    if (backdrop) {
+      backdrop.classList.add('show');
+      // 현재 탭이 편집이면 배경막 무력화
+      const activeTab = document.querySelector('.tab-btn.active');
+      if (activeTab && activeTab.getAttribute('onclick').includes('palette')) {
+        backdrop.classList.add('no-backdrop');
+      } else {
+        backdrop.classList.remove('no-backdrop');
+      }
+    }
   } else {
     panel.classList.remove('mobile-open');
     if (backdrop) backdrop.classList.remove('show');

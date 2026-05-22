@@ -874,20 +874,25 @@ textarea {
   display: none;
   position: fixed;
   inset: 0;
-  z-index: 498;
-  background: rgba(0, 0, 0, 0.4);
+  z-index: 500 !important; /* 서랍(501) 바로 아래 */
+  background: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   opacity: 0;
   transition: opacity 0.3s;
 }
 
 #mobile-panel-backdrop.show {
-  display: block;
-  opacity: 1;
+  display: block !important;
+  opacity: 1 !important;
 }
 
 #mobile-panel-backdrop.no-backdrop {
-  background: transparent;
-  pointer-events: none;
+  background: transparent !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 @media (max-width: 768px) {
