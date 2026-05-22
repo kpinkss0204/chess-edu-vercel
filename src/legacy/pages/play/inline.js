@@ -455,29 +455,34 @@ async function startMatchmaking() {
   const myRef = queue.push();
   _queueRef = myRef;
   const myJoinedAt = Date.now();
+  
+  // 1. 먼저 내 노드를 생성
   await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: myJoinedAt });
 
-  // 자신보다 먼저 들어온 사람 중에서 매칭 대상을 찾음 (Race Condition 방지)
-  const snap = await queue.orderByChild('joinedAt').endAt(myJoinedAt - 1).limitToLast(10).once('value');
+  // 2. 전체 대기열을 가져와서 수동 필터링 (인덱스 경고 및 쿼리 실패 방지)
+  const snap = await queue.once('value');
   let matched = false;
-
+  
   const entries = [];
-  snap.forEach(child => { entries.push({ key: child.key, data: child.val() }); });
-  // 가장 최근에 들어온 사람부터 확인
-  entries.reverse();
+  snap.forEach(child => {
+    const data = child.val();
+    if (data && child.key !== myRef.key && !data.gameId && data.uid !== _user.uid && data.joinedAt < myJoinedAt) {
+      entries.push({ key: child.key, data });
+    }
+  });
+
+  // 먼저 들어온 사람부터 매칭 (가장 오래 기다린 사람 우선)
+  entries.sort((a, b) => a.data.joinedAt - b.data.joinedAt);
 
   for (const entry of entries) {
     if (matched) break;
     const { key, data } = entry;
-    if (!data || data.uid === _user.uid || data.gameId) continue;
 
-    // 트랜잭션을 사용하여 상대를 '선점'함
     const result = await _rtDb.ref(`matchmaking_queue/${key}`).transaction((currentData) => {
       if (currentData && !currentData.gameId) {
-        // 아직 매칭되지 않은 경우에만 내 정보를 기입하여 선점
         return { ...currentData, gameId: 'PENDING', matchedWith: _user.uid };
       }
-      return; // 중단
+      return; 
     });
 
     if (result.committed) {
@@ -499,7 +504,6 @@ async function startMatchmaking() {
       };
 
       await _rtDb.ref('games/' + gameId).set(gameData);
-      // 상대방 노드 업데이트 (진짜 gameId로 교체)
       await _rtDb.ref(`matchmaking_queue/${key}`).update({ gameId: gameId, color: oppColor });
       
       myRef.remove();
