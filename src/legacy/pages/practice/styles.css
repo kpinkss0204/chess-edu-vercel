@@ -159,11 +159,11 @@ body {
 }
 
 #chessboard {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
+  display: flex;
+  flex-direction: column;
   width: 100% !important;
   height: 100% !important;
+  aspect-ratio: 1 / 1;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -171,6 +171,20 @@ body {
   cursor: pointer;
   user-select: none;
   background: var(--bg-card);
+}
+
+.board-row {
+  display: flex;
+  flex: 1;
+  width: 100%;
+}
+
+.square {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #board-controls {
