@@ -6,34 +6,32 @@
   <!-- 로비 -->
   <div id="screen-lobby" style="display:flex;">
     <div class="lobby-header">
-      <div class="lobby-icon">♟</div>
+      <div class="lobby-icon">♟️</div>
       <div class="lobby-title">온라인 대국</div>
-      <div class="lobby-sub">랜덤 매칭 · 실시간 대국</div>
+      <div class="lobby-sub">전 세계 플레이어와 실시간 매칭</div>
     </div>
     <div class="lobby-card">
-      <div class="lobby-card-title">시간 설정</div>
+      <div class="lobby-card-title">매칭 설정</div>
       <div class="time-badge">
-        <div class="time-badge-icon">⏱</div>
+        <div class="time-badge-icon">⏱️</div>
         <div class="time-badge-info">
-          <div class="time-badge-main">10분</div>
-          <div class="time-badge-sub">증가분 없음 · 래피드</div>
+          <div class="time-badge-main">10분 래피드</div>
+          <div class="time-badge-sub">표준 시간 제한 적용</div>
         </div>
       </div>
       <button class="btn-find" onclick="startMatchmaking()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-        대국 찾기
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        대국 상대 찾기
       </button>
     </div>
   </div>
 
   <!-- 매칭 대기 -->
-  <div id="screen-searching" style="display:none;flex-direction:column;align-items:center;gap:24px;">
+  <div id="screen-searching" style="display:none;flex-direction:column;align-items:center;justify-content:center;">
     <div class="search-spinner"></div>
-    <div style="text-align:center;">
-      <div class="search-title">상대방 찾는 중...</div>
-      <div class="search-elapsed" id="search-elapsed">0초 경과</div>
-    </div>
-    <button class="btn-cancel" onclick="cancelMatchmaking()">취소</button>
+    <div class="search-title">대국 상대를 찾는 중</div>
+    <div class="search-elapsed" id="search-elapsed">0초 경과</div>
+    <button class="btn-cancel" onclick="cancelMatchmaking()">매칭 취소</button>
   </div>
 
   <!-- 대국 중 -->
