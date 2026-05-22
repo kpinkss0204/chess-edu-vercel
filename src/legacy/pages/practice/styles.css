@@ -562,13 +562,6 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 /* ====== practice 반응형 ====== */
 @media (max-width: 1100px) and (min-width: 769px) {
   #right-panel { width: 240px !important; }
-  #chessboard {
-    width: min(80vmin, calc(100vw - var(--sidebar-width,72px) - 260px), 600px) !important;
-    height: min(80vmin, calc(100vw - var(--sidebar-width,72px) - 260px), 600px) !important;
-  }
-  #eval-bar-wrap {
-    height: min(80vmin, calc(100vw - var(--sidebar-width,72px) - 260px), 600px) !important;
-  }
 }
 @media (max-width: 950px) and (min-width: 769px) {
   #right-panel { width: 200px !important; }
