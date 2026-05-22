@@ -326,23 +326,27 @@ function attachBoardEvents() {
   if (!board) { setTimeout(attachBoardEvents, 500); return; }
 
   board.addEventListener('drop', function(e) {
+    console.log('[PAL] Drop event fired');
     e.preventDefault();
     var sq = sqAt(e);
-    if (!sq) return;
+    if (!sq) { console.log('[PAL] Drop: No square found'); return; }
     if (_dragSq) {
+      console.log('[PAL] Drag-and-drop piece movement');
       var from = _dragSq; _dragSq = null;
       var p = get(from.col, from.row);
       set(from.col, from.row, null);
       if (p) set(sq.col, sq.row, p);
       return;
     }
-    if (!window._palOpen) return;
+    if (!window._palOpen) { console.log('[PAL] Drop: Pal not open'); return; }
     var raw = e.dataTransfer.getData('pal');
+    console.log('[PAL] Drop: Raw data =', raw);
     if (raw) { try { set(sq.col,sq.row,JSON.parse(raw)); } catch(_){} }
     else if (_sel && _sel!=='erase') set(sq.col,sq.row,_sel);
   });
 
   board.addEventListener('click', function(e) {
+    console.log('[PAL] Click event fired. PalOpen:', window._palOpen, 'Sel:', _sel);
     if (!window._palOpen) return;
     var sq = sqAt(e);
     if (!sq) return;
@@ -353,6 +357,7 @@ function attachBoardEvents() {
   }, true);
 
   board.addEventListener('mousedown', function(e) {
+    console.log('[PAL] Mousedown. PalOpen:', window._palOpen);
     if (!window._palOpen || e.button!==0) return;
     var sq = sqAt(e);
     if (!sq) return;
