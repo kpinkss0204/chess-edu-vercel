@@ -200,6 +200,12 @@ body {
   outline: none !important;
 }
 
+/* 기물이 없는 칸의 이미지 숨김 강제 */
+.piece-img:not([src]) {
+  display: none !important;
+}
+
+/* 하이라이트가 없는 칸의 잔상 제거 및 기본 설정 */
 .sq {
   position: relative !important;
   width: 100% !important;
@@ -211,26 +217,12 @@ body {
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
+  background: transparent !important;
 }
+
+/* 칸 기본 색상 */
 .sq.light { background: var(--board-light) !important; }
 .sq.dark { background: var(--board-dark) !important; }
-
-.piece-img {
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  width: 90% !important;
-  height: 90% !important;
-  max-width: 90% !important;
-  max-height: 90% !important;
-  object-fit: contain !important;
-  pointer-events: none;
-  z-index: 5;
-  display: block !important;
-  border: none !important;
-  outline: none !important;
-}
 
 /* 좌표 레이블 */
 .rank-label, .file-label {
