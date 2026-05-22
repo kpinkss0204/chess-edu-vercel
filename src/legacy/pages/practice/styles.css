@@ -130,14 +130,22 @@ body {
 #eval-container {
   display: flex;
   align-items: stretch;
+  justify-content: center;
   gap: 12px;
-  width: auto;
-  max-width: none;
+  width: 100%;
+  max-width: 680px;
+}
+
+#board-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 #eval-bar-wrap {
   width: 24px;
-  height: min(70vh, calc(100vw - 600px), 640px);
+  height: 640px;
+  max-height: 70vh;
   background: #2a2a2a;
   border-radius: 8px;
   overflow: visible;
@@ -150,8 +158,10 @@ body {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  width: min(70vh, calc(100vw - 600px), 640px);
-  height: min(70vh, calc(100vw - 600px), 640px);
+  width: 640px;
+  height: 640px;
+  max-width: 70vh;
+  max-height: 70vh;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
