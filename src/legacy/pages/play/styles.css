@@ -249,10 +249,10 @@ body {
 }
 
 /* 하이라이트 */
-.sq.last-from { background: rgba(255, 255, 0, 0.25) !important; border: none !important; outline: none !important; }
-.sq.last-to { background: rgba(255, 255, 0, 0.35) !important; border: none !important; outline: none !important; }
-.sq.selected { background: rgba(127, 166, 80, 0.5) !important; border: none !important; outline: none !important; }
-.sq.in-check { background: radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, transparent 80%) !important; border: none !important; outline: none !important; }
+.sq.last-from { background: rgba(255, 255, 0, 0.25) !important; border: none !important; outline: none !important; pointer-events: none !important; }
+.sq.last-to { background: rgba(255, 255, 0, 0.35) !important; border: none !important; outline: none !important; pointer-events: none !important; }
+.sq.selected { background: rgba(127, 166, 80, 0.5) !important; border: none !important; outline: none !important; pointer-events: none !important; }
+.sq.in-check { background: radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, transparent 80%) !important; border: none !important; outline: none !important; pointer-events: none !important; }
 
 .sq.possible::after {
   content: '';
