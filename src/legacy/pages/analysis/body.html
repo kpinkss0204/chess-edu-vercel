@@ -129,11 +129,6 @@
 
       <div id="coach-body">
         <div id="coach-context-display" class="coach-context-line" style="display:none;"></div>
-
-        <div class="coach-question-row">
-          <textarea id="coach-input" placeholder="체스 코치에게 질문하세요..." rows="2"></textarea>
-        </div>
-
         <div id="coach-response-main" class="coach-response-area" style="display:none;"></div>
       </div>
     </div><!-- /#coach-panel -->
@@ -232,10 +227,6 @@
           </div>
 
           <div id="coach-body" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px;">
-            <div class="coach-question-row">
-              <textarea id="coach-input-tab" placeholder="체스 코치에게 질문하세요..." rows="2" style="width:100%;"></textarea>
-            </div>
-
             <div id="coach-response-tab" class="coach-response-area" style="display:none;margin-top:8px;"></div>
           </div>
         </div>
@@ -460,6 +451,11 @@
   </button>
 
   <style>
+    /* 기본적으로 모바일 전용 요소 숨김 */
+    .mobile-only {
+      display: none !important;
+    }
+
     /* PC UI 복구 및 레이아웃 조정 */
     @media (min-width: 769px) {
       #main {
@@ -529,6 +525,12 @@
         font-size: 11px !important;
       }
 
+      /* PC에서도 AI 코치 답변 영역 스크롤 보장 */
+      .coach-response-area {
+        max-height: 100% !important;
+        overflow-y: auto !important;
+      }
+
       .player-info {
         width: 100% !important;
         max-width: min(calc(100vh - 180px), calc(100vw - 500px)) !important;
@@ -550,6 +552,10 @@
 
     /* 분석 페이지 특화 모바일 스타일 */
     @media (max-width: 768px) {
+      .mobile-only {
+        display: block !important;
+      }
+      
       :root {
         --board-size: min(96vw, 500px);
       }
