@@ -182,13 +182,13 @@ function loadPositionFromInput() {
 (function () {
   var IMG = 'https://lichess1.org/assets/piece/cburnett/';
   var TYPES = ['K','Q','R','B','N','P'];
-  var _open = false;
+  window._palOpen = false;
   var _sel = null;       // {color,type} | 'erase' | null
   var _dragSq = null;    // 보드 위 기물 드래그 출발칸
   var _ghost = null;
 
   /* ── 팔레트 버튼 빌드 ── */
-  function build() {
+  window.palBuild = function() {
     ['w','b'].forEach(function(c) {
       var box = document.getElementById('pal-' + c);
       if (!box) return;
@@ -200,22 +200,27 @@ function loadPositionFromInput() {
         el.dataset.c = c; el.dataset.t = t;
         el.draggable = true;
         el.innerHTML = '<img src="' + IMG + c + t + '.svg" draggable="false">';
-        // click (데스크탑)
-        el.addEventListener('click', function() { sel(c, t); });
-        // touchstart로 즉시 선택 — touchend는 스크롤 중 cancelable=false가 될 수 있어서 사용 불가
+        
+        var selectThis = function() { sel(c, t); };
+        el.addEventListener('click', selectThis);
         el.addEventListener('touchstart', function(e) {
-          if (e.cancelable) e.preventDefault(); // cancelable일 때만 — scroll 중이면 건너뜀
-          sel(c, t);
+          if (e.cancelable) e.preventDefault();
+          selectThis();
         }, { passive: false });
+
         el.addEventListener('dragstart', function(e) {
-          sel(c, t);
+          selectThis();
           e.dataTransfer.effectAllowed = 'copy';
           e.dataTransfer.setData('pal', JSON.stringify({color:c, type:t}));
         });
         box.appendChild(el);
       });
     });
-  }
+    // 선택 상태 복원 (기본 퀸 선택)
+    if (!_sel) sel('w', 'Q');
+    else if (_sel !== 'erase') sel(_sel.color, _sel.type);
+    else if (_sel === 'erase') window.palErase();
+  };
 
   /* ── 선택 ── */
   function sel(c, t) {
@@ -225,6 +230,7 @@ function loadPositionFromInput() {
     document.querySelectorAll('.pal-piece').forEach(function(el) {
       el.classList.toggle('pal-selected', el.dataset.c === c && el.dataset.t === t);
     });
+    if (window.__palDbg) window.__palDbg.log('기물 선택됨: ' + (c==='w'?'백':'흑') + ' ' + t);
   }
 
   window.palErase = function() {
@@ -232,43 +238,30 @@ function loadPositionFromInput() {
     var er = document.getElementById('pal-erase');
     if (er) er.classList.add('pal-selected');
     document.querySelectorAll('.pal-piece').forEach(function(el) { el.classList.remove('pal-selected'); });
+    if (window.__palDbg) window.__palDbg.log('삭제 모드 활성화');
   };
 
-  // 지우개 버튼에 touchend 직접 연결 (onclick 300ms 딜레이 우회)
-  document.addEventListener('DOMContentLoaded', function() {
-    var er = document.getElementById('pal-erase');
-    if (er) {
-      er.addEventListener('touchstart', function(e) {
-        if (e.cancelable) e.preventDefault();
-        window.palErase();
-      }, { passive: false });
-    }
-  });
-
   /* ── 팔레트 열기/닫기 ── */
-  window.palToggle = function() {
-    _open = !_open;
+  window.palToggle = function(force) {
+    if (force !== undefined) window._palOpen = !force; 
+    window._palOpen = !window._palOpen;
+
     var panelEl = document.getElementById('right-panel');
     var board = document.getElementById('chessboard');
     var btn   = document.getElementById('edit-mode-btn');
     var backdrop = document.getElementById('mobile-panel-backdrop');
     
-    if (_open) {
-      build();
-      // 탭 전환
+    if (window._palOpen) {
+      window.palBuild();
       switchTab('palette');
       
-      // 모바일인 경우 패널 열기 + 투명 배경 처리 (보드 클릭 허용)
       if (window.innerWidth <= 768) {
         toggleMobilePanel(true);
-        if (backdrop) backdrop.classList.add('no-backdrop');
       }
 
       if (board) board.classList.add('pal-edit');
       if (btn) { btn.style.background='rgba(80,144,208,0.25)'; btn.style.borderColor='#5090d0'; }
-      sel('w','Q');
       
-      // 현재 차례 표시
       var t = (typeof game !== 'undefined' && game) ? game.turn : 'w';
       palTurn(t || 'w');
       
@@ -280,10 +273,8 @@ function loadPositionFromInput() {
       _sel = null;
       window._enginePracticeMode = window._editorSavedPracticeMode || null;
       
-      // 모바일인 경우 패널 닫기 및 배경 복원
       if (window.innerWidth <= 768) {
         toggleMobilePanel(false);
-        if (backdrop) backdrop.classList.remove('no-backdrop');
       }
 
       if (typeof analyzePosition === 'function') analyzePosition(true);
@@ -904,12 +895,16 @@ function switchTab(tab) {
   var backdrop = document.getElementById('mobile-panel-backdrop');
 
   if (isPalette) {
-    if (!window._open) {
-       window._open = true;
+    if (!window._palOpen) {
+       window._palOpen = true;
+       if (typeof window.palBuild === 'function') window.palBuild();
        if (board) board.classList.add('pal-edit');
        if (btn) { btn.style.background='rgba(80,144,208,0.25)'; btn.style.borderColor='#5090d0'; }
        window._editorSavedPracticeMode = window._enginePracticeMode;
        window._enginePracticeMode = null;
+    } else {
+       // 이미 열려있더라도 빌드 호출 (기물 목록 확인용)
+       if (typeof window.palBuild === 'function') window.palBuild();
     }
     if (backdrop) backdrop.classList.add('no-backdrop');
   } else {
@@ -944,7 +939,10 @@ function toggleMobilePanel(forceOpen) {
     }
   } else {
     panel.classList.remove('mobile-open');
-    if (backdrop) backdrop.classList.remove('show');
+    if (backdrop) {
+      backdrop.classList.remove('show');
+      backdrop.classList.remove('no-backdrop');
+    }
   }
 }
 
