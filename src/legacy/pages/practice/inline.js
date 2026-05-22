@@ -865,3 +865,57 @@ function loadPositionFromInput() {
     attach();
   });
 })();
+
+/* --- UI Utilities --- */
+
+function switchTab(tab) {
+  // 버튼 활성화
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const onclick = btn.getAttribute('onclick');
+    if (onclick && onclick.includes(`'${tab}'`)) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+  // 패널 활성화
+  document.querySelectorAll('.tab-panel').forEach(panel => {
+    if (panel.id === 'tab-' + tab) panel.classList.add('active');
+    else panel.classList.remove('active');
+  });
+}
+
+function toggleMobilePanel(forceOpen) {
+  const panel = document.getElementById('right-panel');
+  const backdrop = document.getElementById('mobile-panel-backdrop');
+  const isOpening = forceOpen !== undefined ? forceOpen : !panel.classList.contains('mobile-open');
+  
+  if (isOpening) {
+    panel.classList.add('mobile-open');
+    if (backdrop) backdrop.classList.add('show');
+  } else {
+    panel.classList.remove('mobile-open');
+    if (backdrop) backdrop.classList.remove('show');
+  }
+}
+
+function closeMobilePanel() {
+  toggleMobilePanel(false);
+}
+
+function showToast(message, duration = 3000) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, duration);
+}
+
+// 모바일: 리사이즈 시 패널 상태 정리
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) {
+    const panel = document.getElementById('right-panel');
+    const backdrop = document.getElementById('mobile-panel-backdrop');
+    if (panel) panel.classList.remove('mobile-open');
+    if (backdrop) backdrop.classList.remove('show');
+  }
+});
