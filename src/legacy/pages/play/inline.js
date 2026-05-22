@@ -215,11 +215,11 @@ function renderBoard() {
       if (img) {
         if (piece) {
           const src = pieceImg(piece);
-          if (img.src !== src) img.src = src;
+          if (img.getAttribute('src') !== src) img.src = src;
           img.style.display = 'block';
         } else {
           img.style.display = 'none';
-          img.src = '';
+          img.removeAttribute('src');
         }
       }
     }
