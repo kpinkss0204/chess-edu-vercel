@@ -88,7 +88,12 @@ export default function LegacyPage({ pageId }) {
           URL.revokeObjectURL(url);
         }
 
-        runInlineScript(inline, pageId);
+        if (inline) {
+          const blob = new Blob([inline], { type: 'application/javascript' });
+          const url = URL.createObjectURL(blob);
+          await loadScript(url);
+          URL.revokeObjectURL(url);
+        }
 
         if (typeof window.initSidebar === 'function') {
           window.initSidebar();
