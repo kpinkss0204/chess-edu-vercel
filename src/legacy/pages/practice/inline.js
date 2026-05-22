@@ -445,7 +445,7 @@ function loadPositionFromInput() {
 
     /* dragover / drop (팔레트→보드) */
     board.addEventListener('dragover', function(e) {
-      if (!_open && !_dragSq) return;
+      if (!window._palOpen && !_dragSq) return;
       e.preventDefault();
     });
     board.addEventListener('drop', function(e) {
@@ -460,7 +460,7 @@ function loadPositionFromInput() {
         if (p) set(sq.col, sq.row, p);
         return;
       }
-      if (!_open) return;
+      if (!window._palOpen) return;
       var raw = e.dataTransfer.getData('pal');
       if (raw) { try { set(sq.col,sq.row,JSON.parse(raw)); } catch(_){} }
       else if (_sel && _sel!=='erase') set(sq.col,sq.row,_sel);
@@ -468,7 +468,7 @@ function loadPositionFromInput() {
 
     /* 클릭: 팔레트 모드에서만 */
     board.addEventListener('click', function(e) {
-      if (!_open) return;
+      if (!window._palOpen) return;
       var sq = sqAt(e);
       if (!sq) return;
       e.stopImmediatePropagation();
@@ -479,7 +479,7 @@ function loadPositionFromInput() {
 
     /* 우클릭: 삭제 */
     board.addEventListener('contextmenu', function(e) {
-      if (!_open) return;
+      if (!window._palOpen) return;
       e.preventDefault(); e.stopImmediatePropagation();
       var sq = sqAt(e);
       if (sq) set(sq.col,sq.row,null);
@@ -487,7 +487,7 @@ function loadPositionFromInput() {
 
     /* mousedown: 보드 위 기물 드래그 이동 */
     board.addEventListener('mousedown', function(e) {
-      if (!_open || e.button!==0) return;
+      if (!window._palOpen || e.button!==0) return;
       var sq = sqAt(e);
       if (!sq) return;
       var p = get(sq.col, sq.row);
@@ -629,7 +629,7 @@ function loadPositionFromInput() {
     // ════════════════════════════════════════════════════════
     board.addEventListener('touchstart', function(e) {
       // 편집 모드가 아니면 완전히 무시 (기본 동작 유지)
-      if (!_open) return;
+      if (!window._palOpen) return;
       if (e.touches.length !== 1) { cancelTouchDrag(); return; }
 
       // touchstart는 거의 항상 cancelable=true이지만 방어적으로 체크
@@ -671,7 +671,7 @@ function loadPositionFromInput() {
 
     // ════════════════════════════════════════════════════════
     board.addEventListener('touchmove', function(e) {
-      if (!_open) return;
+      if (!window._palOpen) return;
       if (e.cancelable) { e.preventDefault(); e.stopPropagation(); }
 
       var touch = e.touches[0];
@@ -694,7 +694,7 @@ function loadPositionFromInput() {
 
     // ════════════════════════════════════════════════════════
     board.addEventListener('touchend', function(e) {
-      if (!_open) return;
+      if (!window._palOpen) return;
       // touchend는 스크롤 중이면 cancelable=false — 그 경우 preventDefault 건너뜀
       if (e.cancelable) { e.preventDefault(); e.stopPropagation(); }
 
