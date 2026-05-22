@@ -837,6 +837,18 @@ function showToast(msg, duration=2500) {
 
 let _gameArrows = {}; 
 
+// ══════════════════════════════════════════
+// 전역 노출
+// ══════════════════════════════════════════
+window.startMatchmaking = startMatchmaking;
+window.cancelMatchmaking = cancelMatchmaking;
+window.offerDraw = offerDraw;
+window.acceptDraw = acceptDraw;
+window.declineDraw = declineDraw;
+window.resignGame = resignGame;
+window.showScreen = showScreen;
+window.onSquareClick = onSquareClick;
+
 (function(){
   const ARROW_COLOR='rgba(255,165,0,0.92)';
   const ARROW_SW=14;
