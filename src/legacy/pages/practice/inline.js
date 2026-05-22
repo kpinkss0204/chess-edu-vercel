@@ -372,11 +372,22 @@ function attachBoardEvents() {
   }, true);
 }
 
+function attachUIEvents() {
+  const btn = document.getElementById('edit-mode-btn');
+  if (btn) {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      window.palToggle();
+    };
+  }
+}
+
 // 초기화
 window.addEventListener('DOMContentLoaded', () => {
   palBuild();
   attachEvents();
   attachBoardEvents();
+  attachUIEvents();
 });
 
 // 전역 노출
