@@ -1749,29 +1749,75 @@
     }
 
 
-    #coach-response {
+    .coach-response-area, #coach-response {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px 14px;
-      font-size: 13px;
-      line-height: 1.7;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 13.5px;
+      line-height: 1.75;
       color: var(--text-primary);
       flex: 1;
-      /* 남은 공간 전부 차지 */
       min-height: 0;
-      /* flex 안에서 shrink 허용 */
       overflow-y: auto;
-      /* 내용이 넘칠 때만 스크롤 */
       word-break: break-word;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
 
-    #coach-response.loading {
+    .coach-response-area strong {
+      color: var(--accent-green-bright);
+      font-weight: 700;
+    }
+
+    /* 섹션별 카드 스타일 */
+    .coach-section {
+      background: var(--bg-tertiary);
+      border-radius: 10px;
+      padding: 12px 14px;
+      border-left: 4px solid var(--border);
+      transition: transform 0.2s ease;
+    }
+
+    .coach-section:hover {
+      transform: translateX(2px);
+    }
+
+    .section-pos { border-left-color: #70a1ff; }
+    .section-weak { border-left-color: #ff4757; }
+    .section-strong { border-left-color: #2ed573; }
+    .section-threat { border-left-color: #ffa502; }
+    .section-best { border-left-color: #5352ed; }
+    .section-plan { border-left-color: #eccc68; }
+
+    .section-header {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-weight: 800;
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+
+    .section-icon {
+      font-size: 16px;
+    }
+
+    .section-body {
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+    }
+
+    .coach-response-area.loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
       color: var(--text-muted);
       font-style: italic;
+      gap: 12px;
     }
 
     .coach-dots span {

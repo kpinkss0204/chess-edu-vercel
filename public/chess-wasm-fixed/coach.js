@@ -1703,7 +1703,7 @@ function formatCommentary(text) {
     return formatPlain(escaped);
   }
 
-  let html = '<div class="commentary-wrapper">';
+  let html = '<div class="coach-response-area">';
   for (const def of SECTION_DEFS) {
     const body = parsed[def.key];
     if (!body) continue;
@@ -1714,9 +1714,9 @@ function formatCommentary(text) {
                m => m.length >= 2 ? `<span class="chess-move">${m}</span>` : m)
       .replace(/\n/g, '<br>');
     html += `
-      <div class="commentary-section ${def.cls}">
-        <div class="commentary-label">${def.icon} ${def.key}</div>
-        <div class="commentary-body">${formatted}</div>
+      <div class="coach-section ${def.cls}">
+        <div class="section-header"><span class="section-icon">${def.icon}</span> ${def.key}</div>
+        <div class="section-body">${formatted}</div>
       </div>`;
   }
   html += '</div>';

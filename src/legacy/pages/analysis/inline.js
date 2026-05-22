@@ -1480,6 +1480,25 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
           scheduleAutoGameAnalysis();
         });
       }
+
+      // ── AI 코치 엔터 키 질문 ──
+      const inputs = ['coach-input', 'coach-input-tab', 'coach-input-mobile'];
+      inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (id === 'coach-input-tab') {
+              if (typeof askCoach === 'function') askCoach('tab');
+            } else if (id === 'coach-input-mobile') {
+              if (typeof askCoachMobile === 'function') askCoachMobile();
+            } else {
+              if (typeof askCoach === 'function') askCoach();
+            }
+          }
+        });
+      });
     });
 
 /* --- script block --- */
