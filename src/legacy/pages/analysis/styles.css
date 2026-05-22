@@ -1612,8 +1612,11 @@
       flex-direction: column;
       gap: 8px;
       min-height: 0;
-      overflow: hidden;
-      /* 바디 자체는 hidden, 응답 영역만 스크롤 */
+      overflow-y: auto; /* 바디 자체에 스크롤 추가 */
+    }
+
+    #coach-response-main, .coach-response-area {
+      flex-shrink: 0; /* 내용이 잘리지 않도록 설정 */
     }
 
     #coach-api-row {
