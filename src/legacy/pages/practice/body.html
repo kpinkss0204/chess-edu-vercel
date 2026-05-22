@@ -169,11 +169,13 @@
             <button class="pal-turn-btn" id="pal-tb" onclick="palTurn('b')">⬛ 흑</button>
           </div>
           <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
-            <div style="display: flex; gap: 8px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
               <button class="pal-action-btn delete" id="pal-erase" onclick="palErase()" title="삭제">🗑 삭제</button>
-              <button class="pal-action-btn clear" onclick="palClear()" title="초기화" style="flex:1">🧹 초기화</button>
+              <button class="pal-action-btn" onclick="palReset()" title="기본 배치">♟ 시작 포지션</button>
+              <button class="pal-action-btn clear" onclick="palClear()" title="전체 삭제">🧹 보드 비우기</button>
+              <button class="pal-action-btn" onclick="toggleMobilePanel(false)" id="btn-minimize-pal" style="display:none;">📱 보드 보기</button>
             </div>
-            <button class="pal-action-btn done" onclick="palToggle()" style="width:100%; height: 40px; font-size: 14px;">✔ 편집 완료</button>
+            <button class="pal-action-btn done" onclick="palToggle()" style="width:100%; height: 44px; font-size: 15px; margin-top: 4px;">✔ 편집 완료</button>
           </div>
         </div>
         <!-- Warning Message -->

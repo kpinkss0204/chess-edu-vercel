@@ -875,8 +875,7 @@ textarea {
   position: fixed;
   inset: 0;
   z-index: 498;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.4);
   opacity: 0;
   transition: opacity 0.3s;
 }
@@ -884,6 +883,11 @@ textarea {
 #mobile-panel-backdrop.show {
   display: block;
   opacity: 1;
+}
+
+#mobile-panel-backdrop.no-backdrop {
+  background: transparent;
+  pointer-events: none;
 }
 
 @media (max-width: 768px) {

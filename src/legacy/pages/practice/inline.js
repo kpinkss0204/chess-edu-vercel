@@ -251,15 +251,17 @@ function loadPositionFromInput() {
     var panelEl = document.getElementById('right-panel');
     var board = document.getElementById('chessboard');
     var btn   = document.getElementById('edit-mode-btn');
+    var backdrop = document.getElementById('mobile-panel-backdrop');
     
     if (_open) {
       build();
       // 탭 전환
       switchTab('palette');
       
-      // 모바일인 경우 패널 열기
+      // 모바일인 경우 패널 열기 + 투명 배경 처리 (보드 클릭 허용)
       if (window.innerWidth <= 768) {
         toggleMobilePanel(true);
+        if (backdrop) backdrop.classList.add('no-backdrop');
       }
 
       if (board) board.classList.add('pal-edit');
@@ -278,9 +280,10 @@ function loadPositionFromInput() {
       _sel = null;
       window._enginePracticeMode = window._editorSavedPracticeMode || null;
       
-      // 모바일인 경우 패널 닫기 (사용자 편의성)
+      // 모바일인 경우 패널 닫기 및 배경 복원
       if (window.innerWidth <= 768) {
         toggleMobilePanel(false);
+        if (backdrop) backdrop.classList.remove('no-backdrop');
       }
 
       if (typeof analyzePosition === 'function') analyzePosition(true);
@@ -327,7 +330,12 @@ function loadPositionFromInput() {
   };
   window.palReset = function() {
     var START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    if (typeof game !== 'undefined' && game && typeof game.loadFromFen==='function') game.loadFromFen(START);
+    if (typeof game !== 'undefined' && game && typeof game.loadFromFen==='function') {
+      game.loadFromFen(START);
+      refresh();
+      if (typeof analyzePosition === 'function') analyzePosition(true);
+      showToast('♟ 기본 포지션으로 재설정되었습니다');
+    }
   };
 
   /* ── 보드 좌표 ── */
@@ -888,6 +896,12 @@ function switchTab(tab) {
     if (panel.id === 'tab-' + tab) panel.classList.add('active');
     else panel.classList.remove('active');
   });
+
+  // 모바일 전용: 편집 탭에서만 '보드 보기' 버튼 표시
+  var minBtn = document.getElementById('btn-minimize-pal');
+  if (minBtn) {
+    minBtn.style.display = (tab === 'palette' && window.innerWidth <= 768) ? 'flex' : 'none';
+  }
 }
 
 function toggleMobilePanel(forceOpen) {
