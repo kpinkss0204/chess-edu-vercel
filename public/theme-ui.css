@@ -71,10 +71,6 @@ html[data-color-mode="light"] body {
   display: none;
 }
 
-.sidebar-mobile-header {
-  display: none;
-}
-
 #sidebar {
   position: fixed !important;
   top: 0 !important;
@@ -128,18 +124,12 @@ html[data-color-mode="light"] body {
   opacity: 1 !important;
 }
 
-@media (max-width: 768px) {
-  #mobile-panel-toggle {
-    display: flex;
-  }
-}
-
 .sidebar-logo {
   width: 44px;
   height: 44px;
   background: var(--accent-green);
   border-radius: 12px;
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
@@ -293,7 +283,15 @@ body {
   flex-direction: row;
 }
 
+.pc-only {
+  display: flex;
+}
+
 @media (max-width: 768px) {
+  #mobile-panel-toggle {
+    display: flex;
+  }
+
   #hamburger-btn {
     display: flex;
     position: fixed;
@@ -392,43 +390,9 @@ body {
   #main {
     flex-direction: column;
   }
-}
 
-.pc-only {
-  display: flex;
-}
-
-/* Hamburger Button */
-#hamburger-btn {
-  display: none;
-  position: fixed;
-  top: 15px;
-  left: 15px;
-  width: 44px;
-  height: 44px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  z-index: 850;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.2s, background 0.2s;
-}
-
-#hamburger-btn:active {
-  transform: scale(0.92);
-}
-
-#hamburger-btn:hover {
-  background: var(--bg-hover);
-}
-
-@media (max-width: 768px) {
-  #hamburger-btn {
-    display: flex;
+  .pc-only {
+    display: none !important;
   }
 }
 
