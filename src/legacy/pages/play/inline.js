@@ -160,38 +160,45 @@ function renderBoard() {
   const el = document.getElementById('play-board');
   if (!el) return;
   
-  // 항상 64개의 칸이 정확히 유지되도록 검증
-  if (el.children.length !== 64) el.innerHTML = '';
-  
-  const flipped = _myColor === 'b';
-  const isFirstRender = el.children.length === 0;
-
-  for (let ri = 0; ri < 8; ri++) {
-    for (let ci = 0; ci < 8; ci++) {
-      const r = flipped ? 7 - ri : ri;
-      const c = flipped ? 7 - ci : ci;
-      const isLight = (r + c) % 2 === 0;
-      const idx = ri * 8 + ci;
-      const piece = _board[r][c];
-
-      let sq;
-      if (isFirstRender) {
-        sq = document.createElement('div');
+  // 강제 초기화 및 64칸 보장
+  if (el.children.length !== 64) {
+    el.innerHTML = '';
+    const flipped = _myColor === 'b';
+    for (let ri = 0; ri < 8; ri++) {
+      for (let ci = 0; ci < 8; ci++) {
+        const r = flipped ? 7 - ri : ri;
+        const c = flipped ? 7 - ci : ci;
+        const isLight = (r + c) % 2 === 0;
+        const sq = document.createElement('div');
         sq.dataset.r = r; sq.dataset.c = c;
+        sq.className = 'sq ' + (isLight ? 'light' : 'dark');
+        
         if (ci === 0) { const lbl = document.createElement('span'); lbl.className='rank-label'; lbl.textContent=8-r; sq.appendChild(lbl); }
         if (ri === 7) { const lbl = document.createElement('span'); lbl.className='file-label'; lbl.textContent='abcdefgh'[c]; sq.appendChild(lbl); }
+        
         const img = document.createElement('img');
         img.className = 'piece-img';
         img.draggable = false;
         img.style.display = 'none';
         sq.appendChild(img);
+        
         sq.onclick = () => onSquareClick(Number(sq.dataset.r), Number(sq.dataset.c));
         el.appendChild(sq);
-      } else {
-        sq = el.children[idx];
       }
+    }
+  }
 
-      const classes = ['sq', isLight ? 'light' : 'dark'];
+  // 데이터 업데이트
+  const flipped = _myColor === 'b';
+  for (let ri = 0; ri < 8; ri++) {
+    for (let ci = 0; ci < 8; ci++) {
+      const r = flipped ? 7 - ri : ri;
+      const c = flipped ? 7 - ci : ci;
+      const idx = ri * 8 + ci;
+      const piece = _board[r][c];
+      const sq = el.children[idx];
+
+      const classes = ['sq', (r+c)%2===0 ? 'light' : 'dark'];
       if (_lastMove) {
         if (_lastMove.from[0]===r && _lastMove.from[1]===c) classes.push('last-from');
         if (_lastMove.to[0]===r   && _lastMove.to[1]===c)   classes.push('last-to');
@@ -430,7 +437,7 @@ function updateTimerOnMove() {
 // Firebase 매칭 & 대국
 // ══════════════════════════════════════════
 const GAME_TIME = 600;
-let _queueRef = null, _searchInt = null, _matchmakingInProgress = false;
+let _queueRef = null, _searchInt = null, _matchmakingInProgress = false, _queueListener = null;
 
 async function startMatchmaking() {
   if (_matchmakingInProgress || !_user || _gameActive) return;
@@ -451,115 +458,92 @@ async function startMatchmaking() {
     const queue = _rtDb.ref('matchmaking_queue');
     
     // 1. 기존 내 항목 청소 (UID 기준)
-    console.log('[Matchmaking] Cleaning old entries...');
     const oldSnap = await queue.once('value');
     const cleanupUpdates = {};
-    oldSnap.forEach(child => {
-      if (child.val().uid === _user.uid) cleanupUpdates[child.key] = null;
-    });
+    oldSnap.forEach(child => { if (child.val().uid === _user.uid) cleanupUpdates[child.key] = null; });
     await queue.update(cleanupUpdates);
 
+    // 2. 내 노드 생성
     const myRef = queue.push();
     _queueRef = myRef;
-    const myJoinedAt = Date.now();
-    
-    // 2. 대기열 등록
-    console.log('[Matchmaking] Registering my node:', myRef.key);
-    await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: myJoinedAt });
+    await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: Date.now() });
     myRef.onDisconnect().remove(); 
+    console.log('[Matchmaking] Created my entry:', myRef.key);
 
-    // 3. 상대 찾기
-    const snap = await queue.once('value');
-    let matched = false;
-    const allEntries = [];
-    snap.forEach(child => {
-      const d = child.val();
-      if (d && child.key !== myRef.key && !d.gameId && d.uid !== _user.uid) {
-        allEntries.push({ key: child.key, uid: d.uid, name: d.displayName });
-      }
-    });
+    // 3. 결정론적 매칭 리스너 시작
+    _queueListener = queue.on('child_added', async (snap) => {
+      const entryKey = snap.key;
+      const d = snap.val();
+      if (!d || entryKey === myRef.key || d.uid === _user.uid || d.gameId) return;
 
-    console.log('[Matchmaking] Found potential candidates:', allEntries.length);
-
-    for (const entry of allEntries) {
-      if (matched) break;
-      
-      // 결정론적 매칭 규칙: 내 UID가 상대보다 작을 때만 내가 매칭을 시도함
-      // (둘이 동시에 서로를 매칭하여 방을 두 개 만드는 현상 방지)
-      if (_user.uid < entry.uid) {
-        console.log('[Matchmaking] I am the MATCHER for:', entry.name);
-        
-        const result = await _rtDb.ref(`matchmaking_queue/${entry.key}`).transaction((curr) => {
-          if (curr && !curr.gameId) {
-            return { ...curr, gameId: 'PENDING', matchedWith: _user.uid };
-          }
-          return; // 이미 매칭되었거나 데이터 없음
+      if (_user.uid < d.uid) {
+        console.log('[Matchmaking] I am Actor for:', d.displayName);
+        const result = await _rtDb.ref(`matchmaking_queue/${entryKey}`).transaction((curr) => {
+          if (curr && !curr.gameId) return { ...curr, gameId: 'PENDING', matchedWith: _user.uid };
+          return; 
         });
 
         if (result.committed) {
-          console.log('[Matchmaking] Transaction SUCCESS! Creating game room...');
-          matched = true;
+          console.log('[Matchmaking] Match SUCCESS! Creating game room...');
           const gameId = queue.push().key;
           const myColor = Math.random() < 0.5 ? 'w' : 'b';
           const oppColor = myColor === 'w' ? 'b' : 'w';
 
           const gameData = {
-            white: myColor === 'w' ? _user.uid : entry.uid,
-            black: myColor === 'b' ? _user.uid : entry.uid,
-            whiteName: myColor === 'w' ? myName : entry.name,
-            blackName: myColor === 'b' ? myName : entry.name,
-            status: 'playing',
-            whiteTime: GAME_TIME,
-            blackTime: GAME_TIME,
-            lastMoveAt: Date.now(),
-            createdAt: Date.now(),
+            white: myColor==='w'?_user.uid:d.uid, black: myColor==='b'?_user.uid:d.uid,
+            whiteName: myColor==='w'?myName:d.displayName, blackName: myColor==='b'?myName:d.displayName,
+            status: 'playing', whiteTime: GAME_TIME, blackTime: GAME_TIME,
+            lastMoveAt: Date.now(), createdAt: Date.now(),
           };
 
           await _rtDb.ref('games/' + gameId).set(gameData);
-          await _rtDb.ref(`matchmaking_queue/${entry.key}`).update({ gameId: gameId, color: oppColor });
+          await _rtDb.ref(`matchmaking_queue/${entryKey}`).update({ gameId: gameId, color: oppColor });
           
-          console.log('[Matchmaking] Game created:', gameId);
-          myRef.onDisconnect().cancel();
+          stopMatchmakingListeners();
           myRef.remove();
           _queueRef = null;
           joinGame(gameId, myColor, gameData);
-          break;
-        } else {
-          console.log('[Matchmaking] Transaction FAILED/SKIPPED for:', entry.name);
         }
       } else {
-        console.log('[Matchmaking] I am the WAITER for:', entry.name, '(Waiting for them to match me)');
+        console.log('[Matchmaking] I am Target for:', d.displayName, '- Waiting for them.');
       }
-    }
+    });
 
-    if (!matched) {
-      console.log('[Matchmaking] Still waiting in queue...');
-      _queueRef.on('value', async snap2 => {
-        const d = snap2.val();
-        if (!d || !d.gameId || d.gameId === 'PENDING') return;
-        
-        console.log('[Matchmaking] MATCHED by someone else! GameId:', d.gameId);
-        _queueRef.off();
-        _queueRef.onDisconnect().cancel();
-        const waitRef = _queueRef;
-        _queueRef = null;
-        
-        const gs = await _rtDb.ref('games/' + d.gameId).once('value');
-        if (gs.val()) {
-          waitRef.remove();
-          joinGame(d.gameId, d.color, gs.val());
-        } else {
-          console.error('[Matchmaking] CRITICAL: Game data missing for', d.gameId);
-          showScreen('lobby');
-        }
-      });
-    }
+    myRef.on('value', async snap => {
+      const d = snap.val();
+      if (!d || !d.gameId || d.gameId === 'PENDING') return;
+      console.log('[Matchmaking] I was matched! GameId:', d.gameId);
+      
+      stopMatchmakingListeners();
+      const waitRef = _queueRef;
+      _queueRef = null;
+      
+      const gs = await _rtDb.ref('games/' + d.gameId).once('value');
+      if (gs.val()) {
+        waitRef.remove();
+        joinGame(d.gameId, d.color, gs.val());
+      } else {
+        console.error('[Matchmaking] Game data missing');
+        showScreen('lobby');
+      }
+    });
+
   } catch (e) {
-    console.error('[Matchmaking] CRITICAL ERROR:', e);
-    showToast('매칭 중 오류가 발생했습니다.');
+    console.error('[Matchmaking] Error:', e);
     showScreen('lobby');
   } finally {
     _matchmakingInProgress = false;
+  }
+}
+
+function stopMatchmakingListeners() {
+  if (_queueListener) {
+    _rtDb.ref('matchmaking_queue').off('child_added', _queueListener);
+    _queueListener = null;
+  }
+  if (_queueRef) {
+    _queueRef.off();
+    _queueRef.onDisconnect().cancel();
   }
 }
 
@@ -568,11 +552,8 @@ function cancelMatchmaking() {
   clearTimeout(_firstMoveTimer);
   cancelDisconnectLoss();
   stopHeartbeat(_gameId, _myColor);
-  if (_queueRef) { 
-    _queueRef.onDisconnect().cancel();
-    _queueRef.remove(); 
-    _queueRef = null; 
-  }
+  stopMatchmakingListeners();
+  if (_queueRef) { _queueRef.remove(); _queueRef = null; }
   showScreen('lobby');
   _matchmakingInProgress = false;
 }
