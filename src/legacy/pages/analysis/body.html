@@ -106,10 +106,6 @@
         </button>
       </div>
 
-      <!-- 모바일 전용 기보 영역 (보드 컨트롤과 AI 코치 사이) -->
-      <div id="move-list-mobile" class="mobile-only">
-        <div id="move-list-horizontal"></div>
-      </div>
     </div><!-- /#board-area -->
 
     <!-- AI 코치 패널 — 보드와 기보 사이 중간 컬럼 -->
@@ -657,54 +653,6 @@
       }
       #eval-bar-wrap {
         height: var(--board-size) !important;
-      }
-
-      /* 기보 영역: 가로로 늘어뜨리고 자동 줄바꿈 (Wrapped Flow) */
-      #move-list-mobile {
-        display: block !important;
-        width: var(--board-size) !important;
-        max-width: var(--board-size) !important;
-        margin: 12px auto !important;
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px;
-        height: auto !important;
-        max-height: none !important;
-        overflow: visible !important;
-      }
-      #move-list-horizontal {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 8px 10px !important;
-        align-items: center !important;
-        justify-content: flex-start !important;
-      }
-      #move-list-horizontal .move-pair {
-        display: inline-flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        gap: 4px !important;
-        background: var(--bg-tertiary) !important;
-        padding: 4px 8px !important;
-        border-radius: 6px !important;
-        white-space: nowrap !important;
-      }
-      #move-list-horizontal .move-num {
-        font-size: 11px !important;
-        color: var(--text-muted) !important;
-        font-weight: 700 !important;
-        margin-right: 2px !important;
-      }
-      #move-list-horizontal .move-cell {
-        font-size: 13px !important;
-        padding: 2px 4px !important;
-        cursor: pointer !important;
-        border-radius: 4px !important;
-      }
-      #move-list-horizontal .move-cell.active {
-        background: var(--accent-green) !important;
-        color: white !important;
       }
 
       /* AI 코치 패널: 모바일에서 기보 아래에 상시 노출 */
