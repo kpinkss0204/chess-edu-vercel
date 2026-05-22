@@ -174,6 +174,22 @@ function loadPositionFromInput() {
   }
 })();
 
+// ══════════════════════════════════════════
+// 전역 노출
+// ══════════════════════════════════════════
+window.palToggle = palToggle;
+window.palBuild = palBuild;
+window.palErase = palErase;
+window.palTurn = palTurn;
+window.palClear = palClear;
+window.palReset = palReset;
+window.toggleMobilePanel = toggleMobilePanel;
+window.closeMobilePanel = closeMobilePanel;
+window.switchTab = switchTab;
+window.loadPositionFromInput = loadPositionFromInput;
+window.saveCurrentGame = saveCurrentGame;
+window.practiceNewGame = practiceNewGame;
+
 /* --- script block --- */
 
 // ══════════════════════════════════════════════════════
