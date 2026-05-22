@@ -121,7 +121,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px !important;
+  padding: 20px !important;
   background: rgba(0,0,0,0.03);
   min-width: 0;
   overflow: hidden;
@@ -137,7 +137,7 @@ body {
 
 #eval-bar-wrap {
   width: 24px;
-  height: min(calc(100vh - 400px), calc(100vw - 850px));
+  height: min(calc(100vh - 200px), calc(100vw - 600px));
   background: #2a2a2a;
   border-radius: 8px;
   overflow: visible;
@@ -150,8 +150,8 @@ body {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  width: min(calc(100vh - 400px), calc(100vw - 850px));
-  height: min(calc(100vh - 400px), calc(100vw - 850px));
+  width: min(calc(100vh - 200px), calc(100vw - 600px));
+  height: min(calc(100vh - 200px), calc(100vw - 600px));
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -167,7 +167,7 @@ body {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
-  max-width: min(calc(100vh - 400px), calc(100vw - 850px));
+  max-width: min(calc(100vh - 200px), calc(100vw - 600px));
   background: var(--bg-secondary);
   padding: 10px 15px;
   border-radius: 12px;
@@ -195,7 +195,7 @@ body {
   flex-direction: column;
   gap: 15px;
   width: 100%;
-  max-width: min(calc(100vh - 400px), calc(100vw - 850px));
+  max-width: min(calc(100vh - 200px), calc(100vw - 600px));
   box-shadow: var(--shadow-sm);
 }
 
@@ -282,26 +282,25 @@ body {
 
 @media (max-width: 768px) {
   #palette-panel {
-    max-width: 94vw;
+    max-width: min(94vw, 450px);
   }
   .pal-piece {
     width: 36px;
     height: 36px;
   }
-}
 
   #eval-bar-wrap {
-    height: 94vw !important;
+    height: min(94vw, 450px) !important;
     width: 20px;
   }
 
   #chessboard {
-    width: 94vw !important;
-    height: 94vw !important;
+    width: min(94vw, 450px) !important;
+    height: min(94vw, 450px) !important;
   }
 
   #board-controls {
-    width: 94vw !important;
+    width: min(94vw, 450px) !important;
     max-width: none !important;
   }
 
@@ -552,21 +551,21 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
 @media (max-width: 1100px) and (min-width: 769px) {
   #right-panel { width: 240px !important; }
   #chessboard {
-    width: min(80vmin, calc(100vw - var(--sidebar-width,72px) - 260px)) !important;
-    height: min(80vmin, calc(100vw - var(--sidebar-width,72px) - 260px)) !important;
+    width: min(80vmin, calc(100vw - var(--sidebar-width,72px) - 260px), 600px) !important;
+    height: min(80vmin, calc(100vw - var(--sidebar-width,72px) - 260px), 600px) !important;
   }
   #eval-bar-wrap {
-    height: min(80vmin, calc(100vw - var(--sidebar-width,72px) - 260px)) !important;
+    height: min(80vmin, calc(100vw - var(--sidebar-width,72px) - 260px), 600px) !important;
   }
 }
 @media (max-width: 950px) and (min-width: 769px) {
   #right-panel { width: 200px !important; }
   #chessboard {
-    width: min(75vmin, calc(100vw - var(--sidebar-width,72px) - 220px)) !important;
-    height: min(75vmin, calc(100vw - var(--sidebar-width,72px) - 220px)) !important;
+    width: min(75vmin, calc(100vw - var(--sidebar-width,72px) - 220px), 500px) !important;
+    height: min(75vmin, calc(100vw - var(--sidebar-width,72px) - 220px), 500px) !important;
   }
   #eval-bar-wrap {
-    height: min(75vmin, calc(100vw - var(--sidebar-width,72px) - 220px)) !important;
+    height: min(75vmin, calc(100vw - var(--sidebar-width,72px) - 220px), 500px) !important;
   }
 }
 @media (max-width: 768px) {
@@ -678,15 +677,15 @@ body.dragging, body.dragging * { user-select: none !important; cursor: grabbing 
     overflow: hidden;
   }
   #chessboard {
-    width: min(92vmin, calc(100vh - 250px)) !important;
-    height: min(92vmin, calc(100vh - 250px)) !important;
+    width: min(94vw, 450px) !important;
+    height: min(94vw, 450px) !important;
   }
   #eval-bar-wrap {
-    height: min(92vmin, calc(100vh - 250px)) !important;
+    height: min(94vw, 450px) !important;
   }
   .player-info, #board-controls {
-    width: var(--board-size) !important;
-    max-width: var(--board-size) !important;
+    width: min(94vw, 450px) !important;
+    max-width: min(94vw, 450px) !important;
   }
 
   #right-panel {
