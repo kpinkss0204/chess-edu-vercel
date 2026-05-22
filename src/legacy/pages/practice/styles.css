@@ -137,7 +137,7 @@ body {
 
 #eval-bar-wrap {
   width: 24px;
-  height: min(calc(100vh - 320px), calc(100vw - 720px));
+  height: min(calc(100vh - 400px), calc(100vw - 850px));
   background: #2a2a2a;
   border-radius: 8px;
   overflow: visible;
@@ -150,8 +150,8 @@ body {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  width: min(calc(100vh - 320px), calc(100vw - 720px));
-  height: min(calc(100vh - 320px), calc(100vw - 720px));
+  width: min(calc(100vh - 400px), calc(100vw - 850px));
+  height: min(calc(100vh - 400px), calc(100vw - 850px));
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -167,7 +167,7 @@ body {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
-  max-width: min(calc(100vh - 320px), calc(100vw - 720px));
+  max-width: min(calc(100vh - 400px), calc(100vw - 850px));
   background: var(--bg-secondary);
   padding: 10px 15px;
   border-radius: 12px;
@@ -195,7 +195,7 @@ body {
   flex-direction: column;
   gap: 15px;
   width: 100%;
-  max-width: min(calc(100vh - 320px), calc(100vw - 720px));
+  max-width: min(calc(100vh - 400px), calc(100vw - 850px));
   box-shadow: var(--shadow-sm);
 }
 
