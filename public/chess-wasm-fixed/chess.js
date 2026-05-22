@@ -679,6 +679,8 @@ function uciMovesToSan(uciMoves, startBoard, startTurn, startCastling, startEnPa
 
 function renderTopMoves(msg) {
   const container = document.getElementById('top-moves');
+  if (!container) return;
+
   const rowCount = Math.max(multiPV, 1);
 
   // 항상 고정 높이 (행 수 × 52px) — 분석 중/완료 상관없이 크기 동일
