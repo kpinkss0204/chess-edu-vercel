@@ -585,7 +585,10 @@ function handleMainWorkerMessage(e) {
     engineSearching = false;
     
     // bestmove 처리 시점의 데이터가 유효한지 재확인
-    document.getElementById('engine-dot').className = 'engine-dot ready';
+    const engineDot = document.getElementById('engine-dot');
+    if (engineDot) {
+      engineDot.className = 'engine-dot ready';
+    }
 
     // 미처 flush 안 된 마지막 사이클
     if (Object.keys(cycleStore).length && cycleSnap) {
