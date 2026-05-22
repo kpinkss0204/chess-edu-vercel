@@ -174,14 +174,18 @@ function renderBoard() {
       if (isFirstRender) {
         sq = document.createElement('div');
         sq.dataset.r = r; sq.dataset.c = c;
+        
+        // 좌표 레이블 (절대 위치 스타일 적용됨)
         if (ci === 0) { const lbl = document.createElement('span'); lbl.className='rank-label'; lbl.textContent=8-r; sq.appendChild(lbl); }
         if (ri === 7) { const lbl = document.createElement('span'); lbl.className='file-label'; lbl.textContent='abcdefgh'[c]; sq.appendChild(lbl); }
-        // 기물 이미지 슬롯을 미리 생성해 두고 숨김
+        
+        // 기물 이미지 (절대 위치가 아닌 flex-center로 배치됨)
         const img = document.createElement('img');
         img.className = 'piece-img';
         img.draggable = false;
         img.style.display = 'none';
         sq.appendChild(img);
+        
         sq.addEventListener('click', () => onSquareClick(Number(sq.dataset.r), Number(sq.dataset.c)));
         el.appendChild(sq);
       } else {
@@ -204,7 +208,7 @@ function renderBoard() {
       if (piece === king && isInCheck(_board, _turn)) classes.push('in-check');
       sq.className = classes.join(' ');
 
-      // 기물 이미지 — src가 같으면 건드리지 않아 깜빡임 방지
+      // 기물 이미지 업데이트
       const img = sq.querySelector('.piece-img');
       if (img) {
         if (piece) {
@@ -213,7 +217,7 @@ function renderBoard() {
           const newCls = 'piece-img' + (piece.startsWith('b') ? ' black-piece' : '');
           if (img.className !== newCls) img.className = newCls;
           img.alt = piece;
-          img.style.display = '';
+          img.style.display = 'block'; // none 대신 block으로 확실히 표시
         } else {
           img.style.display = 'none';
           img.src = '';
