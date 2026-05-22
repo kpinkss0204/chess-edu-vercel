@@ -40,14 +40,52 @@ body {
   justify-content: center;
   overflow: hidden;
   position: relative;
+  background: radial-gradient(circle at center, #242424 0%, #1a1a1a 100%);
+}
+
+#main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("https://www.transparenttextures.com/patterns/dark-leather.png");
+  opacity: 0.05;
+  pointer-events: none;
 }
 
 /* ══════════ 로비 화면 ══════════ */
 #screen-lobby {
   position: relative; z-index: 1;
-  display: flex; flex-direction: column; align-items: center;
+  display: none; flex-direction: column; align-items: center;
   gap: 40px; padding: 40px;
   animation: fadeUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+#screen-lobby[style*="display: flex"],
+#screen-lobby[style*="display:flex"] {
+  display: flex !important;
+}
+
+.lobby-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.lobby-icon {
+  font-size: 4rem;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 10px rgba(127, 166, 80, 0.3));
+}
+
+.lobby-title {
+  font-family: var(--font-display);
+  font-size: 2.8rem; font-weight: 900; color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.lobby-sub {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .lobby-card {
@@ -56,12 +94,90 @@ body {
   border-radius: 24px; padding: 40px;
   width: 420px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.lobby-title {
-  font-family: var(--font-display);
-  font-size: 2.8rem; font-weight: 900; color: var(--text-primary);
-  margin-bottom: 8px;
+.lobby-card-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.time-badge {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  padding: 16px 20px;
+  cursor: default;
+  transition: transform 0.2s;
+}
+
+.time-badge:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-green);
+}
+
+.time-badge-icon {
+  font-size: 1.8rem;
+}
+
+.time-badge-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.time-badge-main {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.time-badge-sub {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.btn-find {
+  width: 100%;
+  height: 60px;
+  background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
+  border: none;
+  border-radius: 16px;
+  color: white;
+  font-family: var(--font-main);
+  font-size: 1.1rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(127, 166, 80, 0.25);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.btn-find:hover {
+  transform: scale(1.02);
+  box-shadow: 0 12px 28px rgba(127, 166, 80, 0.35);
+}
+
+.btn-find:active {
+  transform: scale(0.98);
+}
+
+.btn-find svg {
+  transition: transform 0.3s;
+}
+
+.btn-find:hover svg {
+  transform: rotate(-10deg) scale(1.1);
 }
 
 /* ══════════ 대국 화면 ══════════ */
