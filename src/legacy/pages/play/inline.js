@@ -159,6 +159,10 @@ function getAllLegal(board, color, castling, enPassant) {
 function renderBoard() {
   const el = document.getElementById('play-board');
   if (!el) return;
+  
+  // 항상 64개의 칸이 정확히 유지되도록 검증
+  if (el.children.length !== 64) el.innerHTML = '';
+  
   const flipped = _myColor === 'b';
   const isFirstRender = el.children.length === 0;
 
@@ -174,50 +178,38 @@ function renderBoard() {
       if (isFirstRender) {
         sq = document.createElement('div');
         sq.dataset.r = r; sq.dataset.c = c;
-        
-        // 좌표 레이블 (절대 위치 스타일 적용됨)
         if (ci === 0) { const lbl = document.createElement('span'); lbl.className='rank-label'; lbl.textContent=8-r; sq.appendChild(lbl); }
         if (ri === 7) { const lbl = document.createElement('span'); lbl.className='file-label'; lbl.textContent='abcdefgh'[c]; sq.appendChild(lbl); }
-        
-        // 기물 이미지 (절대 위치가 아닌 flex-center로 배치됨)
         const img = document.createElement('img');
         img.className = 'piece-img';
         img.draggable = false;
         img.style.display = 'none';
         sq.appendChild(img);
-        
-        sq.addEventListener('click', () => onSquareClick(Number(sq.dataset.r), Number(sq.dataset.c)));
+        sq.onclick = () => onSquareClick(Number(sq.dataset.r), Number(sq.dataset.c));
         el.appendChild(sq);
       } else {
         sq = el.children[idx];
       }
 
-      // 클래스 재설정
       const classes = ['sq', isLight ? 'light' : 'dark'];
       if (_lastMove) {
         if (_lastMove.from[0]===r && _lastMove.from[1]===c) classes.push('last-from');
         if (_lastMove.to[0]===r   && _lastMove.to[1]===c)   classes.push('last-to');
       }
       if (_selected && _selected[0]===r && _selected[1]===c) classes.push('selected');
-      const isPossible = _legalMoves.some(m => m.to[0]===r && m.to[1]===c);
-      if (isPossible) {
+      if (_legalMoves.some(m => m.to[0]===r && m.to[1]===c)) {
         classes.push('possible');
         if (piece) classes.push('has-piece');
       }
-      const king = _turn + 'K';
-      if (piece === king && isInCheck(_board, _turn)) classes.push('in-check');
+      if (piece === _turn + 'K' && isInCheck(_board, _turn)) classes.push('in-check');
       sq.className = classes.join(' ');
 
-      // 기물 이미지 업데이트
       const img = sq.querySelector('.piece-img');
       if (img) {
         if (piece) {
-          const newSrc = pieceImg(piece);
-          if (img.src !== newSrc) img.src = newSrc;
-          const newCls = 'piece-img' + (piece.startsWith('b') ? ' black-piece' : '');
-          if (img.className !== newCls) img.className = newCls;
-          img.alt = piece;
-          img.style.display = 'block'; // none 대신 block으로 확실히 표시
+          const src = pieceImg(piece);
+          if (img.src !== src) img.src = src;
+          img.style.display = 'block';
         } else {
           img.style.display = 'none';
           img.src = '';
@@ -438,95 +430,125 @@ function updateTimerOnMove() {
 // Firebase 매칭 & 대국
 // ══════════════════════════════════════════
 const GAME_TIME = 600;
-let _queueRef = null, _searchInt = null;
+let _queueRef = null, _searchInt = null, _matchmakingInProgress = false;
 
 async function startMatchmaking() {
-  if (!_user || _gameActive) return;
-  showScreen('searching');
-  let elapsed = 0;
-  _searchInt = setInterval(() => {
-    elapsed++;
-    const el = document.getElementById('search-elapsed');
-    if (el) el.textContent = elapsed + '초 경과';
-  }, 1000);
+  if (_matchmakingInProgress || !_user || _gameActive) return;
+  _matchmakingInProgress = true;
 
-  const myName = _user.displayName || _user.email.split('@')[0];
-  const queue = _rtDb.ref('matchmaking_queue');
-  const myRef = queue.push();
-  _queueRef = myRef;
-  const myJoinedAt = Date.now();
-  
-  // 1. 먼저 내 노드를 생성
-  await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: myJoinedAt });
+  try {
+    console.log('[Matchmaking] --- Start ---');
+    showScreen('searching');
+    let elapsed = 0;
+    clearInterval(_searchInt);
+    _searchInt = setInterval(() => {
+      elapsed++;
+      const el = document.getElementById('search-elapsed');
+      if (el) el.textContent = elapsed + '초 경과';
+    }, 1000);
 
-  // 2. 전체 대기열을 가져와서 수동 필터링 (인덱스 경고 및 쿼리 실패 방지)
-  const snap = await queue.once('value');
-  let matched = false;
-  
-  const entries = [];
-  snap.forEach(child => {
-    const data = child.val();
-    if (data && child.key !== myRef.key && !data.gameId && data.uid !== _user.uid && data.joinedAt < myJoinedAt) {
-      entries.push({ key: child.key, data });
-    }
-  });
+    const myName = _user.displayName || _user.email.split('@')[0];
+    const queue = _rtDb.ref('matchmaking_queue');
+    
+    // 1. 기존 내 대기열 항목 청소 (중복 방지)
+    const oldSnap = await queue.once('value');
+    const updates = {};
+    oldSnap.forEach(child => { if (child.val().uid === _user.uid) updates[child.key] = null; });
+    await queue.update(updates);
+    console.log('[Matchmaking] Previous entries cleaned');
 
-  // 먼저 들어온 사람부터 매칭 (가장 오래 기다린 사람 우선)
-  entries.sort((a, b) => a.data.joinedAt - b.data.joinedAt);
+    const myRef = queue.push();
+    _queueRef = myRef;
+    const myJoinedAt = Date.now();
+    
+    // 2. 내 노드 생성 및 연결 끊김 시 자동 삭제 설정
+    await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: myJoinedAt });
+    myRef.onDisconnect().remove(); 
+    console.log('[Matchmaking] My entry created:', myRef.key);
 
-  for (const entry of entries) {
-    if (matched) break;
-    const { key, data } = entry;
-
-    const result = await _rtDb.ref(`matchmaking_queue/${key}`).transaction((currentData) => {
-      if (currentData && !currentData.gameId) {
-        return { ...currentData, gameId: 'PENDING', matchedWith: _user.uid };
+    // 3. 상대 찾기
+    const snap = await queue.once('value');
+    let matched = false;
+    const entries = [];
+    snap.forEach(child => {
+      const data = child.val();
+      if (data && child.key !== myRef.key && !data.gameId && data.uid !== _user.uid && data.joinedAt < myJoinedAt) {
+        entries.push({ key: child.key, data });
       }
-      return; 
     });
 
-    if (result.committed) {
-      matched = true;
-      const gameId = queue.push().key;
-      const myColor = Math.random() < 0.5 ? 'w' : 'b';
-      const oppColor = myColor === 'w' ? 'b' : 'w';
+    console.log('[Matchmaking] Potential opponents:', entries.length);
+    entries.sort((a, b) => a.data.joinedAt - b.data.joinedAt);
 
-      const gameData = {
-        white: myColor === 'w' ? _user.uid : data.uid,
-        black: myColor === 'b' ? _user.uid : data.uid,
-        whiteName: myColor === 'w' ? myName : data.displayName,
-        blackName: myColor === 'b' ? myName : data.displayName,
-        status: 'playing',
-        whiteTime: GAME_TIME,
-        blackTime: GAME_TIME,
-        lastMoveAt: Date.now(),
-        createdAt: Date.now(),
-      };
+    for (const entry of entries) {
+      if (matched) break;
+      const { key, data } = entry;
+      console.log('[Matchmaking] Attempting match with:', data.displayName);
 
-      await _rtDb.ref('games/' + gameId).set(gameData);
-      await _rtDb.ref(`matchmaking_queue/${key}`).update({ gameId: gameId, color: oppColor });
-      
-      myRef.remove();
-      _queueRef = null;
-      joinGame(gameId, myColor, gameData);
-      break;
-    }
-  }
-
-  if (!matched) {
-    _queueRef.on('value', snap2 => {
-      const d = snap2.val();
-      if (!d || !d.gameId || d.gameId === 'PENDING') return;
-      _queueRef.off();
-      const waitRef = _queueRef;
-      _queueRef = null;
-      _rtDb.ref('games/' + d.gameId).once('value').then(gs => {
-        if (gs.val()) {
-          waitRef.remove();
-          joinGame(d.gameId, d.color, gs.val());
+      const result = await _rtDb.ref(`matchmaking_queue/${key}`).transaction((currentData) => {
+        if (currentData && !currentData.gameId) {
+          return { ...currentData, gameId: 'PENDING', matchedWith: _user.uid };
         }
+        return; 
       });
-    });
+
+      if (result.committed) {
+        console.log('[Matchmaking] Transaction SUCCESS');
+        matched = true;
+        const gameId = queue.push().key;
+        const myColor = Math.random() < 0.5 ? 'w' : 'b';
+        const oppColor = myColor === 'w' ? 'b' : 'w';
+
+        const gameData = {
+          white: myColor === 'w' ? _user.uid : data.uid,
+          black: myColor === 'b' ? _user.uid : data.uid,
+          whiteName: myColor === 'w' ? myName : data.displayName,
+          blackName: myColor === 'b' ? myName : data.displayName,
+          status: 'playing',
+          whiteTime: GAME_TIME,
+          blackTime: GAME_TIME,
+          lastMoveAt: Date.now(),
+          createdAt: Date.now(),
+        };
+
+        await _rtDb.ref('games/' + gameId).set(gameData);
+        await _rtDb.ref(`matchmaking_queue/${key}`).update({ gameId: gameId, color: oppColor });
+        
+        console.log('[Matchmaking] Game ready:', gameId);
+        myRef.onDisconnect().cancel();
+        myRef.remove();
+        _queueRef = null;
+        joinGame(gameId, myColor, gameData);
+        break;
+      }
+    }
+
+    if (!matched) {
+      console.log('[Matchmaking] Waiting to be matched...');
+      _queueRef.on('value', snap2 => {
+        const d = snap2.val();
+        if (!d || !d.gameId || d.gameId === 'PENDING') return;
+        console.log('[Matchmaking] I was matched! GameId:', d.gameId);
+        _queueRef.off();
+        _queueRef.onDisconnect().cancel();
+        const waitRef = _queueRef;
+        _queueRef = null;
+        _rtDb.ref('games/' + d.gameId).once('value').then(gs => {
+          if (gs.val()) {
+            waitRef.remove();
+            joinGame(d.gameId, d.color, gs.val());
+          } else {
+            console.error('[Matchmaking] Game data missing');
+            showScreen('lobby');
+          }
+        });
+      });
+    }
+  } catch (e) {
+    console.error('[Matchmaking] Error:', e);
+    showScreen('lobby');
+  } finally {
+    _matchmakingInProgress = false;
   }
 }
 
@@ -535,8 +557,13 @@ function cancelMatchmaking() {
   clearTimeout(_firstMoveTimer);
   cancelDisconnectLoss();
   stopHeartbeat(_gameId, _myColor);
-  if (_queueRef) { _queueRef.remove(); _queueRef = null; }
+  if (_queueRef) { 
+    _queueRef.onDisconnect().cancel();
+    _queueRef.remove(); 
+    _queueRef = null; 
+  }
   showScreen('lobby');
+  _matchmakingInProgress = false;
 }
 
 function joinGame(gameId, myColor, gameData) {
@@ -582,8 +609,7 @@ function joinGame(gameId, myColor, gameData) {
   startHeartbeat(gameId, myColor);
 
   // ── 접속 끊김 감지: 첫 수 후 나가면 패배 ──
-  // 첫 수 전에는 무승부(위 타이머), 첫 수 후에는 패배
-  _disconnectRef = null; // 첫 수 후 setupDisconnectLoss()에서 설정
+  _disconnectRef = null; 
   _gameRef.child('moves').on('child_added', snap => {
     const d = snap.val();
     if (!d || d.uid === _user.uid) return;
@@ -599,11 +625,9 @@ function joinGame(gameId, myColor, gameData) {
     const bar   = document.getElementById('draw-offer-bar');
     const btn   = document.getElementById('btn-draw');
     if (offer && offer !== _myColor) {
-      // 상대가 무승부 제안
       if (bar) bar.classList.add('show');
     } else {
       if (bar) bar.classList.remove('show');
-      // 내 제안이 취소/수락됨 → 버튼 복원
       if (!offer && btn) { btn.disabled = false; btn.textContent = '½ 무승부 제안'; }
     }
   });
@@ -637,7 +661,6 @@ function offerDraw() {
   const btn = document.getElementById('btn-draw');
   if (btn) { btn.disabled = true; btn.textContent = '½ 제안 중...'; }
   _gameRef.update({ drawOffer: _myColor, drawOfferAt: Date.now() });
-  // 30초 후 자동 만료
   _drawOfferTimeout = setTimeout(() => {
     if (_gameRef) _gameRef.update({ drawOffer: null });
     if (btn) { btn.disabled = false; btn.textContent = '½ 무승부 제안'; }
@@ -661,12 +684,11 @@ function hidDrawOfferBar() {
 
 function resignGame() {
   if (!_gameRef || !_gameActive) return;
-  cancelDisconnectLoss(); // 정상 기권이므로 disconnect 취소
+  cancelDisconnectLoss(); 
   const status = _myColor === 'w' ? 'resign_w' : 'resign_b';
   _gameRef.update({ status });
 }
 
-// ── disconnect 패배 등록/해제 ──
 function setupDisconnectLoss() {
   if (!_gameRef || !_user) return;
   const status = _myColor === 'w' ? 'resign_w' : 'resign_b';
@@ -680,35 +702,28 @@ function cancelDisconnectLoss() {
   }
 }
 
-// ══════════════════════════════════════════
-// Heartbeat (상대 접속 감시)
-// ══════════════════════════════════════════
 function startHeartbeat(gameId, myColor) {
   const oppColor = myColor === 'w' ? 'b' : 'w';
   const myHbRef  = _rtDb.ref(`games/${gameId}/heartbeat/${myColor}`);
   const oppHbRef = _rtDb.ref(`games/${gameId}/heartbeat/${oppColor}`);
 
-  // 내 heartbeat: 3초마다 현재 시각 기록
   clearInterval(_heartbeatInt);
   _heartbeatInt = setInterval(() => {
     if (!_gameActive) return;
     myHbRef.set(Date.now());
   }, 3000);
-  myHbRef.set(Date.now()); // 즉시 1회
+  myHbRef.set(Date.now());
 
-  // 상대 heartbeat 감시: 상대 값이 바뀔 때마다 갱신
   _oppLastSeen = Date.now();
   oppHbRef.on('value', snap => {
     if (snap.val()) _oppLastSeen = snap.val();
   });
 
-  // 10초마다 상대가 살아있는지 체크
   clearInterval(_oppHeartbeatInt);
   _oppHeartbeatInt = setInterval(() => {
-    if (!_gameActive || !_firstMoveDone) return; // 첫 수 전엔 체크 안 함
+    if (!_gameActive || !_firstMoveDone) return; 
     const elapsed = Date.now() - _oppLastSeen;
     if (elapsed > 10000) {
-      // 상대가 10초 이상 응답 없음 → 상대 패배(내 승리)
       const status = oppColor === 'w' ? 'resign_w' : 'resign_b';
       if (_gameRef) _gameRef.update({ status });
     }
@@ -731,14 +746,11 @@ function endGame(status) {
   clearInterval(_timerInt);
   clearTimeout(_firstMoveTimer);
   cancelDisconnectLoss();
-  stopHeartbeat(_gameId, _myColor); // heartbeat 정리
+  stopHeartbeat(_gameId, _myColor); 
   if (_gameRef) _gameRef.off();
   playSound('over');
-
-  // Firestore 기보 저장
   saveRecord(status);
 
-  // 결과 판정
   let emoji='🏁', title='대국 종료', reason='';
   if (status==='checkmate') {
     const winner = enemyColor(_turn);
@@ -751,19 +763,11 @@ function endGame(status) {
     if (_myColor==='w') { emoji='🏆'; title='승리!'; reason='상대방 기권'; }
     else { emoji='😔'; title='패배'; reason='기권'; }
   } else if (status==='timeout_w') {
-    // 백이 시간 초과
     if (_myColor==='b') { emoji='🏆'; title='승리!'; reason='상대방 시간 초과'; }
     else { emoji='😔'; title='패배'; reason='시간 초과'; }
   } else if (status==='timeout_b') {
-    // 흑이 시간 초과
     if (_myColor==='w') { emoji='🏆'; title='승리!'; reason='상대방 시간 초과'; }
     else { emoji='😔'; title='패배'; reason='시간 초과'; }
-  } else if (status==='win_time') {
-    // 구버전 호환
-    emoji='🏆'; title='승리!'; reason='상대방 시간 초과';
-  } else if (status==='lose_time') {
-    // 구버전 호환
-    emoji='😔'; title='패배'; reason='시간 초과';
   } else if (status==='stalemate') {
     emoji='🤝'; title='무승부'; reason='스테일메이트';
   } else if (status==='draw' || status==='draw_no_move') {
@@ -773,7 +777,6 @@ function endGame(status) {
   document.getElementById('result-emoji').textContent = emoji;
   document.getElementById('result-title').textContent = title;
   document.getElementById('result-reason').textContent = reason;
-
   showScreen('result');
 }
 
@@ -792,32 +795,13 @@ async function saveRecord(result) {
     });
     pgn = pgn.trim();
 
-    // ── resultStr: 항상 백/흑 관점으로 올바르게 계산 ──
     let resultStr = '*';
-    if (result === 'checkmate') {
-      // _turn은 체크메이트 당한 쪽(진 쪽)의 색
-      resultStr = _turn === 'w' ? '0-1' : '1-0';
-    } else if (result === 'resign_w') {
-      // 백이 기권 → 흑 승
-      resultStr = '0-1';
-    } else if (result === 'resign_b') {
-      // 흑이 기권 → 백 승
-      resultStr = '1-0';
-    } else if (result === 'timeout_w') {
-      // 백이 시간 초과 → 흑 승
-      resultStr = '0-1';
-    } else if (result === 'timeout_b') {
-      // 흑이 시간 초과 → 백 승
-      resultStr = '1-0';
-    } else if (result === 'win_time') {
-      // 구버전 호환: 내가 시간승
-      resultStr = _myColor === 'w' ? '1-0' : '0-1';
-    } else if (result === 'lose_time') {
-      // 구버전 호환: 내가 시간패
-      resultStr = _myColor === 'w' ? '0-1' : '1-0';
-    } else if (result === 'stalemate' || result === 'draw' || result === 'draw_no_move') {
-      resultStr = '1/2-1/2';
-    }
+    if (result === 'checkmate') resultStr = _turn === 'w' ? '0-1' : '1-0';
+    else if (result === 'resign_w') resultStr = '0-1';
+    else if (result === 'resign_b') resultStr = '1-0';
+    else if (result === 'timeout_w') resultStr = '0-1';
+    else if (result === 'timeout_b') resultStr = '1-0';
+    else if (result === 'stalemate' || result === 'draw' || result === 'draw_no_move') resultStr = '1/2-1/2';
 
     const myName   = _user.displayName || _user.email.split('@')[0];
     const oppName  = document.getElementById('opp-name-el')?.textContent || '상대방';
@@ -826,18 +810,11 @@ async function saveRecord(result) {
     const today = new Date().toISOString().slice(0,10);
     const fullPgn = `[White "${whiteName}"]\n[Black "${blackName}"]\n[Result "${resultStr}"]\n[Date "${today}"]\n\n${pgn} ${resultStr}`;
 
-    // ── 중복 저장 방지: gameId + uid 조합으로 이미 저장된 기록 확인 ──
     if (_gameId) {
       try {
-        const existing = await _fbDb.collection('game_records')
-          .where('gameId', '==', _gameId)
-          .where('uid', '==', _user.uid)
-          .limit(1).get();
-        if (!existing.empty) {
-          console.log('[saveRecord] 이미 저장된 기록, 중복 저장 방지');
-          return;
-        }
-      } catch(e) { /* 인덱스 없을 경우 무시하고 저장 진행 */ }
+        const existing = await _fbDb.collection('game_records').where('gameId','==',_gameId).where('uid','==',_user.uid).limit(1).get();
+        if (!existing.empty) return;
+      } catch(e) {}
     }
 
     await _fbDb.collection('game_records').add({
@@ -848,39 +825,25 @@ async function saveRecord(result) {
       arrows: _gameArrows,
       playedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    console.log('[saveRecord] 기보 저장 완료:', _myColor, resultStr);
   } catch(e) { console.warn('기보 저장 실패', e); }
 }
 
-// ══════════════════════════════════════════
-// 화면 전환
-// ══════════════════════════════════════════
 function showScreen(name) {
   ['lobby','searching','playing','result'].forEach(s => {
     const el = document.getElementById('screen-'+s);
     if (el) el.style.display = s===name ? 'flex' : 'none';
   });
-  // 모바일: 대국 중일 때 사이드바 숨김
-  if (name === 'playing') {
-    document.body.classList.add('playing');
-  } else {
-    document.body.classList.remove('playing');
-  }
+  if (name === 'playing') document.body.classList.add('playing');
+  else document.body.classList.remove('playing');
 }
 
-// ── 토스트 ──
 function showToast(msg, duration=2500) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), duration);
 }
 
-// ══════════════════════════════════════════
-// 우클릭 화살표 그리기
-// ══════════════════════════════════════════
-// 게임 중 후보수 화살표: 수 인덱스 → 화살표 배열
-// { fc, fr, tc, tr }
-let _gameArrows = {}; // moveIndex → [{fc,fr,tc,tr}, ...]
+let _gameArrows = {}; 
 
 (function(){
   const ARROW_COLOR='rgba(255,165,0,0.92)';
@@ -934,7 +897,6 @@ let _gameArrows = {}; // moveIndex → [{fc,fr,tc,tr}, ...]
     board.addEventListener('mousedown',e=>{
       if(e.button===2){_rightDragging=true;_arrowStart=getBoardSq(e);}
       else if(e.button===0){
-        // 좌클릭: 현재 수의 화살표 초기화
         const curIdx=_sanMoves.length;
         _userArrows=[];_gameArrows[curIdx]=[];
         redraw();_arrowStart=null;_rightDragging=false;
