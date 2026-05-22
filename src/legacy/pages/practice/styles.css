@@ -252,6 +252,7 @@ body {
   position: relative;
   display: flex;
   align-items: stretch;
+  pointer-events: auto !important; /* 추가 */
 }
 
 /* ===== CHESSBOARD ===== */
@@ -263,6 +264,9 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   cursor: pointer;
   transition: width 0.35s, height 0.35s;
+  pointer-events: auto !important; /* 강제 활성화 */
+  position: relative;
+  z-index: 10 !important; /* 레이어 최상단 보장 */
 }
 
 #board-svg-overlay {
@@ -271,8 +275,8 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
-  z-index: 10;
+  pointer-events: none !important; /* 클릭 통과 */
+  z-index: 20; /* 보드보다 높게 하되 클릭은 통과 */
   overflow: visible;
 }
 
