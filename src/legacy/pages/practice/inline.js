@@ -248,28 +248,41 @@ function loadPositionFromInput() {
   /* ── 팔레트 열기/닫기 ── */
   window.palToggle = function() {
     _open = !_open;
-    var panel = document.getElementById('palette-panel');
+    var panelEl = document.getElementById('right-panel');
     var board = document.getElementById('chessboard');
     var btn   = document.getElementById('edit-mode-btn');
+    
     if (_open) {
       build();
-      if (panel) panel.classList.add('pal-open');
+      // 탭 전환
+      switchTab('palette');
+      
+      // 모바일인 경우 패널 열기
+      if (window.innerWidth <= 768) {
+        toggleMobilePanel(true);
+      }
+
       if (board) board.classList.add('pal-edit');
       if (btn) { btn.style.background='rgba(80,144,208,0.25)'; btn.style.borderColor='#5090d0'; }
       sel('w','Q');
+      
       // 현재 차례 표시
       var t = (typeof game !== 'undefined' && game) ? game.turn : 'w';
       palTurn(t || 'w');
+      
       window._editorSavedPracticeMode = window._enginePracticeMode;
       window._enginePracticeMode = null;
-      // 디버그 오버레이 활성화
-      if (window.__palDbg) window.__palDbg.log('=== 편집 모드 시작 ===\n탭:배치 | 드래그:이동 | 길게누르기:삭제');
     } else {
-      if (panel) panel.classList.remove('pal-open');
       if (board) board.classList.remove('pal-edit');
       if (btn) { btn.style.background=''; btn.style.borderColor='rgba(80,144,208,0.4)'; }
       _sel = null;
       window._enginePracticeMode = window._editorSavedPracticeMode || null;
+      
+      // 모바일인 경우 패널 닫기 (사용자 편의성)
+      if (window.innerWidth <= 768) {
+        toggleMobilePanel(false);
+      }
+
       if (typeof analyzePosition === 'function') analyzePosition(true);
     }
   };
@@ -287,13 +300,8 @@ function loadPositionFromInput() {
     }
     var tw = document.getElementById('pal-tw');
     var tb = document.getElementById('pal-tb');
-    if (tw) { tw.classList.toggle('pal-active-w', turn==='w'); tw.classList.remove('pal-active-b'); }
-    if (tb) { tb.classList.toggle('pal-active-b', turn==='b'); tb.classList.remove('pal-active-w'); }
-    // 하위호환
-    var obw = document.getElementById('turn-btn-w');
-    var obb = document.getElementById('turn-btn-b');
-    if (obw) { obw.classList.toggle('active-w', turn==='w'); }
-    if (obb) { obb.classList.toggle('active-b', turn==='b'); }
+    if (tw) { tw.classList.toggle('pal-active-w', turn==='w'); }
+    if (tb) { tb.classList.toggle('pal-active-b', turn==='b'); }
     
     // 추가: 차례 변경 시 실시간 분석 요청
     if (typeof analyzePosition === 'function') {
