@@ -375,11 +375,17 @@ function flushCycleToDisplay() {
   console.log('[Debug Engine] window.pvData updated:', window.pvData);
   const best = processed[1];
 
-  document.getElementById('depth-info').textContent =
-    `⚙ d${best.depth}` +
-    (best.nps    ? ` · ${(best.nps/1e6).toFixed(1)}Mnps` : '') +
-    (best.time_ms? ` · ${(best.time_ms/1000).toFixed(1)}s` : '');
-  document.getElementById('eval-score').textContent = best.eval;
+  const dinfo = document.getElementById('depth-info');
+  if (dinfo) {
+    dinfo.textContent =
+      `⚙ d${best.depth}` +
+      (best.nps    ? ` · ${(best.nps/1e6).toFixed(1)}Mnps` : '') +
+      (best.time_ms? ` · ${(best.time_ms/1000).toFixed(1)}s` : '');
+  }
+
+  const escore = document.getElementById('eval-score');
+  if (escore) escore.textContent = best.eval;
+
   updateEvalBarFromCp(best.cpFromWhite, best.eval);
   renderTopMoves();
 
