@@ -89,10 +89,9 @@ export default function LegacyPage({ pageId }) {
         }
 
         if (inline) {
-          const blob = new Blob([inline], { type: 'application/javascript' });
-          const url = URL.createObjectURL(blob);
-          await loadScript(url);
-          URL.revokeObjectURL(url);
+          const script = document.createElement('script');
+          script.textContent = inline;
+          document.head.appendChild(script);
         }
 
         if (typeof window.initSidebar === 'function') {
