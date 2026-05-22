@@ -437,7 +437,7 @@ async function startMatchmaking() {
   _matchmakingInProgress = true;
 
   try {
-    console.log('[Matchmaking] --- Start ---');
+    console.log('[Matchmaking] START - UID:', _user.uid);
     showScreen('searching');
     let elapsed = 0;
     clearInterval(_searchInt);
@@ -450,102 +450,113 @@ async function startMatchmaking() {
     const myName = _user.displayName || _user.email.split('@')[0];
     const queue = _rtDb.ref('matchmaking_queue');
     
-    // 1. 기존 내 대기열 항목 청소 (중복 방지)
+    // 1. 기존 내 항목 청소 (UID 기준)
+    console.log('[Matchmaking] Cleaning old entries...');
     const oldSnap = await queue.once('value');
-    const updates = {};
-    oldSnap.forEach(child => { if (child.val().uid === _user.uid) updates[child.key] = null; });
-    await queue.update(updates);
-    console.log('[Matchmaking] Previous entries cleaned');
+    const cleanupUpdates = {};
+    oldSnap.forEach(child => {
+      if (child.val().uid === _user.uid) cleanupUpdates[child.key] = null;
+    });
+    await queue.update(cleanupUpdates);
 
     const myRef = queue.push();
     _queueRef = myRef;
     const myJoinedAt = Date.now();
     
-    // 2. 내 노드 생성 및 연결 끊김 시 자동 삭제 설정
+    // 2. 대기열 등록
+    console.log('[Matchmaking] Registering my node:', myRef.key);
     await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: myJoinedAt });
     myRef.onDisconnect().remove(); 
-    console.log('[Matchmaking] My entry created:', myRef.key);
 
     // 3. 상대 찾기
     const snap = await queue.once('value');
     let matched = false;
-    const entries = [];
+    const allEntries = [];
     snap.forEach(child => {
-      const data = child.val();
-      if (data && child.key !== myRef.key && !data.gameId && data.uid !== _user.uid && data.joinedAt < myJoinedAt) {
-        entries.push({ key: child.key, data });
+      const d = child.val();
+      if (d && child.key !== myRef.key && !d.gameId && d.uid !== _user.uid) {
+        allEntries.push({ key: child.key, uid: d.uid, name: d.displayName });
       }
     });
 
-    console.log('[Matchmaking] Potential opponents:', entries.length);
-    entries.sort((a, b) => a.data.joinedAt - b.data.joinedAt);
+    console.log('[Matchmaking] Found potential candidates:', allEntries.length);
 
-    for (const entry of entries) {
+    for (const entry of allEntries) {
       if (matched) break;
-      const { key, data } = entry;
-      console.log('[Matchmaking] Attempting match with:', data.displayName);
-
-      const result = await _rtDb.ref(`matchmaking_queue/${key}`).transaction((currentData) => {
-        if (currentData && !currentData.gameId) {
-          return { ...currentData, gameId: 'PENDING', matchedWith: _user.uid };
-        }
-        return; 
-      });
-
-      if (result.committed) {
-        console.log('[Matchmaking] Transaction SUCCESS');
-        matched = true;
-        const gameId = queue.push().key;
-        const myColor = Math.random() < 0.5 ? 'w' : 'b';
-        const oppColor = myColor === 'w' ? 'b' : 'w';
-
-        const gameData = {
-          white: myColor === 'w' ? _user.uid : data.uid,
-          black: myColor === 'b' ? _user.uid : data.uid,
-          whiteName: myColor === 'w' ? myName : data.displayName,
-          blackName: myColor === 'b' ? myName : data.displayName,
-          status: 'playing',
-          whiteTime: GAME_TIME,
-          blackTime: GAME_TIME,
-          lastMoveAt: Date.now(),
-          createdAt: Date.now(),
-        };
-
-        await _rtDb.ref('games/' + gameId).set(gameData);
-        await _rtDb.ref(`matchmaking_queue/${key}`).update({ gameId: gameId, color: oppColor });
+      
+      // 결정론적 매칭 규칙: 내 UID가 상대보다 작을 때만 내가 매칭을 시도함
+      // (둘이 동시에 서로를 매칭하여 방을 두 개 만드는 현상 방지)
+      if (_user.uid < entry.uid) {
+        console.log('[Matchmaking] I am the MATCHER for:', entry.name);
         
-        console.log('[Matchmaking] Game ready:', gameId);
-        myRef.onDisconnect().cancel();
-        myRef.remove();
-        _queueRef = null;
-        joinGame(gameId, myColor, gameData);
-        break;
+        const result = await _rtDb.ref(`matchmaking_queue/${entry.key}`).transaction((curr) => {
+          if (curr && !curr.gameId) {
+            return { ...curr, gameId: 'PENDING', matchedWith: _user.uid };
+          }
+          return; // 이미 매칭되었거나 데이터 없음
+        });
+
+        if (result.committed) {
+          console.log('[Matchmaking] Transaction SUCCESS! Creating game room...');
+          matched = true;
+          const gameId = queue.push().key;
+          const myColor = Math.random() < 0.5 ? 'w' : 'b';
+          const oppColor = myColor === 'w' ? 'b' : 'w';
+
+          const gameData = {
+            white: myColor === 'w' ? _user.uid : entry.uid,
+            black: myColor === 'b' ? _user.uid : entry.uid,
+            whiteName: myColor === 'w' ? myName : entry.name,
+            blackName: myColor === 'b' ? myName : entry.name,
+            status: 'playing',
+            whiteTime: GAME_TIME,
+            blackTime: GAME_TIME,
+            lastMoveAt: Date.now(),
+            createdAt: Date.now(),
+          };
+
+          await _rtDb.ref('games/' + gameId).set(gameData);
+          await _rtDb.ref(`matchmaking_queue/${entry.key}`).update({ gameId: gameId, color: oppColor });
+          
+          console.log('[Matchmaking] Game created:', gameId);
+          myRef.onDisconnect().cancel();
+          myRef.remove();
+          _queueRef = null;
+          joinGame(gameId, myColor, gameData);
+          break;
+        } else {
+          console.log('[Matchmaking] Transaction FAILED/SKIPPED for:', entry.name);
+        }
+      } else {
+        console.log('[Matchmaking] I am the WAITER for:', entry.name, '(Waiting for them to match me)');
       }
     }
 
     if (!matched) {
-      console.log('[Matchmaking] Waiting to be matched...');
-      _queueRef.on('value', snap2 => {
+      console.log('[Matchmaking] Still waiting in queue...');
+      _queueRef.on('value', async snap2 => {
         const d = snap2.val();
         if (!d || !d.gameId || d.gameId === 'PENDING') return;
-        console.log('[Matchmaking] I was matched! GameId:', d.gameId);
+        
+        console.log('[Matchmaking] MATCHED by someone else! GameId:', d.gameId);
         _queueRef.off();
         _queueRef.onDisconnect().cancel();
         const waitRef = _queueRef;
         _queueRef = null;
-        _rtDb.ref('games/' + d.gameId).once('value').then(gs => {
-          if (gs.val()) {
-            waitRef.remove();
-            joinGame(d.gameId, d.color, gs.val());
-          } else {
-            console.error('[Matchmaking] Game data missing');
-            showScreen('lobby');
-          }
-        });
+        
+        const gs = await _rtDb.ref('games/' + d.gameId).once('value');
+        if (gs.val()) {
+          waitRef.remove();
+          joinGame(d.gameId, d.color, gs.val());
+        } else {
+          console.error('[Matchmaking] CRITICAL: Game data missing for', d.gameId);
+          showScreen('lobby');
+        }
       });
     }
   } catch (e) {
-    console.error('[Matchmaking] Error:', e);
+    console.error('[Matchmaking] CRITICAL ERROR:', e);
+    showToast('매칭 중 오류가 발생했습니다.');
     showScreen('lobby');
   } finally {
     _matchmakingInProgress = false;
