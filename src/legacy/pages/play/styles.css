@@ -288,6 +288,71 @@ body {
   overflow: hidden;
 }
 
+#play-board {
+  display: grid;
+  grid-template-columns: repeat(8, 12.5%);
+  grid-template-rows: repeat(8, 12.5%);
+  width: 100%;
+  height: 100%;
+}
+
+.sq {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sq.light { background-color: var(--board-light); color: var(--board-dark); }
+.sq.dark  { background-color: var(--board-dark);  color: var(--board-light); }
+
+/* 하이라이트 */
+.sq.selected { background-color: rgba(127, 166, 80, 0.8) !important; }
+.sq.last-from { background-color: rgba(245, 246, 130, 0.6) !important; }
+.sq.last-to   { background-color: rgba(245, 246, 130, 0.8) !important; }
+.sq.in-check  { background: radial-gradient(circle, #ff4d4d 0%, var(--accent-red) 100%) !important; }
+
+/* 이동 가능 표시 */
+.sq.possible::after {
+  content: "";
+  width: 25%;
+  height: 25%;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 50%;
+}
+.sq.possible.has-piece::after {
+  width: 90%;
+  height: 90%;
+  background: transparent;
+  border: 6px solid rgba(0, 0, 0, 0.1);
+}
+
+.piece-img {
+  width: 95%;
+  height: 95%;
+  object-fit: contain;
+  z-index: 5;
+  pointer-events: none;
+  transition: transform 0.1s ease;
+}
+
+.black-piece { filter: drop-shadow(0 0 1px rgba(255,255,255,0.4)); }
+
+/* 좌표 라벨 */
+.rank-label, .file-label {
+  position: absolute;
+  font-size: 10px;
+  font-weight: 800;
+  z-index: 2;
+  pointer-events: none;
+}
+.rank-label { top: 2px; left: 2px; }
+.file-label { bottom: 2px; right: 2px; }
+
 .play-actions {
   display: flex; gap: 12px;
   width: min(calc(100vh - 250px), calc(100vw - 450px));

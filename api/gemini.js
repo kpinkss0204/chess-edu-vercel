@@ -10,26 +10,29 @@ export default async function handler(req, res) {
   try {
     const { model, messages, max_tokens, temperature } = req.body;
     
-    // Gemini API 포맷으로 변환 (v1 사용)
+    // Gemini API 포맷으로 변환 (system_instruction 지원을 위해 v1beta 사용)
     const geminiModel = model || 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1/models/${geminiModel}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
 
-    // System prompt 추출 및 User prompt 구성 (올바른 배열 구조로 수정)
+    // System prompt 추출 및 User prompt 구성
     const systemInstruction = messages.find(m => m.role === 'system')?.content || '';
     const userMessage = messages.find(m => m.role === 'user')?.content || '';
 
+    // 공식 문서 규격에 맞춘 Payload 구성
     const payload = {
-      contents: [{
-        role: 'user',
-        parts: [{ text: userMessage }]
-      }],
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: userMessage }]
+        }
+      ],
       generationConfig: {
         maxOutputTokens: max_tokens || 1000,
         temperature: temperature || 0.3,
       }
     };
 
-    // system_instruction이 있는 경우 추가
+    // system_instruction 필드 추가 (v1beta 규격)
     if (systemInstruction) {
       payload.system_instruction = {
         parts: [{ text: systemInstruction }]
