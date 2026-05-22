@@ -115,7 +115,7 @@ body {
   height: 100vh !important;
 }
 
-/* 핵심: 보드 영역 구조 고정 */
+/* 핵심: 보드 영역 구조 고정 - 수정: 패딩 및 max-width 균형 조정 */
 #board-area {
   flex: 1 !important;
   display: flex;
@@ -126,18 +126,18 @@ body {
   background: rgba(0,0,0,0.03);
   min-width: 0;
   overflow: hidden;
-  height: 100vh; /* 화면 높이 준수 */
+  height: 100vh;
 }
 
-/* 평가바 + 보드 부모 컨테이너 */
+/* 평가바 + 보드 부모 컨테이너 - 수정: 균형있는 최대폭 설정 */
 #eval-container {
   display: flex;
-  align-items: center; /* 수직 중앙 */
+  align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 16px;
   width: 100%;
-  max-width: 800px; /* 전체 컨테이너 폭 */
-  height: 70vh;    /* 보드 영역 세로 제한 */
+  max-width: 840px; /* 좀 더 여유로운 폭 */
+  height: 75vh;    
 }
 
 #board-wrap {
