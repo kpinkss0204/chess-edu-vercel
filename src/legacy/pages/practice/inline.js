@@ -868,7 +868,7 @@ function loadPositionFromInput() {
   };
 
   document.addEventListener('DOMContentLoaded', function() {
-    build();
+    if (typeof window.palBuild === 'function') window.palBuild();
     attach();
   });
 })();
