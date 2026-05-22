@@ -445,41 +445,78 @@ async function startMatchmaking() {
     const el = document.getElementById('search-elapsed');
     if (el) el.textContent = elapsed + '초 경과';
   }, 1000);
+
   const myName = _user.displayName || _user.email.split('@')[0];
-  const queue  = _rtDb.ref('matchmaking_queue');
-  const myRef  = queue.push();
+  const queue = _rtDb.ref('matchmaking_queue');
+  const myRef = queue.push();
   _queueRef = myRef;
-  await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: Date.now() });
-  const snap = await queue.orderByChild('joinedAt').once('value');
+  const myJoinedAt = Date.now();
+  await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: myJoinedAt });
+
+  // 자신보다 먼저 들어온 사람 중에서 매칭 대상을 찾음 (Race Condition 방지)
+  const snap = await queue.orderByChild('joinedAt').endAt(myJoinedAt - 1).limitToLast(10).once('value');
   let matched = false;
-  snap.forEach(child => {
-    if (matched) return;
-    if (child.key === myRef.key) return;
-    const data = child.val();
-    if (!data || data.uid === _user.uid || data.gameId) return;
-    matched = true;
-    const myColor  = Math.random() < 0.5 ? 'w' : 'b';
-    const oppColor = myColor === 'w' ? 'b' : 'w';
-    const gameId   = queue.push().key;
-    const gameData = {
-      white: myColor==='w'?_user.uid:data.uid, black: myColor==='b'?_user.uid:data.uid,
-      whiteName: myColor==='w'?myName:data.displayName, blackName: myColor==='b'?myName:data.displayName,
-      status:'playing', whiteTime:GAME_TIME, blackTime:GAME_TIME,
-      lastMoveAt:Date.now(), createdAt:Date.now(),
-    };
-    _rtDb.ref('games/'+gameId).set(gameData);
-    child.ref.update({ gameId, color: oppColor });
-    myRef.remove(); _queueRef = null;
-    joinGame(gameId, myColor, gameData);
-  });
+
+  const entries = [];
+  snap.forEach(child => { entries.push({ key: child.key, data: child.val() }); });
+  // 가장 최근에 들어온 사람부터 확인
+  entries.reverse();
+
+  for (const entry of entries) {
+    if (matched) break;
+    const { key, data } = entry;
+    if (!data || data.uid === _user.uid || data.gameId) continue;
+
+    // 트랜잭션을 사용하여 상대를 '선점'함
+    const result = await _rtDb.ref(`matchmaking_queue/${key}`).transaction((currentData) => {
+      if (currentData && !currentData.gameId) {
+        // 아직 매칭되지 않은 경우에만 내 정보를 기입하여 선점
+        return { ...currentData, gameId: 'PENDING', matchedWith: _user.uid };
+      }
+      return; // 중단
+    });
+
+    if (result.committed) {
+      matched = true;
+      const gameId = queue.push().key;
+      const myColor = Math.random() < 0.5 ? 'w' : 'b';
+      const oppColor = myColor === 'w' ? 'b' : 'w';
+
+      const gameData = {
+        white: myColor === 'w' ? _user.uid : data.uid,
+        black: myColor === 'b' ? _user.uid : data.uid,
+        whiteName: myColor === 'w' ? myName : data.displayName,
+        blackName: myColor === 'b' ? myName : data.displayName,
+        status: 'playing',
+        whiteTime: GAME_TIME,
+        blackTime: GAME_TIME,
+        lastMoveAt: Date.now(),
+        createdAt: Date.now(),
+      };
+
+      await _rtDb.ref('games/' + gameId).set(gameData);
+      // 상대방 노드 업데이트 (진짜 gameId로 교체)
+      await _rtDb.ref(`matchmaking_queue/${key}`).update({ gameId: gameId, color: oppColor });
+      
+      myRef.remove();
+      _queueRef = null;
+      joinGame(gameId, myColor, gameData);
+      break;
+    }
+  }
+
   if (!matched) {
     _queueRef.on('value', snap2 => {
       const d = snap2.val();
-      if (!d || !d.gameId) return;
+      if (!d || !d.gameId || d.gameId === 'PENDING') return;
       _queueRef.off();
-      const waitRef = _queueRef; _queueRef = null;
-      _rtDb.ref('games/'+d.gameId).once('value').then(gs => {
-        if (gs.val()) { waitRef.remove(); joinGame(d.gameId, d.color, gs.val()); }
+      const waitRef = _queueRef;
+      _queueRef = null;
+      _rtDb.ref('games/' + d.gameId).once('value').then(gs => {
+        if (gs.val()) {
+          waitRef.remove();
+          joinGame(d.gameId, d.color, gs.val());
+        }
       });
     });
   }
