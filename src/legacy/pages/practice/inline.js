@@ -243,8 +243,8 @@ function loadPositionFromInput() {
 
   /* ── 팔레트 열기/닫기 ── */
   window.palToggle = function(force) {
-    if (force !== undefined) window._palOpen = !force; 
-    window._palOpen = !window._palOpen;
+    if (force !== undefined) window._palOpen = !force;
+    else window._palOpen = !window._palOpen;
 
     var panelEl = document.getElementById('right-panel');
     var board = document.getElementById('chessboard');

@@ -547,6 +547,7 @@ class ChessGame {
         // Click handler for empty square or target square
         sq.addEventListener('mousedown', (e) => {
           if (e.button !== 0) return;
+          if (window._palOpen) return;
           if (e.target.classList.contains('piece-img')) return;
           e.preventDefault();
           if (this.selectedSq) {
@@ -588,6 +589,7 @@ class ChessGame {
 
           img.addEventListener('mousedown', (e) => {
             if (e.button !== 0) return;
+            if (window._palOpen) return;
             e.preventDefault();
             e.stopPropagation();
             this._startMouseDrag(r, c, e, img);
