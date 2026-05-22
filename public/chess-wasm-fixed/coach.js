@@ -1569,28 +1569,61 @@ async function callGroqAPIWithSystem(systemPrompt, userContent, maxTokens = 800)
 }
 
 async function callGroqAPIWithSystemTemp(systemPrompt, userContent, maxTokens = 800, temperature = 0.3) {
-  const response = await fetch('/api/groq', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: maxTokens,
-      temperature: temperature,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userContent  },
-      ],
-    }),
-  });
+  try {
+    const response = await fetch('/api/groq', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: maxTokens,
+        temperature: temperature,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: userContent  },
+        ],
+      }),
+    });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${response.status}`);
+    if (response.ok) {
+      const data = await response.json();
+      const raw  = data.choices?.[0]?.message?.content || '응답을 받지 못했습니다.';
+      return cleanKorean(raw);
+    }
+    
+    // Groq 실패 시 Gemini로 폴백
+    console.warn(`[Coach] Groq API 실패 (HTTP ${response.status}), Gemini 폴백 시도...`);
+  } catch (e) {
+    console.warn(`[Coach] Groq 호출 오류, Gemini 폴백 시도:`, e);
   }
 
-  const data = await response.json();
-  const raw  = data.choices?.[0]?.message?.content || '응답을 받지 못했습니다.';
-  return cleanKorean(raw);
+  // ── Gemini 폴백 호출 ──
+  try {
+    const response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gemini-1.5-flash',
+        max_tokens: maxTokens,
+        temperature: temperature,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: userContent  },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Gemini API 오류: HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const raw  = data.choices?.[0]?.message?.content || '응답을 받지 못했습니다.';
+    return cleanKorean(raw);
+  } catch (err) {
+    console.error(`[Coach] 모든 API 호출 실패:`, err);
+    throw err;
+  }
 }
 
 // ══════════════════════════════════════════════════════
