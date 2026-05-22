@@ -8,6 +8,7 @@ function loadPositionFromInput() {
     }
   }
 }
+window.loadPositionFromInput = loadPositionFromInput;
 
 // ══════════════════════════════════════════════════════
 //  우클릭 화살표 그리기
