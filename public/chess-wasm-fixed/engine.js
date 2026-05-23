@@ -372,6 +372,7 @@ function flushCycleToDisplay() {
 
   pvData = processed;
   window.pvData = pvData; 
+  window.pvDataFen = cycleSnap.fen; // AI 코치 동기화용 FEN 기록
   console.log('[Debug Engine] window.pvData updated:', window.pvData);
   const best = processed[1];
 
@@ -460,6 +461,7 @@ function _sendGoCommand(fen, myId, mpv, movetime) {
     board: pendingBoard,
     cast:  pendingCastling,
     ep:    pendingEP,
+    fen:   fen, // 현재 분석 대상 FEN 기록
   };
   console.log('[CMD] → setoption MultiPV', mpv);
   mainWorker.postMessage(`setoption name MultiPV value ${mpv}`);
@@ -824,6 +826,7 @@ function analyzePosition(force) {
     lastAnalyzedFen = fen;
     lastSentFen     = fen;
     pvData          = {};
+    window.pvDataFen = ''; // 새 분석 시작 시 FEN 동기화 정보 초기화
     rawPvStore      = {};
     cycleStore      = {};
     cycleDepth      = 0;

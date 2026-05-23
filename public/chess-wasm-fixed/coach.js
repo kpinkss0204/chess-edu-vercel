@@ -75,10 +75,14 @@ function buildChessContext() {
   const turn = game.turn;
   const fen = boardToFen(game.board, game.turn, game.castling, game.enPassant, game.halfMove, game.fullMove);
 
+  // 엔진 데이터 유효성 확인: 현재 FEN과 일치하는지 체크
+  const pvDataValid = window.pvData && window.pvDataFen && (typeof normFen === 'function') && 
+                      (normFen(window.pvDataFen) === normFen(fen));
+
   // 엔진 라인 3개 (window.pvData에서)
-  const pv1 = window.pvData && window.pvData[1];
-  const pv2 = window.pvData && window.pvData[2];
-  const pv3 = window.pvData && window.pvData[3];
+  const pv1 = pvDataValid ? (window.pvData && window.pvData[1]) : null;
+  const pv2 = pvDataValid ? (window.pvData && window.pvData[2]) : null;
+  const pv3 = pvDataValid ? (window.pvData && window.pvData[3]) : null;
 
   const bestMove  = pv1 && pv1.moves && pv1.moves[0] ? pv1.moves[0] : null;
   const bestLine  = pv1 && pv1.moves ? pv1.moves.slice(0, 8).join(' ') : null;
@@ -1073,6 +1077,10 @@ function extractPositionInsights(fen) {
 
 // 스톡피시 라인이 충분한지 검사 (최소 1수 이상 있으면 시작)
 function hasEnoughLines(ctx) {
+  // FEN 동기화 확인: 엔진 결과(pvDataFen)가 현재 포지션(ctx.fen)과 일치해야 함
+  if (!window.pvDataFen || typeof normFen !== 'function') return false;
+  if (normFen(window.pvDataFen) !== normFen(ctx.fen)) return false;
+
   const pv1 = window.pvData && window.pvData[1];
   const len1 = pv1 && pv1.moves ? pv1.moves.length : 0;
   return len1 >= 1;
@@ -1543,7 +1551,7 @@ async function callCommentaryAPI(ctx) {
 9. 전체 900~1300자. 각 섹션 3~5문장. 한 문단이 끊기지 않고 이어지게 쓸 것 ("~고요", "~거든요", "~라고 볼 수 있겠어요").
 10. 【오프닝·스토리텔링】 [국면 내러티브]에 오프닝 이름·수순이 있으면 **포지션 상황** 첫 문단에서 "경기는 … 이후 … 오프닝으로 들어갔고"처럼 맥락을 잡을 것. 직전 수·최근 수순을 자연스럽게 연결.
 11. 한국어로만 출력. 체스 수 표기(e4, Nf3 등)는 영문 그대로.
-12. 【수 설명 주어 규칙 — 절대 위반 금지】 모든 수에 대해 **누가(백/흑)** 두는지 주어를 반드시 명시할 것. 엔진 수순을 설명할 때 "백이 A를 두면, 흑은 B로 응수하고, 백은 C를 두어..."와 같이 **모든 수에 대해 주어를 써야 한다**. 주어 생략 및 양쪽 수를 반대편이 두는 것처럼 서술하는 것은 엄격히 금지.
+12. 【수 설명 주어 규칙 — 절대 위반 금지】 모든 수에 대해 **누가(백/흑)** 두는지 주어를 반드시 명시할 것. 엔진 수순을 설명할 때 "백이 A를 두면, 흑은 B로 응수하고, 백은 C를 두어..."와 같이 **모든 수에 대해 주어를 써야 한다**. 주어 생략 및 양쪽 수를 반대편이 두는 것처럼 서술하는 것은 엄격히 금지. 특히 엔진 수순의 1번째 수는 현재 차례인 쪽이 두는 수임을 명심할 것.
 13. 【이후 수순 섹션 규칙】 수순에 등장하는 각 수에 대해 "누가(백/흑) 무엇을(수 표기) 두면, 왜(구체적 결과)"를 반드시 써야 한다. 수를 나열만 하거나 결과 없이 "X로 막는다", "Y를 노린다"처럼 막연하게 쓰는 것은 금지. 구체적으로 어떤 칸/기물/위협이 발생하는지 서술할 것.
 14. 【킹 위협 서술 규칙】 특정 수가 킹을 위협한다고 쓰려면, 구체적으로 어떤 칸으로 침투하는지 또는 어떤 체크/메이트 위협이 생기는지 반드시 함께 써야 한다. "킹을 노린다"는 단독 표현은 금지.
 15. 【엔진 라인 없음】 사용자 메시지에 "엔진 라인 미준비" 또는 브리프에 "엔진 1순위 수순"이 없으면, **최선수 분석**에서 SAN을 나열하지 말고 한 문장으로만 언급. **이후 수순** 섹션은 쓰지 말 것.
@@ -1827,7 +1835,7 @@ async function runThreatAnalysis() {
   if (!coachApiKey || threatLoading) return;
   
   // API 호출 직전 최신 컨텍스트 빌드
-  const ctx = buildChessContext();
+  let ctx = buildChessContext();
   if (!ctx) return;
 
   const fenKey = ctx.fen;
@@ -1841,6 +1849,12 @@ async function runThreatAnalysis() {
   lastThreatFen   = fenKey;
 
   try {
+    // 엔진 데이터가 현재 FEN과 동기화될 때까지 대기 (최대 5초)
+    if (!hasEnoughLines(ctx)) {
+      await waitForDeepLines(ctx, 5000);
+      ctx = buildChessContext(); // 대기 후 컨텍스트 갱신
+    }
+
     // 최신 컨텍스트 주입 (window.pvData 업데이트 반영)
     ctx.pvData = window.pvData;
 
@@ -1883,6 +1897,12 @@ async function callThreatAPI(ctx) {
 Chess move notation stays in algebraic form (Nf3, e4, dxc4, O-O).
 
 CRITICAL: You will be given the actual engine lines and FEN for the current position. Use ONLY those moves. Never invent or hallucinate moves. Never copy from examples.
+
+COLOR CONSISTENCY RULE:
+- NEVER swap Black and White.
+- The "차례 (Mover)" provided is the side whose turn it is.
+- The 1st move in the engine line is ALWAYS played by the current mover.
+- Ensure your "핵심 계획" and "최선책" focus on the correct player.
 
 TACTICAL SCANNING:
 Scan the provided engine lines for tactical themes and use the exact terms:
@@ -2098,9 +2118,11 @@ async function callBestExplainAPI(ctx, moves, focusIdx) {
 
 【목표】엔진 최선수 한 수가 **왜** 좋은지, 포지션 맥락(오프닝·전개·계획)과 연결해 구체적으로 설명합니다.
 
-【절대 규칙】
+【절대 규칙 — 색상 반전 주의】
+- **절대 백과 흑을 바꿔서 설명하지 말 것.** 제공된 "현재 차례"와 수순의 번호를 엄격히 따르세요.
+- 엔진 수순의 1번째 수는 항상 현재 차례인 쪽이 두는 수입니다.
+- 모든 수에 "백이 …" / "흑이 …" 주어를 명시하여 누가 두는지 명확히 하세요.
 - [검증된 분석 브리프]·[국면 내러티브]·제공된 엔진 SAN 수순만 사용. 없는 수·기물·오프닝 통계 창작 금지.
-- 모든 수에 "백이 …" / "흑이 …" 주어 명시. 차례 착각 금지.
 - 말투: "~고요", "~거든요", "~라고 볼 수 있겠어요", "~인 모습이었고요"
 - cp/승률 수치 금지
 
