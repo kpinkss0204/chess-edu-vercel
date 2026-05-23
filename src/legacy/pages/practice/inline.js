@@ -168,7 +168,7 @@ function attachEvents() {
 // ══════════════════════════════════════════════════════
 const IMG = 'https://lichess1.org/assets/piece/cburnett/';
 const TYPES = ['K','Q','R','B','N','P'];
-window._palOpen = false;
+window._palOpen = window._palOpen || false;
 let _sel = null;       // {color,type} | 'erase' | null
 let _dragSq = null;    // 보드 위 기물 드래그 출발칸
 let _ghost = null;
@@ -223,7 +223,7 @@ function palErase() {
 }
 
 function palToggle(force) {
-  if (force !== undefined) window._palOpen = !force;
+  if (typeof force === 'boolean') window._palOpen = force;
   else window._palOpen = !window._palOpen;
 
   var panelEl = document.getElementById('right-panel');
@@ -233,20 +233,20 @@ function palToggle(force) {
   
   if (window._palOpen) {
     palBuild();
-    switchTab('palette');
-    if (window.innerWidth <= 768) toggleMobilePanel(true);
+    if (typeof switchTab === 'function') switchTab('palette');
+    if (window.innerWidth <= 768 && typeof toggleMobilePanel === 'function') toggleMobilePanel(true);
     if (board) board.classList.add('pal-edit');
-    if (btn) { btn.style.background='rgba(80,144,208,0.25)'; btn.style.borderColor='#5090d0'; }
+    if (btn) { btn.style.background='rgba(80,144,208,0.25)'; btn.style.borderColor='#5090d0'; btn.style.color='var(--text-primary)'; }
     var t = (typeof game !== 'undefined' && game) ? game.turn : 'w';
     palTurn(t || 'w');
     window._editorSavedPracticeMode = window._enginePracticeMode;
     window._enginePracticeMode = null;
   } else {
     if (board) board.classList.remove('pal-edit');
-    if (btn) { btn.style.background=''; btn.style.borderColor='rgba(80,144,208,0.4)'; }
+    if (btn) { btn.style.background=''; btn.style.borderColor='rgba(80,144,208,0.4)'; btn.style.color=''; }
     _sel = null;
     window._enginePracticeMode = window._editorSavedPracticeMode || null;
-    if (window.innerWidth <= 768) toggleMobilePanel(false);
+    if (window.innerWidth <= 768 && typeof toggleMobilePanel === 'function') toggleMobilePanel(false);
     if (typeof analyzePosition === 'function') analyzePosition(true);
   }
 }
@@ -415,13 +415,34 @@ function attachBoardEvents() {
 }
 
 function attachUIEvents() {
-  const btn = document.getElementById('edit-mode-btn');
-  if (btn) {
-    btn.onclick = (e) => {
+  const editBtn = document.getElementById('edit-mode-btn');
+  if (editBtn) {
+    editBtn.onclick = (e) => {
       e.preventDefault();
       window.palToggle();
     };
   }
+
+  // 탭 버튼들과의 동기화
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const onClick = btn.getAttribute('onclick') || '';
+    if (onClick.includes("'palette'")) {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        window.palToggle(true);
+      };
+    } else {
+      // 다른 탭 클릭 시 편집 모드 해제
+      const tabMatch = onClick.match(/switchTab\('([^']+)'\)/);
+      if (tabMatch) {
+        const tabName = tabMatch[1];
+        btn.onclick = (e) => {
+          if (window._palOpen) window.palToggle(false);
+          if (typeof window.switchTab === 'function') window.switchTab(tabName);
+        };
+      }
+    }
+  });
 }
 
 // 초기화 로직 (React 내비게이션 지원)
