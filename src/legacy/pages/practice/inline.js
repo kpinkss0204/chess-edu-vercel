@@ -326,29 +326,38 @@ function attachBoardEvents() {
   var board = document.getElementById('chessboard');
   if (!board) { setTimeout(attachBoardEvents, 500); return; }
 
+  // 드롭 허용을 위한 dragover 추가
+  board.addEventListener('dragover', function(e) {
+    if (window._palOpen) e.preventDefault();
+  });
+
   board.addEventListener('drop', function(e) {
     console.log('[PAL] Drop event fired');
     e.preventDefault();
+    if (!window._palOpen) return;
     var sq = sqAt(e);
-    if (!sq) { console.log('[PAL] Drop: No square found'); return; }
-    if (_dragSq) {
-      console.log('[PAL] Drag-and-drop piece movement');
-      var from = _dragSq; _dragSq = null;
-      var p = get(from.col, from.row);
-      set(from.col, from.row, null);
-      if (p) set(sq.col, sq.row, p);
-      return;
-    }
-    if (!window._palOpen) { console.log('[PAL] Drop: Pal not open'); return; }
+    if (!sq) return;
+    
+    // 외부 팔레트에서 드롭된 경우
     var raw = e.dataTransfer.getData('pal');
-    console.log('[PAL] Drop: Raw data =', raw);
-    if (raw) { try { set(sq.col,sq.row,JSON.parse(raw)); } catch(_){} }
-    else if (_sel && _sel!=='erase') set(sq.col,sq.row,_sel);
+    if (raw) {
+      try { 
+        set(sq.col, sq.row, JSON.parse(raw)); 
+        return;
+      } catch(_){}
+    }
   });
 
   board.addEventListener('click', function(e) {
     console.log('[PAL] Click event fired. PalOpen:', window._palOpen, 'Sel:', _sel);
     if (!window._palOpen) return;
+    
+    // 드래그 직후 발생하는 클릭 무시
+    if (window._isPalDragging) {
+      window._isPalDragging = false;
+      return;
+    }
+
     var sq = sqAt(e);
     if (!sq) return;
     e.stopImmediatePropagation();
@@ -364,11 +373,44 @@ function attachBoardEvents() {
     if (!sq) return;
     var p = get(sq.col, sq.row);
     if (!p) return;
+    
     e.preventDefault();
     _dragSq = sq;
-    var sqEls = board.querySelectorAll('.square');
-    var img = sqEls[sq.row*8+sq.col] && sqEls[sq.row*8+sq.col].querySelector('.piece-img');
-    if (img) img.classList.add('pal-dragging');
+    window._isPalDragging = false;
+
+    // 기물 레이어에서 해당 위치의 이미지 찾기
+    var piecesLayer = board.querySelector('.board-pieces-layer');
+    if (piecesLayer) {
+      var dr = (typeof game !== 'undefined' && game.flipped) ? 7 - sq.row : sq.row;
+      var dc = (typeof game !== 'undefined' && game.flipped) ? 7 - sq.col : sq.col;
+      var topVal = (dr * 12.5) + '%';
+      var leftVal = (dc * 12.5) + '%';
+      var imgs = piecesLayer.querySelectorAll('img');
+      for (var i = 0; i < imgs.length; i++) {
+        if (imgs[i].style.top === topVal && imgs[i].style.left === leftVal) {
+          imgs[i].classList.add('pal-dragging');
+          break;
+        }
+      }
+    }
+  }, true);
+
+  board.addEventListener('mouseup', function(e) {
+    if (!window._palOpen || e.button!==0) return;
+    if (!_dragSq) return;
+    
+    var sq = sqAt(e);
+    if (sq && (_dragSq.col !== sq.col || _dragSq.row !== sq.row)) {
+      var p = get(_dragSq.col, _dragSq.row);
+      if (p) {
+        set(_dragSq.col, _dragSq.row, null);
+        set(sq.col, sq.row, p);
+        window._isPalDragging = true; // 드래그 완료 표시
+      }
+    }
+    
+    _dragSq = null;
+    board.querySelectorAll('.piece-img').forEach(function(i) { i.classList.remove('pal-dragging'); });
   }, true);
 }
 
@@ -382,13 +424,19 @@ function attachUIEvents() {
   }
 }
 
-// 초기화
-window.addEventListener('DOMContentLoaded', () => {
+// 초기화 로직 (React 내비게이션 지원)
+function initPalSystem() {
   palBuild();
   attachEvents();
   attachBoardEvents();
   attachUIEvents();
-});
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initPalSystem);
+} else {
+  initPalSystem();
+}
 
 // 전역 노출
 window.palToggle = palToggle;
