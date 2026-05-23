@@ -102,27 +102,6 @@
     <!-- Config Tab -->
     <div class="tab-panel active" id="tab-config">
       <div id="config-panel">
-        <!-- Match Settings -->
-        <div class="config-section">
-          <div class="config-title">대전 설정</div>
-          <div class="setting-row">
-            <label>모드</label>
-            <div class="mode-pills">
-              <button class="mode-pill active" id="mode-casual" onclick="setMode('casual')">캐주얼</button>
-              <button class="mode-pill" id="mode-level" onclick="setMode('level')">레벨전</button>
-            </div>
-          </div>
-          <div class="setting-row" id="level-row" style="display:none;">
-            <label>엔진 레벨</label>
-            <select id="engine-level" onchange="setEngineLevel(this.value)">
-              <option value="1">Level 1</option>
-              <option value="5">Level 5</option>
-              <option value="10">Level 10</option>
-              <option value="20" selected>Level 20</option>
-            </select>
-          </div>
-        </div>
-
         <!-- Position Input -->
         <div class="config-section">
           <div class="config-title">포지션 입력</div>
