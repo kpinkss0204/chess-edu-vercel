@@ -394,6 +394,7 @@ class ChessGame {
     window._enginePracticeThinking = false;
     this.reset();
     pvData = {};
+    window.pvDataFen = ''; // 전역 동기화 정보 초기화
     lastAnalyzedFen = '';
     renderTopMoves('새 게임');
     document.getElementById('eval-score').textContent = '0.0';

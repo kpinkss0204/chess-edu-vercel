@@ -76,8 +76,10 @@ function buildChessContext() {
   const fen = boardToFen(game.board, game.turn, game.castling, game.enPassant, game.halfMove, game.fullMove);
 
   // 엔진 데이터 유효성 확인: 현재 FEN과 일치하는지 체크
-  const pvDataValid = window.pvData && window.pvDataFen && (typeof normFen === 'function') && 
-                      (normFen(window.pvDataFen) === normFen(fen));
+  const currentNormFen = (typeof normFen === 'function') ? normFen(fen) : fen;
+  const engineNormFen  = (window.pvDataFen && typeof normFen === 'function') ? normFen(window.pvDataFen) : '';
+  
+  const pvDataValid = window.pvData && (engineNormFen === currentNormFen);
 
   // 엔진 라인 3개 (window.pvData에서)
   const pv1 = pvDataValid ? (window.pvData && window.pvData[1]) : null;
@@ -1078,8 +1080,11 @@ function extractPositionInsights(fen) {
 // 스톡피시 라인이 충분한지 검사 (최소 1수 이상 있으면 시작)
 function hasEnoughLines(ctx) {
   // FEN 동기화 확인: 엔진 결과(pvDataFen)가 현재 포지션(ctx.fen)과 일치해야 함
-  if (!window.pvDataFen || typeof normFen !== 'function') return false;
-  if (normFen(window.pvDataFen) !== normFen(ctx.fen)) return false;
+  if (typeof normFen !== 'function') return false;
+  const currentFen = normFen(ctx.fen);
+  const engineFen  = window.pvDataFen ? normFen(window.pvDataFen) : '';
+  
+  if (engineFen !== currentFen) return false;
 
   const pv1 = window.pvData && window.pvData[1];
   const len1 = pv1 && pv1.moves ? pv1.moves.length : 0;
@@ -1270,12 +1275,27 @@ async function askCoach(source) {
 
 /** UCI 엔진 라인 → SAN (프롬프트용) */
 function engineLineSan(ctx, pv, maxLen) {
-  if (!pv || !pv.moves || !pv.moves.length || typeof uciMovesToSan !== 'function') return null;
+  if (!pv || typeof uciMovesToSan !== 'function') return null;
+  
+  // 이미 SAN으로 변환된 moves가 있다면 우선 사용
+  if (pv.moves && pv.moves.length > 0) {
+    const m = pv.moves;
+    // 첫 수가 UCI(e2e4)가 아닌 SAN(e4, Nf3 등) 형태라면 그대로 반환
+    if (m[0] && !/^[a-h][1-8][a-h][1-8]/.test(m[0])) {
+      return m.slice(0, maxLen || 8).join(' ');
+    }
+  }
+
+  // UCI(pv.pv)만 있는 경우 SAN으로 변환 시도
+  const uciList = pv.pv || pv.moves || [];
+  if (!uciList || !uciList.length) return null;
+
   const parts = ctx.fen.trim().split(/\s+/);
   const board = parseFenBoard(parts[0]);
   if (!board) return null;
+  
   const sanList = uciMovesToSan(
-    pv.moves.slice(0, maxLen || 8),
+    uciList.slice(0, maxLen || 8),
     board,
     parts[1] || 'w',
     parseFenCastling(parts[2] || '-'),
@@ -1327,17 +1347,39 @@ function buildCommentaryPrompt(ctx) {
     lines.push(`[엔진 라인 미준비] 최선수·이후 수순 섹션에서 구체적 SAN 나열 금지. 구조·브리프·직전 수 맥락만 설명.`);
   }
 
+  // 사용자 화살표 (후보수 / 수순) 정제
+  const refineArrow = (arrow) => {
+    if (!arrow || !arrow.includes('-')) return arrow;
+    const [from, to] = arrow.split('-');
+    const idx = sqToIdx(from);
+    const cell = game.board[idx[0]]?.[idx[1]];
+    if (!cell) return arrow;
+    const mover = cell.color === 'w' ? '백' : '흑';
+    const pName = PIECE_KR[cell.piece.toUpperCase()] || cell.piece;
+    return `${mover}의 ${pName}가 ${to}로 이동하는 수`;
+  };
+
   if (ctx.candidateMoves && ctx.candidateMoves.length > 0) {
-    lines.push(`사용자 후보수 (화살표): ${ctx.candidateMoves.join(', ')} — 엔진 추천과 비교해서 언급해주세요.`);
+    const refined = ctx.candidateMoves.map(refineArrow).join(', ');
+    lines.push(`사용자 후보수 (화살표): ${refined} — 엔진 추천과 비교해서 언급해주세요.`);
   }
   if (ctx.sequenceMoves && ctx.sequenceMoves.length > 0) {
-    lines.push(`사용자 수순 (Alt+화살표): ${ctx.sequenceMoves.join(' → ')} — 장단점 간략히 언급해주세요.`);
+    const refined = ctx.sequenceMoves.map(refineArrow).join(' → ');
+    lines.push(`사용자 수순 (Alt+화살표): ${refined} — 장단점 간략히 언급해주세요.`);
   }
 
   // 구조화 브리프 (위협/약점/엔진 인과 — 검증된 사실만)
   if (ctx.positionBrief && typeof formatPositionBriefForPrompt === 'function') {
     lines.push(``);
     lines.push(formatPositionBriefForPrompt(ctx.positionBrief, ctx));
+    
+    // 로직 계산 사실 추가 (hanging, mateIn1 등 직접 노출하여 AI에게 강조)
+    if (ctx.positionBrief.hanging && ctx.positionBrief.hanging.length > 0) {
+      lines.push(`■ 로직 계산 위협 (반드시 언급): ${ctx.positionBrief.hanging.join(', ')} 기물이 방어 없이 공격받고 있음.`);
+    }
+    if (ctx.positionBrief.mateIn1 && ctx.positionBrief.mateIn1.length > 0) {
+      lines.push(`■ 로직 계산 메이트 (최우선): ${ctx.positionBrief.mateIn1.join(', ')} 수로 1수만에 체크메이트 가능.`);
+    }
   } else if (ctx.positionInsights && ctx.positionInsights.length > 0) {
     lines.push(``);
     lines.push(`[포지션 구조 분석 — 코드 계산 사실]`);
@@ -1346,10 +1388,10 @@ function buildCommentaryPrompt(ctx) {
 
   if (ctx.threatData) {
     lines.push(``);
-    lines.push(`[위협 분석 데이터 — 엔진·브리프와 충돌하면 브리프·엔진 우선. 없는 수·기물은 인용 금지]`);
-    if (ctx.threatData.idea) lines.push(`핵심 계획: ${ctx.threatData.idea}`);
-    if (ctx.threatData.prob) lines.push(`문제점: ${ctx.threatData.prob}`);
-    if (ctx.threatData.sol)  lines.push(`최선책: ${ctx.threatData.sol}`);
+    lines.push(`[참고용 이전 AI 분석 — 엔진·브리프와 충돌하면 무시할 것]`);
+    if (ctx.threatData.idea) lines.push(`이전 분석 아이디어: ${ctx.threatData.idea}`);
+    if (ctx.threatData.prob) lines.push(`이전 분석 문제점: ${ctx.threatData.prob}`);
+    if (ctx.threatData.sol)  lines.push(`이전 분석 해결책: ${ctx.threatData.sol}`);
   }
 
   if (ctx.pgnMoves) lines.push(`전체 기보: ${ctx.pgnMoves}`);
@@ -1610,7 +1652,7 @@ async function callGroqAPIWithSystemTemp(systemPrompt, userContent, maxTokens = 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-1.5-flash-latest',
         max_tokens: maxTokens,
         temperature: temperature,
         messages: [
@@ -1677,9 +1719,15 @@ function sanitizeAnswer(text, ctx) {
     out = `**포지션 상황:** 현재 포지션을 분석 중입니다.\n**약점 분석:** 스톡피시 라인을 바탕으로 분석이 필요합니다.\n**최선수 분석:** 엔진 추천수를 확인해주세요.\n**이후 수순:** 다음 수순을 살펴보세요.`;
   }
 
+  // 엔진 수순이 정말로 없는지 확인 (이미 텍스트에 포함되어 있다면 강제 대체 자제)
   const pv1 = (ctx && ctx.pvData && ctx.pvData[1]) || (window.pvData && window.pvData[1]);
   const engineSan = ctx ? (engineLineSan(ctx, pv1, 8) || '') : '';
-  if (!engineSan.trim()) {
+  
+  // 만약 AI가 이미 본문에 SAN 수순(Nf3, e4 등)을 어느 정도 언급했다면, 
+  // 엔진 데이터가 순간적으로 없더라도 강제 폴백 문구 삽입을 지양함.
+  const hasChessMovesInText = (out.match(/\b([NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?)\b/g) || []).length > 2;
+
+  if (!engineSan.trim() && !hasChessMovesInText) {
     out = out.replace(/\*\*이후 수순\*\*[\s\S]*?(?=\*\*|$)/gi, '');
     out = out.replace(/\*\*최선수 분석\*\*[\s\S]*?(?=\*\*|$)/gi, '**최선수 분석**\n엔진 수순이 아직 준비되지 않아, 구체적인 수순은 생략합니다. 구조·위협·직전 수 맥락을 참고해 주세요.\n\n');
   }

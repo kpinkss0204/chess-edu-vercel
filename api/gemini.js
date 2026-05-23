@@ -10,26 +10,24 @@ export default async function handler(req, res) {
   try {
     const { model, messages, max_tokens, temperature } = req.body;
     
-    // Gemini API v1 stable 사용
+    // Gemini API v1beta 사용 (system_instruction 지원)
     const geminiModel = model || 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1/models/${geminiModel}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
 
     // System prompt 추출 및 User prompt 구성
     const systemInstruction = messages.find(m => m.role === 'system')?.content || '';
     const userMessage = messages.find(m => m.role === 'user')?.content || '';
 
-    // v1에서는 system_instruction 필드 대신 유저 메시지 앞에 지침을 추가하여 안정성 확보
-    const combinedPrompt = systemInstruction 
-      ? `SYSTEM INSTRUCTION:\n${systemInstruction}\n\nUSER MESSAGE:\n${userMessage}`
-      : userMessage;
-
     const payload = {
       contents: [
         {
           role: 'user',
-          parts: [{ text: combinedPrompt }]
+          parts: [{ text: userMessage }]
         }
       ],
+      system_instruction: systemInstruction ? {
+        parts: [{ text: systemInstruction }]
+      } : undefined,
       generationConfig: {
         maxOutputTokens: max_tokens || 1000,
         temperature: temperature || 0.3,

@@ -796,6 +796,8 @@ function analyzePosition(force) {
     const snapC  = {...game.castling};
     const snapEP = game.enPassant;
     pvData = processPvData(cachedEntry.pvs, cachedTurn, snapB, snapC, snapEP);
+    window.pvData = pvData; // 전역 데이터 동기화
+    window.pvDataFen = fen;   // FEN 동기화
     const bestEval = pvData[1] ? pvData[1].eval : null;
     const v = cachedEntry.cp / 100;
     const evalStr = bestEval || (v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2));
@@ -807,6 +809,7 @@ function analyzePosition(force) {
     renderTopMoves();
   } else {
     pvData = {};
+    window.pvDataFen = ''; // 전역 동기화 정보 초기화
     renderTopMoves('분석 중...');
     const dinfo = document.getElementById('depth-info');
     if (dinfo) dinfo.textContent = '분석 시작 중...';
@@ -970,6 +973,7 @@ function _analyzeSpecificFen(fen) {
   pendingEP = ep;
 
   document.getElementById('engine-dot').className = 'engine-dot thinking';
+  window.pvDataFen = ''; // 새 분석 시작 시 동기화 정보 초기화
 
   analysisTimeout = setTimeout(() => {
     if (myId !== currentAnalysisId) return;
@@ -977,6 +981,7 @@ function _analyzeSpecificFen(fen) {
     lastAnalyzedFen = fen;
     lastSentFen = fen;
     pvData = {};
+    window.pvDataFen = ''; // 전역 동기화 정보 초기화
     rawPvStore = {};
     cycleStore = {};
     cycleDepth = 0;
