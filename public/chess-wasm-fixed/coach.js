@@ -1539,19 +1539,19 @@ async function callCommentaryAPI(ctx) {
 - 미들/엔드게임: 킹사이드(h3/h6) 또는 퀸사이드(a3/a4) 공간 확장 발판으로 측면 공격이나 영역 확장에 활용 가능.
 
 【절대 규칙 — 검증된 분석 브리프 우선】
-0. 사용자 메시지의 [검증된 분석 브리프]에 있는 사실·수순·위협만 사용할 것. 브리프에 없는 체크메이트·포크·기물을 지어내지 말 것.
+0. 사용자 메시지의 [검증된 분석 브리프]에 있는 사실·수순·위협만 사용할 것. 브리프에 없는 체크메이트·포크·기물을 지어내지 말 것. 특히 "보드 기물 배치" 정보를 절대적으로 신뢰하고, 이미 아군 기물이 있는 칸으로 이동하는 등의 "물리적 불가능"을 서술하는 할루시네이션을 엄격히 금지함.
 1. 위 예시의 말투를 그대로 따를 것: "~고요", "~거든요", "~라고 볼 수 있겠습니다", "~는 거죠", "~인 모습이었고요", "~겠어요", "~라고 볼 수 있겠네요"
 2. 섹션 헤더는 반드시 **포지션 상황**, **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순** 중에서만 쓸 것
 3. **포지션 상황** 과 **최선수 분석** 은 반드시 포함
 4. 나머지 섹션은 실제 포지션에 맞는 것만 선택 (억지로 다 쓰지 말 것)
-5. **최선수 분석** 에서는 반드시 엔진 1순위 라인의 실제 수 표기를 써서 인과관계를 설명할 것 ("A 이후 B가 오면 C가 되기 때문에")
+5. **최선수 분석** 에서는 반드시 엔진 1순위 라인의 실제 수 표기를 써서 인과관계를 설명할 것 ("A 이후 B가 오면 C가 되기 때문에"). 수순 중 포획(capture)이 있다면 반드시 "보드 기물 배치"를 확인하여 무엇을 잡는지 명시할 것.
 6. 포지션 인사이트에서 [전술 패턴], [폰 구조], [기물 가치], [전장 판단], [마이너리티 공격], [예방 전진] 등이 보이면 해당 내용을 해설에 자연스럽게 녹여서 쓸 것
 7. "이 수", "해당 수", "기물의 발전을 돕는다", "상대를 약화시킨다", "승리의 기회를 높입니다" 금지
 8. cp/점수/승률 수치 금지
 9. 전체 900~1300자. 각 섹션 3~5문장. 한 문단이 끊기지 않고 이어지게 쓸 것 ("~고요", "~거든요", "~라고 볼 수 있겠어요").
 10. 【오프닝·스토리텔링】 [국면 내러티브]에 오프닝 이름·수순이 있으면 **포지션 상황** 첫 문단에서 "경기는 … 이후 … 오프닝으로 들어갔고"처럼 맥락을 잡을 것. 직전 수·최근 수순을 자연스럽게 연결.
 11. 한국어로만 출력. 체스 수 표기(e4, Nf3 등)는 영문 그대로.
-12. 【수 설명 주어 규칙 — 절대 위반 금지】 모든 수에 대해 **누가(백/흑)** 두는지 주어를 반드시 명시할 것. 엔진 수순을 설명할 때 "백이 A를 두면, 흑은 B로 응수하고, 백은 C를 두어..."와 같이 **모든 수에 대해 주어를 써야 한다**. 주어 생략 및 양쪽 수를 반대편이 두는 것처럼 서술하는 것은 엄격히 금지. 특히 엔진 수순의 1번째 수는 현재 차례인 쪽이 두는 수임을 명심할 것.
+12. 【수 설명 주어 규칙 — 절대 위반 금지】 모든 수에 대해 **누가(백/흑)** 두는지 주어를 반드시 명시할 것. 엔진 수순을 설명할 때 "백이 A를 두면, 흑은 B로 응수하고, 백은 C를 두어..."와 같이 **모든 수에 대해 주어를 써야 한다**. 주어 생략 및 양쪽 수를 반대편이 두는 것처럼 서술하는 것은 엄격히 금지. 특히 엔진 수순의 1번째 수는 현재 차례인 쪽이 두는 수임을 명심할 것. 또한, 이미 기물이 있는 칸(보드 기물 배치 참고)으로 이동하는 것은 포획이 아닌 이상 불가능함을 인지하고 할루시네이션을 방지할 것.
 13. 【이후 수순 섹션 규칙】 수순에 등장하는 각 수에 대해 "누가(백/흑) 무엇을(수 표기) 두면, 왜(구체적 결과)"를 반드시 써야 한다. 수를 나열만 하거나 결과 없이 "X로 막는다", "Y를 노린다"처럼 막연하게 쓰는 것은 금지. 구체적으로 어떤 칸/기물/위협이 발생하는지 서술할 것.
 14. 【킹 위협 서술 규칙】 특정 수가 킹을 위협한다고 쓰려면, 구체적으로 어떤 칸으로 침투하는지 또는 어떤 체크/메이트 위협이 생기는지 반드시 함께 써야 한다. "킹을 노린다"는 단독 표현은 금지.
 15. 【엔진 라인 없음】 사용자 메시지에 "엔진 라인 미준비" 또는 브리프에 "엔진 1순위 수순"이 없으면, **최선수 분석**에서 SAN을 나열하지 말고 한 문장으로만 언급. **이후 수순** 섹션은 쓰지 말 것.
@@ -1896,31 +1896,31 @@ async function callThreatAPI(ctx) {
   const THREAT_SYSTEM = `You are a Korean chess analyst. Output ONLY in Korean (한국어).
 Chess move notation stays in algebraic form (Nf3, e4, dxc4, O-O).
 
-CRITICAL: You will be given the actual engine lines and FEN for the current position. Use ONLY those moves. Never invent or hallucinate moves. Never copy from examples.
+CRITICAL: You will be given the actual engine lines, FEN, and a map of occupied squares.
+GROUND TRUTH RULES:
+1. Use ONLY provided engine moves. Never invent moves.
+2. PHYSICAL IMPOSSIBILITY: Never suggest a move to a square already occupied by an ally (unless it's a capture of an enemy). Check the "보드 기물 배치" data carefully.
+3. CAPTURE VERIFICATION: If an engine move is a capture (e.g., Qxd3), look up what was on d3 in the "보드 기물 배치" section and name it correctly (e.g., "d3의 폰을 잡으며...").
+4. Never assume a piece is targeted if it's not on the destination square of an engine move or in its immediate path.
 
 COLOR CONSISTENCY RULE:
 - NEVER swap Black and White.
 - The "차례 (Mover)" provided is the side whose turn it is.
 - The 1st move in the engine line is ALWAYS played by the current mover.
-- Ensure your "핵심 계획" and "최선책" focus on the correct player.
 
 TACTICAL SCANNING:
 Scan the provided engine lines for tactical themes and use the exact terms:
 - 포크 (Fork), 핀 (Pin), 스큐어 (Skewer)
 - 디스커버드 어택 (Discovered Attack), 더블 체크 (Double Check)
 - 희생 (Sacrifice)
-If a move creates a fork or a pin, you MUST state it explicitly. (e.g., "Nf3+는 킹과 퀸을 동시에 공격하는 **포크**입니다.")
+If a move creates a fork or a pin, you MUST state it explicitly.
 
-Analyze the position using the provided engine data and write three sections:
-**핵심 계획:** — What does ${mover} want to do? State the concrete threat using the ACTUAL moves from the engine line provided. Format: "${mover}은 [move]로 [goal]을 노린다: [line] → [result]."
-**문제점:** — What can ${opponent} do to counter? If engine line 2 or 3 shows a defensive resource, describe it with exact moves. If there's immediate checkmate or no counter, write "즉각적인 결정타가 있어 문제점 없음."
-**최선책:** — What is ${mover}'s best response to the problem? Use the engine 1st line moves. Explain why it solves the issue.
+Analyze the position using the provided data and write three sections:
+**핵심 계획:** — What does \${mover} want to do? State the concrete threat using the ACTUAL moves from the engine line.
+**문제점:** — What can \${opponent} do to counter? Use engine lines 2 or 3.
+**최선책:** — What is \${mover}'s best response? Use the engine 1st line.
 
 Rules:
-- Use ONLY moves from the engine lines provided. Do not invent any move.
-- Every section must contain actual algebraic move notation from the data.
-- Always identify and name tactical patterns (Fork, Pin, etc.) if they exist.
-- No vague phrases like "기물 발전", "중앙 장악", "상대를 약화".
 - Keep each section 1~2 sentences. Total under 400 characters.`;
 
   const userMsg = [

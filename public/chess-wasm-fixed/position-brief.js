@@ -377,16 +377,17 @@
       const boardAfter = global.applyMoveToBoard(board.map(r => [...r]), move, turn);
       const forkNote = forkAfterMove(boardAfter, move, turn);
       if (forkNote) tags.push('fork');
-
-      let note = `${mover} ${san}`;
-      if (tags.includes('mate')) {
-        note += ' → 즉시 체크메이트';
-      } else if (tags.includes('check')) {
-        note += ' → 체크, 상대는 킹을 안전한 칸으로 피해야 함';
-      } else if (tags.includes('capture')) {
-        const capName = captured ? PIECE_KR[captured[1]] : '폰';
-        note += ` → ${capName} 포획`;
-      }
+let note = `${mover} ${san}`;
+if (tags.includes('mate')) {
+  note += ' → 즉시 체크메이트';
+} else if (tags.includes('check')) {
+  note += ' → 체크, 상대는 킹을 안전한 칸으로 피해야 함';
+} else if (tags.includes('capture')) {
+  const cap = captured || epCap;
+  const capName = PIECE_KR[cap[1]];
+  const targetSq = idxToSq(move.to[0], move.to[1]);
+  note += ` → ${targetSq}의 ${COLOR_KR[cap[0]]} ${capName} 포획`;
+}
       if (forkNote) note += ` (${forkNote})`;
 
       steps.push({ ply: i + 1, san, mover, tags, note });
@@ -721,6 +722,7 @@
     const brief = {
       fen,
       turn: state ? state.turn : (fen.split(' ')[1] || 'w'),
+      pieceMap: {}, // 칸별 기물 정보 추가
       mateIn1: [],
       mateIn2: [],
       mateIn3: [],
@@ -740,6 +742,21 @@
       anchor: null,
       legalMoves: [],
     };
+
+    if (state) {
+      for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const c = state.board[r][f];
+          if (c) {
+            brief.pieceMap[idxToSq(r, f)] = {
+              piece: PIECE_KR[c[1]],
+              color: COLOR_KR[c[0]],
+              raw: c
+            };
+          }
+        }
+      }
+    }
 
     brief.narrative = buildGameNarrative(opts);
     brief.anchor = buildPositionAnchor(opts, state);
@@ -826,6 +843,16 @@
   function formatPositionBriefForPrompt(brief, ctx) {
     const lines = [];
     lines.push('[검증된 분석 브리프 — 아래 사실만 해설에 사용. 브리프에 없는 위협·기물·수를 만들어내지 말 것]');
+
+    if (brief.pieceMap && Object.keys(brief.pieceMap).length) {
+      lines.push('');
+      lines.push('■ 보드 기물 배치 (절대적 물리 법칙: 이미 기물이 있는 칸으로는 아군 기물이 "이동"할 수 없으며, 상대 기물이 있는 칸으로만 "포획" 이동이 가능함)');
+      const occupied = Object.entries(brief.pieceMap)
+        .sort((a,b) => a[0].localeCompare(b[0]))
+        .map(([sq, info]) => `${sq}: ${info.color} ${info.piece}`)
+        .join(', ');
+      lines.push(`  현재 기물이 있는 칸: ${occupied}`);
+    }
 
     if (brief.narrative) {
       lines.push('');
