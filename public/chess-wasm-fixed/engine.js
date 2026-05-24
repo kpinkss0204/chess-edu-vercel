@@ -475,18 +475,24 @@ function _sendGoCommand(fen, myId, mpv, movetime) {
 }
 
 /**
- * 현재 포지션에서 Stockfish 최선 1수만 요청 (엔드게임 연습 상대)
+ * 현재 포지션에서 Stockfish 최선 1수만 요청 (대전/엔드게임 연습 상대)
+ * @param {string} fen 분석할 포지션
+ * @param {function} callback 최선수(uci)를 받을 콜백
+ * @param {number} movetime 엔진이 생각할 시간(ms)
  */
-function executeEnginePlayMove(fen, callback) {
+function executeEnginePlayMove(fen, callback, movetime) {
   if (!mainWorker || !mainReady) {
     callback(null);
     return;
   }
+  const waitTime = movetime || 1500; // 기본 1.5초
+
   var sendGo = function () {
     window._enginePlayResolve = callback;
     mainWorker.postMessage('setoption name MultiPV value 1');
     mainWorker.postMessage('position fen ' + fen);
-    mainWorker.postMessage('go depth 40 movetime 10000');
+    // 지정된 시간(movetime) 동안 충분히 생각하도록 설정
+    mainWorker.postMessage('go depth 40 movetime ' + waitTime);
     engineSearching = true;
     var ed = document.getElementById('engine-dot');
     if (ed) ed.className = 'engine-dot thinking';
@@ -750,6 +756,10 @@ let settingsDirty = false;
 function analyzePosition(force) {
   if (coachOpen) updateCoachContext();
   if (!autoAnalyze || !mainReady) return;
+
+  // 엔진이 대전 상대로서 수를 생각 중이면 일반 분석 요청 무시 (간섭 방지)
+  if (window._enginePracticeThinking && !force) return;
+
   if (analysisTimeout) clearTimeout(analysisTimeout);
 
   const fen = boardToFen(
@@ -757,17 +767,62 @@ function analyzePosition(force) {
     game.halfMove, game.fullMove
   );
 
-  // 기물 수 체크 (Lite 엔진 한계 경고용)
-  if (force) {
-    let wCount=0, bCount=0;
-    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
-      let p = game.board[r][c];
-      if(p){ if(p[0]==='w') wCount++; else bCount++; }
+  // 기물 수 및 포지션 유효성 체크
+  let wCount=0, bCount=0, wK=0, bK=0;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    let p = game.board[r][c];
+    if(p){ 
+      if(p[0]==='w') {
+        wCount++; 
+        if(p[1]==='K') wK++;
+      } else {
+        bCount++;
+        if(p[1]==='K') bK++;
+      }
     }
-    console.log(`[analyzePosition] 기물 수 - 백: ${wCount}, 흑: ${bCount}`);
+  }
+
+  const isPositionValid = (wK === 1 && bK === 1);
+  const warnEl = document.getElementById('pos-warn-msg');
+  if (warnEl) {
+    let warnings = [];
     if (wCount > 16 || bCount > 16) {
-      console.warn('[analyzePosition] 주의: 한 사이드의 기물이 16개를 초과했습니다. Lite 버전 엔진에서는 평가치가 0.0으로 나올 수 있습니다.');
+      warnings.push('⚠️ 한 사이드의 기물이 16개를 초과했습니다. 평가치가 0.0으로 나올 수 있습니다.');
     }
+    if (wK === 0 || bK === 0) {
+      warnings.push('⚠️ 양측의 킹이 모두 보드에 있어야 분석이 가능합니다.');
+    } else if (wK > 1 || bK > 1) {
+      warnings.push('⚠️ 킹은 각 진영에 하나씩만 있어야 합니다.');
+    }
+
+    if (warnings.length > 0) {
+      warnEl.innerHTML = warnings.join('<br>');
+      warnEl.style.display = 'block';
+    } else {
+      warnEl.style.display = 'none';
+    }
+  }
+
+  if (force) {
+    console.log(`[analyzePosition] 기물 수 - 백: ${wCount}(K:${wK}), 흑: ${bCount}(K:${bK})`);
+  }
+
+  // 킹이 없거나 여러 개면 분석 중단
+  if (!isPositionValid) {
+    const dinfo = document.getElementById('depth-info');
+    if (dinfo) dinfo.textContent = '분석 중단 (킹 부재/오류)';
+    const escore = document.getElementById('eval-score');
+    if (escore) escore.textContent = '---';
+    const edot = document.getElementById('engine-dot');
+    if (edot) edot.className = 'engine-dot ready';
+    
+    // 엔진이 현재 가동 중이면 멈춤
+    if (engineSearching && mainWorker) {
+      mainWorker.postMessage('stop');
+      engineSearching = false;
+      pendingNextFen = null;
+    }
+    return;
   }
 
   console.log('[analyzePosition] FEN:', fen, 'force:', !!force);
@@ -825,6 +880,9 @@ function analyzePosition(force) {
   analysisTimeout = setTimeout(() => {
     if (myId !== currentAnalysisId) return;
     if (!mainWorker) return;
+
+    // 포지션 유효성 재확인 (타임아웃 사이의 상태 변화 대응)
+    if (!isPositionValid) return;
 
     lastAnalyzedFen = fen;
     lastSentFen     = fen;

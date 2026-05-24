@@ -73,30 +73,46 @@
   function scheduleEngineTurn() {
     if (!window._enginePracticeMode || typeof game === 'undefined' || !game) return;
     if (game.turn === window._enginePracticeMode.myColor) return;
+
+    // 엔진 차례임을 UI에 표시
     window._enginePracticeThinking = true;
+    setPlayerLabels(window._enginePracticeMode.myColor);
+
     var fen = boardToFen(game.board, game.turn, game.castling, game.enPassant, game.halfMove, game.fullMove);
+    
+    // 엔진이 1.5초(1500ms) 동안 충분히 분석하도록 요청
+    // 이 시간 동안 engine.js의 analyzePosition은 잠기지만, 엔진의 실시간 info 메시지는 UI에 반영됨
     executeEnginePlayMove(fen, function (uci) {
+      window._enginePracticeThinking = false;
+
       if (!uci || !window._enginePracticeMode) {
-        window._enginePracticeThinking = false;
         if (typeof analyzePosition === 'function') analyzePosition(true);
         return;
       }
-      // 1초 딜레이 후 엔진 수 적용 (사용자가 생각할 시간 제공)
-      setTimeout(function () {
-        window._enginePracticeThinking = false;
-        var mv = uciToMove(uci, game.board, game.turn, game.castling, game.enPassant);
-        if (!mv) {
-          if (typeof showToast === 'function') showToast('엔진 수 적용 실패');
-          if (typeof analyzePosition === 'function') analyzePosition(true);
-          return;
-        }
-        game.makeMove(mv, mv.promoPiece || null);
+
+      var mv = uciToMove(uci, game.board, game.turn, game.castling, game.enPassant);
+      if (!mv) {
+        if (typeof showToast === 'function') showToast('엔진 수 적용 실패');
         if (typeof analyzePosition === 'function') analyzePosition(true);
-      }, 1000);
-    });
+        return;
+      }
+
+      // 분석이 끝난 즉시 착수
+      game.makeMove(mv, mv.promoPiece || null);
+      if (typeof analyzePosition === 'function') analyzePosition(true);
+    }, 1500);
   }
 
   window._enginePracticeAfterHumanMove = function () {
+    // 사용자가 첫 수를 두었을 때 자동으로 연습 모드 색상 설정
+    if (!window._enginePracticeMode && typeof game !== 'undefined' && game) {
+      // game.turn은 이미 상대방 차례로 넘어갔으므로, 반대 색상이 사용자의 색상
+      window._enginePracticeMode = {
+        myColor: game.turn === 'w' ? 'b' : 'w'
+      };
+      setPlayerLabels(window._enginePracticeMode.myColor);
+      showToast('🤖 스톡피쉬 대전이 시작되었습니다');
+    }
     scheduleEngineTurn();
   };
 
@@ -120,10 +136,35 @@
   window.tryInitPracticePage = function () {
     if (!document.body || !document.body.classList.contains('practice-page')) return;
     
-    // 기본 초기화
-    if (typeof game !== 'undefined' && game) {
-        game.reset();
+    // URL에서 토픽 확인
+    var topicKey = readTopicFromUrl();
+    if (topicKey && ENDGAME_TOPICS[topicKey]) {
+      var cfg = ENDGAME_TOPICS[topicKey];
+      window._enginePracticeMode = { 
+        myColor: cfg.myColor, 
+        topicKey: topicKey, 
+        title: cfg.title 
+      };
+      window._enginePracticeThinking = false;
+      if (typeof game !== 'undefined' && game) {
+        game.loadFromFen(cfg.fen);
+        applyHumanFlip(cfg.myColor);
+        setPlayerLabels(cfg.myColor);
         if (typeof analyzePosition === 'function') analyzePosition(true);
+      }
+      showToast('🎯 엔드게임 연습: ' + cfg.title);
+      scheduleEngineTurn();
+    } else {
+      // 일반 연습 모드 초기화
+      window._enginePracticeMode = null;
+      window._enginePracticeThinking = false;
+      
+      if (typeof game !== 'undefined' && game) {
+          game.reset();
+          if (typeof analyzePosition === 'function') analyzePosition(true);
+      }
+      // UI 라벨 초기화
+      setPlayerLabels('w');
     }
   };
 

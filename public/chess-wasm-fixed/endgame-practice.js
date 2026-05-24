@@ -65,25 +65,26 @@
     if (game.turn === window._enginePracticeMode.myColor) return;
     window._enginePracticeThinking = true;
     var fen = getFenForEngine();
+
+    // 엔진이 1.5초 동안 충분히 분석하도록 요청
     executeEnginePlayMove(fen, function (uci) {
+      window._enginePracticeThinking = false;
       if (!uci || !window._enginePracticeMode) {
-        window._enginePracticeThinking = false;
-        analyzePosition(true);
+        if (typeof analyzePosition === 'function') analyzePosition(true);
         return;
       }
-      // 1초 딜레이 후 엔진 수 적용 (사용자가 생각할 시간 제공)
-      setTimeout(function () {
-        window._enginePracticeThinking = false;
-        var mv = uciToMove(uci, game.board, game.turn, game.castling, game.enPassant);
-        if (!mv) {
-          showToast('엔진 수 적용 실패');
-          analyzePosition(true);
-          return;
-        }
-        game.makeMove(mv, mv.promoPiece || null);
-        analyzePosition(true);
-      }, 1000);
-    });
+
+      var mv = uciToMove(uci, game.board, game.turn, game.castling, game.enPassant);
+      if (!mv) {
+        if (typeof showToast === 'function') showToast('엔진 수 적용 실패');
+        if (typeof analyzePosition === 'function') analyzePosition(true);
+        return;
+      }
+
+      // 분석이 끝난 즉시 착수
+      game.makeMove(mv, mv.promoPiece || null);
+      if (typeof analyzePosition === 'function') analyzePosition(true);
+    }, 1500);
   }
 
   window._enginePracticeAfterHumanMove = function () {
