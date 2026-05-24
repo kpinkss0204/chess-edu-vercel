@@ -134,7 +134,8 @@ function createStockfishWorker(threads = 1, hashMb = 64) {
 
         if (line.includes('uciok')) {
           uciReceived = true;
-          worker.postMessage('setoption name Threads value ' + threads);
+          // 단일 스레드 빌드이므로 Threads는 항상 1로 설정 (unreachable 에러 방지)
+          worker.postMessage('setoption name Threads value 1');
           worker.postMessage('setoption name Hash value ' + hashMb);
           worker.postMessage('setoption name UCI_AnalyseMode value true');
           worker.postMessage('setoption name Move Overhead value 0');
