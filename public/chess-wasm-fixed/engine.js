@@ -456,6 +456,8 @@ function _getHistFen(histIdx) {
 // 엔진 정지 상태에서만 호출 — go 명령 전송
 function _sendGoCommand(fen, myId, mpv, movetime) {
   if (myId !== currentAnalysisId) return;
+  if (!mainWorker) return;
+
   engineSearching = true;
   cycleId   = myId;
   cycleSnap = {
@@ -465,15 +467,21 @@ function _sendGoCommand(fen, myId, mpv, movetime) {
     ep:    pendingEP,
     fen:   fen, // 현재 분석 대상 FEN 기록
   };
-  console.log('[CMD] → setoption MultiPV', mpv);
+
+  // 명령들 사이에 아주 미세한 지연(10ms)을 주어 WASM 엔진의 안정성 확보
   mainWorker.postMessage(`setoption name MultiPV value ${mpv}`);
-  console.log('[CMD] → position fen', fen);
-  mainWorker.postMessage(`position fen ${fen}`);
-  // depth와 movetime 동시 지정 — 둘 중 먼저 도달하는 조건에서 종료
-  const targetDepth = Math.max(analysisDepth, 25);
-  console.log('[CMD] → go depth', targetDepth, 'movetime', movetime);
-  mainWorker.postMessage(`go depth ${targetDepth} movetime ${movetime}`);
-  console.log('[CMD] → go sent ✓');
+  
+  setTimeout(() => {
+    if (myId !== currentAnalysisId) return;
+    mainWorker.postMessage(`position fen ${fen}`);
+    
+    setTimeout(() => {
+      if (myId !== currentAnalysisId) return;
+      const targetDepth = Math.max(analysisDepth, 25);
+      mainWorker.postMessage(`go depth ${targetDepth} movetime ${movetime}`);
+      console.log('[CMD] → go sent (with sync delay) ✓');
+    }, 10);
+  }, 10);
 }
 
 /**
@@ -492,13 +500,18 @@ function executeEnginePlayMove(fen, callback, movetime) {
   var sendGo = function () {
     window._enginePlayResolve = callback;
     mainWorker.postMessage('setoption name MultiPV value 1');
-    mainWorker.postMessage('position fen ' + fen);
-    // 지정된 시간(movetime) 동안 충분히 생각하도록 설정
-    mainWorker.postMessage('go depth 40 movetime ' + waitTime);
-    engineSearching = true;
-    var ed = document.getElementById('engine-dot');
-    if (ed) ed.className = 'engine-dot thinking';
+    
+    setTimeout(() => {
+      mainWorker.postMessage('position fen ' + fen);
+      setTimeout(() => {
+        mainWorker.postMessage('go depth 40 movetime ' + waitTime);
+        engineSearching = true;
+        var ed = document.getElementById('engine-dot');
+        if (ed) ed.className = 'engine-dot thinking';
+      }, 10);
+    }, 10);
   };
+  
   if (engineSearching) {
     window._enginePlayAfterStop = sendGo;
     mainWorker.postMessage('stop');

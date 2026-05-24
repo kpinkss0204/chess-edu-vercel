@@ -445,6 +445,14 @@ function attachUIEvents() {
   });
 }
 
+function saveCurrentGame() {
+  if (typeof savePGN === 'function') {
+    savePGN();
+  } else {
+    showToast('기보 저장 기능을 사용할 수 없습니다.');
+  }
+}
+
 // 초기화 로직 (React 내비게이션 지원)
 function initPalSystem() {
   palBuild();
@@ -466,6 +474,5 @@ window.palErase = palErase;
 window.palTurn = palTurn;
 window.palClear = palClear;
 window.palReset = palReset;
-window.practiceNewGame = practiceNewGame;
 window.saveCurrentGame = saveCurrentGame;
 window.loadPositionFromInput = loadPositionFromInput;

@@ -19,8 +19,9 @@ function toggleMobilePanel(forceClose) {
 
   if (!panel || !backdrop) return;
 
-  const isOpen    = panel.classList.contains('mobile-open');
-  const shouldOpen = forceClose === false ? false : !isOpen;
+  const isOpen = panel.classList.contains('mobile-open');
+  // forceClose가 true이면 닫기, false이면 열기, undefined이면 토글
+  const shouldOpen = (forceClose === true) ? false : (forceClose === false ? true : !isOpen);
 
   panel.classList.toggle('mobile-open', shouldOpen);
   backdrop.classList.toggle('show', shouldOpen);
@@ -29,6 +30,11 @@ function toggleMobilePanel(forceClose) {
   if (iconClose) iconClose.style.display = shouldOpen ? ''      : 'none';
 }
 window.toggleMobilePanel = toggleMobilePanel;
+
+function closeMobilePanel() {
+  toggleMobilePanel(true);
+}
+window.closeMobilePanel = closeMobilePanel;
 
 function init() {
   game = new ChessGame();
