@@ -1640,11 +1640,11 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
 응답은 친절하고 격려하는 어조의 한국어로 작성해주세요. 마크다운 형식을 사용하여 가독성 있게 표현해주세요.
 `;
 
-        const response = await fetch('/api/gemini', {
+        const response = await fetch('/api/groq', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'gemini-1.5-flash',
+            model: 'llama-3.3-70b-versatile',
             messages: [
               { role: 'system', content: '당신은 세계적인 체스 코치입니다. 사용자의 통계 데이터를 바탕으로 실력 향상을 위한 조언을 제공합니다.' },
               { role: 'user', content: prompt }
