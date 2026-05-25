@@ -497,6 +497,16 @@ function executeEnginePlayMove(fen, callback, movetime) {
   }
   const waitTime = movetime || 1500; // 기본 1.5초
 
+  // [추가] 엔진 수 계산 시작 시 분석 ID를 갱신하여 예약된 배경 분석 인터럽트 방지
+  currentAnalysisId++;
+  if (typeof game !== 'undefined' && game) {
+    pendingTurn     = game.turn;
+    pendingBoard    = game.board.map(r=>[...r]);
+    pendingCastling = {...game.castling};
+    pendingEP       = game.enPassant;
+  }
+  pendingFen = fen;
+
   var sendGo = function () {
     window._enginePlayResolve = callback;
     mainWorker.postMessage('setoption name MultiPV value 1');
@@ -775,7 +785,8 @@ function analyzePosition(force) {
   if (!autoAnalyze || !mainReady) return;
 
   // 엔진이 대전 상대로서 수를 생각 중이면 일반 분석 요청 무시 (간섭 방지)
-  if (window._enginePracticeThinking && !force) return;
+  // [수정] force가 true여도 연습 모드에서 엔진이 생각 중이면 무조건 스킵하여 인터럽트 방지
+  if (window._enginePracticeThinking) return;
 
   if (analysisTimeout) clearTimeout(analysisTimeout);
 
@@ -897,6 +908,9 @@ function analyzePosition(force) {
   analysisTimeout = setTimeout(() => {
     if (myId !== currentAnalysisId) return;
     if (!mainWorker) return;
+
+    // [수정] 타임아웃 대기 중에 엔진이 대전 수 계산을 시작했다면 배경 분석 중단
+    if (window._enginePracticeThinking) return;
 
     // 포지션 유효성 재확인 (타임아웃 사이의 상태 변화 대응)
     if (!isPositionValid) return;
