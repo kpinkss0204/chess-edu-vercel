@@ -564,7 +564,9 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           if (result === '1-0') { badge = myColor === 'w' ? 'W' : 'L'; badgeClass = myColor === 'w' ? 'win' : 'lose'; label = myColor === 'w' ? '승리' : '패배'; }
           if (result === '0-1') { badge = myColor === 'b' ? 'W' : 'L'; badgeClass = myColor === 'b' ? 'win' : 'lose'; label = myColor === 'b' ? '승리' : '패배'; }
           const dateStr = doc.playedAt ? new Date(doc.playedAt.seconds * 1000).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '—';
-          item.innerHTML = `<div class="record-result-badge ${badgeClass}">${badge}</div><div class="record-info"><div class="record-players">${doc.whiteName || '백'} vs ${doc.blackName || '흑'}</div><div class="record-meta"><span>${label}</span><span>${doc.moveCount || 0}수</span><span>${dateStr}</span></div></div>`;
+          const whiteRating = doc.whiteRating ? ` (${doc.whiteRating})` : '';
+          const blackRating = doc.blackRating ? ` (${doc.blackRating})` : '';
+          item.innerHTML = `<div class="record-result-badge ${badgeClass}">${badge}</div><div class="record-info"><div class="record-players">${doc.whiteName || '백'}${whiteRating} vs ${doc.blackName || '흑'}${blackRating}</div><div class="record-meta"><span>${label}</span><span>${doc.moveCount || 0}수</span><span>${dateStr}</span></div></div>`;
           item.addEventListener('click', () => openRecord(doc, item));
           listEl.appendChild(item);
         });
@@ -1595,3 +1597,79 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
     window.openTacticModal = openTacticModal;
     window.openJudgmentModal = openJudgmentModal;
     window.closeTacticModalAndOpen = closeTacticModalAndOpen;
+
+    // AI 통계 피드백
+    async function requestAIFeedback() {
+      if (!_statsCache) { alert('먼저 통계 데이터 분석이 완료되어야 합니다.'); return; }
+      const btn = document.getElementById('btn-ai-stats');
+      const container = document.getElementById('ai-feedback-container');
+      const body = document.getElementById('ai-feedback-body');
+
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="ai-icon spinner">⏳</span> AI 분석 중...';
+      container.style.display = 'block';
+      body.innerHTML = '<div class="ai-loading">사용자의 최근 대국 성과를 심층 분석하고 있습니다...</div>';
+
+      try {
+        const s = _statsCache;
+        const prompt = `
+당신은 세계적인 체스 코치입니다. 사용자의 최근 ${s.total}개 게임 통계 데이터를 바탕으로 실력 향상을 위한 개인화된 피드백을 제공해주세요.
+
+[통계 요약]
+- 승률: ${s.winRate}% (승: ${s.wins}, 무: ${s.draws}, 패: ${s.losses})
+- 진영별 성과:
+  * 백(White): ${s.winsW}승 ${s.drawsW}무 ${s.lossesW}패 (총 ${s.myColor_counts.w}회)
+  * 흑(Black): ${s.winsB}승 ${s.drawsB}무 ${s.lossesB}패 (총 ${s.myColor_counts.b}회)
+- 평균 정확도 (Lichess Accuracy%): ${s.myAccuracy}%
+- 평균 Centipawn Loss: ${s.avgCpLoss}
+- 주요 전술 성과:
+  * 핀(Pin): ${s.pinFound}회 성공 / ${s.pinMissed}회 놓침
+  * 포크(Fork): ${Object.values(s.forkFound).reduce((a,b)=>a+b,0)}회 성공 / ${Object.values(s.forkMissed).reduce((a,b)=>a+b,0)}회 놓침
+  * 상대 실수 포착: ${s.oppBlunderFound}회 성공 / ${s.oppBlunderMissed}회 놓침
+
+[자주 사용하는 오프닝 (상위 5개)]
+${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w.wins/Math.max(1,o.w.total)*100)}%, 흑 승률: ${Math.round(o.b.wins/Math.max(1,o.b.total)*100)}%)`).join('\n')}
+
+[요청 사항]
+1. 진영별(백/흑) 승률 차이에 대한 원인 분석 및 개선 방향.
+2. 현재 오프닝 선택이 효율적인지, 특정 오프닝에서 더 연마해야 할 점은 무엇인지.
+3. 전술적 측면에서 어떤 유형(핀, 포크 등)에 취약하며 어떤 훈련이 필요한지.
+4. 전반적인 총평과 다음 단계를 위한 조언.
+
+응답은 친절하고 격려하는 어조의 한국어로 작성해주세요. 마크다운 형식을 사용하여 가독성 있게 표현해주세요.
+`;
+
+        const response = await fetch('/api/gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+
+        if (!response.ok) throw new Error('AI 응답을 가져오지 못했습니다.');
+        const data = await response.json();
+        const text = data.answer || data.text || '분석 결과를 생성할 수 없습니다.';
+        
+        // 간단한 마크다운 처리
+        body.innerHTML = text
+          .replace(/### (.*)/g, '<h3>$1</h3>')
+          .replace(/## (.*)/g, '<h2>$1</h2>')
+          .replace(/# (.*)/g, '<h1>$1</h1>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/- (.*)/g, '<li>$1</li>')
+          .replace(/\n/g, '<br>');
+          
+      } catch (err) {
+        body.innerHTML = `<div class="ai-error">오류 발생: ${err.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="ai-icon">✨</span> AI 통계 분석 받기';
+      }
+    }
+
+    function closeAIFeedback() {
+      document.getElementById('ai-feedback-container').style.display = 'none';
+    }
+
+    window.requestAIFeedback = requestAIFeedback;
+    window.closeAIFeedback = closeAIFeedback;

@@ -1567,6 +1567,113 @@
       }
     }
 
+/* AI 통계 분석 버튼 */
+.ai-stats-btn {
+  background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 15px rgba(37, 117, 252, 0.3);
+}
+
+.ai-stats-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 117, 252, 0.4);
+}
+
+.ai-stats-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.ai-icon.spinner {
+  display: inline-block;
+  animation: ai-spin 1s linear infinite;
+}
+
+@keyframes ai-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* AI 피드백 컨테이너 */
+#ai-feedback-container {
+  margin-top: 24px;
+  animation: slideUp 0.4s ease-out;
+}
+
+.ai-feedback-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.ai-feedback-head {
+  background: rgba(106, 17, 203, 0.1);
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.ai-feedback-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #a29bfe;
+}
+
+.ai-feedback-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.ai-feedback-content {
+  padding: 24px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  font-size: 14px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.ai-feedback-content h1, .ai-feedback-content h2, .ai-feedback-content h3 {
+  color: var(--text-primary);
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.ai-feedback-content li {
+  margin-bottom: 8px;
+}
+
+.ai-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
     /* 모바일 패널 토글 버튼 */
     #mobile-panel-toggle {
       display: none !important;
@@ -1591,3 +1698,110 @@
         cursor: pointer;
       }
     }
+
+/* AI 통계 분석 버튼 */
+.ai-stats-btn {
+  background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 15px rgba(37, 117, 252, 0.3);
+}
+
+.ai-stats-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 117, 252, 0.4);
+}
+
+.ai-stats-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.ai-icon.spinner {
+  display: inline-block;
+  animation: ai-spin 1s linear infinite;
+}
+
+@keyframes ai-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* AI 피드백 컨테이너 */
+#ai-feedback-container {
+  margin-top: 24px;
+  animation: slideUp 0.4s ease-out;
+}
+
+.ai-feedback-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.ai-feedback-head {
+  background: rgba(106, 17, 203, 0.1);
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.ai-feedback-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #a29bfe;
+}
+
+.ai-feedback-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.ai-feedback-content {
+  padding: 24px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  font-size: 14px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.ai-feedback-content h1, .ai-feedback-content h2, .ai-feedback-content h3 {
+  color: var(--text-primary);
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.ai-feedback-content li {
+  margin-bottom: 8px;
+}
+
+.ai-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

@@ -161,10 +161,15 @@ async function savePGN() {
   const btn = document.getElementById('btn-save-pgn');
   if (btn) { btn.disabled=true; btn.textContent='저장 중...'; }
   try {
+    const whiteRating = document.getElementById('rating-white')?.textContent || '?';
+    const blackRating = document.getElementById('rating-black')?.textContent || '?';
+    const timeControl = document.getElementById('info-time')?.textContent || '-';
+
     const baseData = {
       uid: window._currentUser.uid,
-      title: `${white} vs ${black}`,
+      title: `${white} (${whiteRating}) vs ${black} (${blackRating})`,
       pgn, white, black, date, result, opening,
+      whiteRating, blackRating, timeControl,
       moveCount: game.history.length,
       savedAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
@@ -180,9 +185,6 @@ async function savePGN() {
       if (!isNaN(parsed.getTime())) playedAtVal = firebase.firestore.Timestamp.fromDate(parsed);
     }
 
-    const myName = myColor === 'w' ? white : black;
-    const oppName = myColor === 'w' ? black : white;
-
     await window._fbDb.collection('game_records').add({
       uid:         window._currentUser.uid,
       pgn,
@@ -190,6 +192,9 @@ async function savePGN() {
       myColor,
       whiteName:   white,
       blackName:   black,
+      whiteRating,
+      blackRating,
+      timeControl,
       opening,
       moveCount:   game.history.length,
       source:      'pgn_import',        // 어디서 저장됐는지 식별

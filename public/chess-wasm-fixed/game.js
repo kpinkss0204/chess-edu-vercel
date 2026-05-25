@@ -2225,20 +2225,30 @@ class ChessGame {
     const openingMatch=pgn.match(/\[Opening "([^"]+)"\]/);
     const eloWhiteMatch=pgn.match(/\[WhiteElo "([^"]+)"\]/);
     const eloBlackMatch=pgn.match(/\[BlackElo "([^"]+)"\]/);
+    const timeControlMatch = pgn.match(/\[TimeControl "([^"]+)"\]/);
 
     if (whiteMatch) {
       document.getElementById('info-white').textContent = whiteMatch[1];
       document.getElementById('name-white').textContent = whiteMatch[1];
-      document.getElementById('rating-white').textContent = eloWhiteMatch ? eloWhiteMatch[1] : '?';
+      const rating = eloWhiteMatch ? eloWhiteMatch[1] : '?';
+      document.getElementById('rating-white').textContent = rating;
+      if (rating !== '?') document.getElementById('info-white').textContent = `${whiteMatch[1]} (${rating})`;
     }
     if (blackMatch) {
       document.getElementById('info-black').textContent = blackMatch[1];
       document.getElementById('name-black').textContent = blackMatch[1];
-      document.getElementById('rating-black').textContent = eloBlackMatch ? eloBlackMatch[1] : '?';
+      const rating = eloBlackMatch ? eloBlackMatch[1] : '?';
+      document.getElementById('rating-black').textContent = rating;
+      if (rating !== '?') document.getElementById('info-black').textContent = `${blackMatch[1]} (${rating})`;
     }
     if (dateMatch)   document.getElementById('info-date').textContent = dateMatch[1];
     if (resultMatch) document.getElementById('info-result').textContent = resultMatch[1];
     if (openingMatch)document.getElementById('info-opening').textContent = openingMatch[1];
+    
+    // TimeControl 정보가 있으면 결과 행 옆이나 다른 곳에 표시 가능 (여기서는 콘솔이나 info에 추가 고려)
+    if (timeControlMatch && document.getElementById('info-time')) {
+      document.getElementById('info-time').textContent = timeControlMatch[1];
+    }
 
     this.reset();
     const root = typeof window !== 'undefined' ? window : globalThis;

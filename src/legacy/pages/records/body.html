@@ -20,13 +20,31 @@
 
     <div id="stats-panel">
       <div class="stats-header">
-        <div class="stats-title">게임 통계</div>
-        <div class="stats-sub" id="stats-sub">분석 중...</div>
+        <div style="flex:1;">
+          <div class="stats-title">게임 통계</div>
+          <div class="stats-sub" id="stats-sub">분석 중...</div>
+        </div>
+        <button type="button" class="ai-stats-btn" id="btn-ai-stats" onclick="requestAIFeedback()">
+          <span class="ai-icon">✨</span> AI 통계 분석 받기
+        </button>
       </div>
       <div id="stats-content">
         <div class="stats-loading">
           <div class="stats-spinner"></div>
           <div>Stockfish 초기화 중...</div>
+        </div>
+      </div>
+      
+      <!-- AI 피드백 영역 -->
+      <div id="ai-feedback-container" style="display:none;">
+        <div class="ai-feedback-card">
+          <div class="ai-feedback-head">
+            <div class="ai-feedback-title">🤖 AI 성과 리포트</div>
+            <button class="ai-feedback-close" onclick="closeAIFeedback()">✕</button>
+          </div>
+          <div id="ai-feedback-body" class="ai-feedback-content">
+            <!-- AI 응답이 여기에 렌더링됨 -->
+          </div>
         </div>
       </div>
     </div>
