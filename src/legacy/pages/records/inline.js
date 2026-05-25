@@ -1366,6 +1366,24 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
               </div>
             </div>
           </div>
+
+          <!-- [추가] 상대 레이팅별 성과 UI -->
+          <div class="comparison-grid" style="margin-top: 12px;">
+            <div class="comp-box" style="border-top: 1px solid var(--border-light); padding-top: 12px;">
+              <div class="comp-title" style="color: var(--accent-orange);">🔥 강적 상대 (나보다 높은 레이팅)</div>
+              <div class="wdl-legend" style="gap:12px; justify-content:space-between; font-size:12px;">
+                <span>승 <b>${s.winsHigher}</b></span> <span>무 <b>${s.drawsHigher}</b></span> <span>패 <b>${s.lossesHigher}</b></span>
+                <span>승률 <b>${Math.round(s.winsHigher/Math.max(1, s.winsHigher+s.drawsHigher+s.lossesHigher)*100)}%</b></span>
+              </div>
+            </div>
+            <div class="comp-box" style="border-top: 1px solid var(--border-light); padding-top: 12px;">
+              <div class="comp-title" style="color: var(--accent-blue);">⚖️ 약자 상대 (나보다 낮은 레이팅)</div>
+              <div class="wdl-legend" style="gap:12px; justify-content:space-between; font-size:12px;">
+                <span>승 <b>${s.winsLower}</b></span> <span>무 <b>${s.drawsLower}</b></span> <span>패 <b>${s.lossesLower}</b></span>
+                <span>승률 <b>${Math.round(s.winsLower/Math.max(1, s.winsLower+s.drawsLower+s.lossesLower)*100)}%</b></span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="stats-card-group">
