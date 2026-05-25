@@ -577,18 +577,13 @@ function handleMainWorkerMessage(e) {
     }
 
   } else if (line.startsWith('bestmove')) {
-    // [수정] 현재 분석 ID와 일치하는 경우에만 bestmove 처리 및 UI 갱신 수행
-    if (cycleId !== currentAnalysisId) {
-      console.log('[SF] Stale bestmove ignored:', line);
-      return;
-    }
-
     if (typeof window._enginePlayAfterStop === 'function') {
       clearTimeout(renderTimer);
       const next = window._enginePlayAfterStop;
       window._enginePlayAfterStop = null;
       engineSearching = false;
       next();
+      return;
     }
     if (typeof window._enginePlayResolve === 'function') {
       clearTimeout(renderTimer);
@@ -602,6 +597,13 @@ function handleMainWorkerMessage(e) {
       if (document.getElementById('engine-dot')) {
         document.getElementById('engine-dot').className = 'engine-dot ready';
       }
+      return;
+    }
+
+    // [수정] 일반 분석(Background) 결과 처리 - ID 체크는 여기서 수행
+    if (cycleId !== currentAnalysisId) {
+      console.log('[SF] Stale bestmove ignored:', line);
+      return;
     }
 
     clearTimeout(renderTimer);
