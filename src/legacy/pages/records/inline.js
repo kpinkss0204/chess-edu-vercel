@@ -1643,12 +1643,21 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
         const response = await fetch('/api/gemini', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt })
+          body: JSON.stringify({
+            model: 'gemini-1.5-flash',
+            messages: [
+              { role: 'system', content: '당신은 세계적인 체스 코치입니다. 사용자의 통계 데이터를 바탕으로 실력 향상을 위한 조언을 제공합니다.' },
+              { role: 'user', content: prompt }
+            ],
+            temperature: 0.3
+          })
         });
 
         if (!response.ok) throw new Error('AI 응답을 가져오지 못했습니다.');
         const data = await response.json();
-        const text = data.answer || data.text || '분석 결과를 생성할 수 없습니다.';
+        
+        // OpenAI 호환 포맷 (data.choices[0].message.content) 또는 직렬화된 포맷 대응
+        const text = data.choices?.[0]?.message?.content || data.answer || data.text || '분석 결과를 생성할 수 없습니다.';
         
         // 간단한 마크다운 처리
         body.innerHTML = text

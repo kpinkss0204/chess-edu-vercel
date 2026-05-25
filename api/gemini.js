@@ -8,15 +8,26 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' });
 
   try {
-    const { model, messages, max_tokens, temperature } = req.body;
+    const { model, messages, prompt, max_tokens, temperature } = req.body;
     
     // Gemini API v1beta 사용 (system_instruction 지원)
     const geminiModel = model || 'gemini-1.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
 
-    // System prompt 추출 및 User prompt 구성
-    const systemInstruction = messages.find(m => m.role === 'system')?.content || '';
-    const userMessage = messages.find(m => m.role === 'user')?.content || '';
+    // System prompt 추출 및 User prompt 구성 (messages 배열이 있는 경우)
+    let systemInstruction = '';
+    let userMessage = '';
+
+    if (Array.isArray(messages)) {
+      systemInstruction = messages.find(m => m.role === 'system')?.content || '';
+      userMessage = messages.find(m => m.role === 'user')?.content || '';
+    } else if (prompt) {
+      userMessage = prompt;
+    }
+
+    if (!userMessage) {
+      return res.status(400).json({ error: '요청 본문에 messages 또는 prompt가 필요합니다.' });
+    }
 
     const payload = {
       contents: [
