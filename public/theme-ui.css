@@ -127,7 +127,7 @@ html[data-color-mode="light"] body {
 .sidebar-logo {
   width: 44px;
   height: 44px;
-  background: var(--accent-green);
+  background: #7fa650;
   border-radius: 12px;
   display: flex !important;
   align-items: center;
@@ -136,12 +136,13 @@ html[data-color-mode="light"] body {
   font-size: 24px;
   color: white;
   text-decoration: none;
-  box-shadow: 0 4px 15px rgba(127,166,80,0.3);
+  box-shadow: 0 4px 15px rgba(127, 166, 80, 0.3);
   transition: all 0.2s;
+  font-family: 'Pretendard', -apple-system, sans-serif;
 }
 
 .sidebar-logo:hover {
-  background: var(--accent-green-bright);
+  background: #a0c060;
   transform: scale(1.05);
 }
 
