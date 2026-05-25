@@ -881,6 +881,8 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         }
 
         let wins = 0, losses = 0, draws = 0, winsW = 0, lossesW = 0, drawsW = 0, winsB = 0, lossesB = 0, drawsB = 0;
+        let winsHigher = 0, lossesHigher = 0, drawsHigher = 0;
+        let winsLower = 0, lossesLower = 0, drawsLower = 0;
         let endCheckmate = 0, endResign = 0, endDraw = 0, endTimeout = 0;
         const myColor_counts = { w: 0, b: 0 }; let totalMovesSum = 0;
         let sumMyBlunders = 0, sumMyMistakes = 0, sumMyInaccuracies = 0;
@@ -953,6 +955,18 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           if (myWin) { wins++; if (myColor === 'w') winsW++; else winsB++; }
           else if (myLose) { losses++; if (myColor === 'w') lossesW++; else lossesB++; }
           else { draws++; if (myColor === 'w') drawsW++; else drawsB++; }
+
+          // [추가] 레이팅별 승률 분석
+          const myRating = parseInt(myColor === 'w' ? doc.whiteRating : doc.blackRating);
+          const oppRating = parseInt(myColor === 'w' ? doc.blackRating : doc.whiteRating);
+          if (!isNaN(myRating) && !isNaN(oppRating)) {
+            if (oppRating > myRating) {
+              if (myWin) winsHigher++; else if (myLose) lossesHigher++; else drawsHigher++;
+            } else if (oppRating < myRating) {
+              if (myWin) winsLower++; else if (myLose) lossesLower++; else drawsLower++;
+            }
+          }
+
           const term = (doc.termination || '').toLowerCase();
           if (term.includes('checkmate') || term.includes('체크메이트')) endCheckmate++;
           else if (term.includes('resign') || term.includes('기권')) endResign++;
@@ -1041,7 +1055,9 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         const avgMyAccuracy = accuracyCount > 0 ? Math.round(sumMyAccuracy / accuracyCount) : 0;
 
         _statsCache = {
-          total, wins, losses, draws, winsW, lossesW, drawsW, winsB, lossesB, drawsB, myColor_counts,
+          total, wins, losses, draws, winsW, lossesW, drawsW, winsB, lossesB, drawsB,
+          winsHigher, lossesHigher, drawsHigher, winsLower, lossesLower, drawsLower,
+          myColor_counts,
           avgMoves: total > 0 ? Math.round(totalMovesSum / total) : 0,
           winRate: total > 0 ? Math.round(wins / total * 100) : 0,
           endCheckmate, endResign, endDraw, endTimeout,
@@ -1621,6 +1637,9 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
 - 진영별 성과:
   * 백(White): ${s.winsW}승 ${s.drawsW}무 ${s.lossesW}패 (총 ${s.myColor_counts.w}회)
   * 흑(Black): ${s.winsB}승 ${s.drawsB}무 ${s.lossesB}패 (총 ${s.myColor_counts.b}회)
+- 상대 레이팅별 성과:
+  * 나보다 높은 레이팅 상대: ${s.winsHigher}승 ${s.drawsHigher}무 ${s.lossesHigher}패 (승률: ${Math.round(s.winsHigher/Math.max(1, s.winsHigher+s.drawsHigher+s.lossesHigher)*100)}%)
+  * 나보다 낮은 레이팅 상대: ${s.winsLower}승 ${s.drawsLower}무 ${s.lossesLower}패 (승률: ${Math.round(s.winsLower/Math.max(1, s.winsLower+s.drawsLower+s.lossesLower)*100)}%)
 - 평균 정확도 (Lichess Accuracy%): ${s.myAccuracy}%
 - 평균 Centipawn Loss: ${s.avgCpLoss}
 - 주요 전술 성과:
@@ -1633,11 +1652,16 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
 
 [요청 사항]
 1. 진영별(백/흑) 승률 차이에 대한 원인 분석 및 개선 방향.
-2. 현재 오프닝 선택이 효율적인지, 특정 오프닝에서 더 연마해야 할 점은 무엇인지.
-3. 전술적 측면에서 어떤 유형(핀, 포크 등)에 취약하며 어떤 훈련이 필요한지.
-4. 전반적인 총평과 다음 단계를 위한 조언.
+2. 상대 레이팅(높음/낮음)에 따른 본인의 플레이 성향 분석 (예: 강자에게 강한지, 약자에게 방심하는지).
+3. 현재 오프닝 선택이 효율적인지, 특정 오프닝에서 더 연마해야 할 점은 무엇인지.
+4. 전술적 측면에서 어떤 유형(핀, 포크 등)에 취약하며 어떤 훈련이 필요한지.
+5. 전반적인 총평과 다음 단계를 위한 조언.
 
-응답은 친절하고 격려하는 어조의 한국어로 작성해주세요. 마크다운 형식을 사용하여 가독성 있게 표현해주세요.
+[중요 지시 사항]
+- 반드시 **한국어**로만 답변하세요.
+- 베트남어(chơi 등)나 다른 외국어 단어를 절대 섞지 마세요.
+- 체스 전문 용어는 한국어 또는 표준 영어 용어를 사용하세요.
+- 친절하고 격려하는 어조를 유지하며, 마크다운 형식을 사용하여 가독성 있게 작성하세요.
 `;
 
         const response = await fetch('/api/groq', {
@@ -1646,7 +1670,7 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
           body: JSON.stringify({
             model: 'llama-3.3-70b-versatile',
             messages: [
-              { role: 'system', content: '당신은 세계적인 체스 코치입니다. 사용자의 통계 데이터를 바탕으로 실력 향상을 위한 조언을 제공합니다.' },
+              { role: 'system', content: '당신은 세계적인 체스 코치입니다. 모든 답변은 반드시 한국어로만 작성해야 하며, 다른 언어(베트남어 등)를 절대 혼용하지 마십시오.' },
               { role: 'user', content: prompt }
             ],
             temperature: 0.3
