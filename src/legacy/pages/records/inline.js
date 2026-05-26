@@ -1677,7 +1677,8 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
 
 [중요 지시 사항]
 - 반드시 **한국어**로만 답변하세요.
-- 베트남어(chơi 등)나 다른 외국어 단어를 절대 섞지 마세요.
+- **한자(漢字)를 절대 사용하지 마세요.** (예: "不存在" 대신 "없음" 또는 "존재하지 않음" 사용)
+- 베트남어, 일본어 등 다른 외국어 단어를 절대 섞지 마세요.
 - 체스 전문 용어는 한국어 또는 표준 영어 용어를 사용하세요.
 - 친절하고 격려하는 어조를 유지하며, 마크다운 형식을 사용하여 가독성 있게 작성하세요.
 `;
@@ -1688,7 +1689,7 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
           body: JSON.stringify({
             model: 'llama-3.3-70b-versatile',
             messages: [
-              { role: 'system', content: '당신은 세계적인 체스 코치입니다. 모든 답변은 반드시 한국어로만 작성해야 하며, 다른 언어(베트남어 등)를 절대 혼용하지 마십시오.' },
+              { role: 'system', content: '당신은 세계적인 체스 코치입니다. 모든 답변은 반드시 한국어로만 작성해야 하며, 한자나 다른 외국어를 절대 혼용하지 마십시오.' },
               { role: 'user', content: prompt }
             ],
             temperature: 0.3
@@ -1701,13 +1702,14 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
         // OpenAI 호환 포맷 (data.choices[0].message.content) 또는 직렬화된 포맷 대응
         const text = data.choices?.[0]?.message?.content || data.answer || data.text || '분석 결과를 생성할 수 없습니다.';
         
-        // 간단한 마크다운 처리
+        // 마크다운 처리 개선
         body.innerHTML = text
-          .replace(/### (.*)/g, '<h3>$1</h3>')
-          .replace(/## (.*)/g, '<h2>$1</h2>')
-          .replace(/# (.*)/g, '<h1>$1</h1>')
+          .replace(/^###\s*(.*)/gm, '<h3>$1</h3>')
+          .replace(/^##\s*(.*)/gm, '<h2>$1</h2>')
+          .replace(/^#\s*(.*)/gm, '<h1>$1</h1>')
           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/- (.*)/g, '<li>$1</li>')
+          .replace(/^\s*[-*+]\s+(.*)/gm, '<li>• $1</li>')
+          .replace(/^\s*(\d+\.)\s+(.*)/gm, '<li>$1 $2</li>')
           .replace(/\n/g, '<br>');
           
       } catch (err) {
