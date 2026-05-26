@@ -1393,21 +1393,21 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
               <div class="comp-title">나의 수 분석</div>
               <div class="key-grid" style="grid-template-columns: 1fr; gap: 8px;">
                 <div class="key-card danger" onclick="openJudgmentModal('myBlunder', '치명적 실수', '??', '블런더')">
-                  <div class="key-card-icon">😱</div>
+                  <div class="key-card-icon">??</div>
                   <div class="key-card-body">
                     <div class="key-card-name">놓친 결정적 기회 (블런더)</div>
                     <div class="key-card-num">${s.myBlunders}</div>
                   </div>
                 </div>
                 <div class="key-card warn" onclick="openJudgmentModal('myMistake', '아쉬운 실수', '?', '실수')">
-                  <div class="key-card-icon">😟</div>
+                  <div class="key-card-icon">?</div>
                   <div class="key-card-body">
                     <div class="key-card-name">아쉬운 실수 (미스테이크)</div>
                     <div class="key-card-num">${s.myMistakes}</div>
                   </div>
                 </div>
                 <div class="key-card" style="border-color:rgba(255,255,255,0.05)" onclick="openJudgmentModal('myInaccuracy', '부정확한 수', '?!', '부정확')">
-                  <div class="key-card-icon">🤨</div>
+                  <div class="key-card-icon">?!</div>
                   <div class="key-card-body">
                     <div class="key-card-name">정교하지 못한 수 (부정확)</div>
                     <div class="key-card-num">${s.myInaccuracies}</div>
@@ -1418,22 +1418,22 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
             <div class="comp-box">
               <div class="comp-title">상대의 수 분석</div>
               <div class="key-grid" style="grid-template-columns: 1fr; gap: 8px;">
-                <div class="key-card good" onclick="openTacticModal('oppBlunder', '', '🎯', '상대 블런더 포착', 'found')">
-                  <div class="key-card-icon">⚡</div>
+                <div class="key-card good" onclick="openTacticModal('oppBlunder', '', '??', '상대 블런더 포착', 'found')">
+                  <div class="key-card-icon">??</div>
                   <div class="key-card-body">
                     <div class="key-card-name">포착한 상대의 블런더</div>
                     <div class="key-card-num">${s.oppBlunderFound} <span style="font-size:12px; font-weight:normal; color:var(--text-muted)">/ ${s.oppBlunders}</span></div>
                   </div>
                 </div>
                 <div class="key-card" style="border-color:rgba(255,255,255,0.05)" onclick="openJudgmentModal('oppMistake', '상대 실수', '?', '상대 실수')">
-                  <div class="key-card-icon">📉</div>
+                  <div class="key-card-icon">?</div>
                   <div class="key-card-body">
                     <div class="key-card-name">상대가 저지른 실수</div>
                     <div class="key-card-num">${s.oppMistakes}</div>
                   </div>
                 </div>
                 <div class="key-card" style="border-color:rgba(255,255,255,0.05)" onclick="openJudgmentModal('oppInaccuracy', '상대 부정확', '?!', '상대 부정확')">
-                  <div class="key-card-icon">🧐</div>
+                  <div class="key-card-icon">?!</div>
                   <div class="key-card-body">
                     <div class="key-card-name">상대의 부정확한 수</div>
                     <div class="key-card-num">${s.oppInaccuracies}</div>
