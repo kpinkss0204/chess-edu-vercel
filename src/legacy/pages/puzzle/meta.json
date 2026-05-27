@@ -11,6 +11,8 @@
     "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js",
     "auth-check.js",
     "theme-global.js",
+    "chess-wasm-fixed/chess.js",
+    "chess-wasm-fixed/parse-pgn-states.js",
     "https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js",
     "sidebar-component.js"
   ]

@@ -460,7 +460,14 @@ window.toggleMobilePanel = toggleMobilePanel;
                   }
                 } else {
                   // 상대방이 나에게 전술을 성공시킴
-                  if (type === 'fork') { result.oppForkCreated[pt] = (result.oppForkCreated[pt] || 0) + 1; }
+                  if (type === 'fork') { 
+                    result.oppForkCreated[pt] = (result.oppForkCreated[pt] || 0) + 1;
+                    // 상대방 포크도 이벤트에 추가 (연습 가능하게)
+                    const alreadyOpp = result.tacticEvents.some(e => e.plyIdx === i && e.type === 'oppFork');
+                    if (!alreadyOpp) {
+                      result.tacticEvents.push({ type: 'oppFork', subtype: 'found', piece: pt, moveNum, san, plyIdx: i });
+                    }
+                  }
                 }
               } else if (gain >= 100) {
                 // [Missed] 전술 기회를 놓침 (이득이 폰 1개 이상일 때만)

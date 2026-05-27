@@ -1323,104 +1323,60 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   if (isDuplicate) return;
 
   let solutionUci = null;
-  const prevPos = plyIdx > 0 ? positions[plyIdx - 1] : null;
 
   if (missed) {
     solutionUci = (ev.bestMove && String(ev.bestMove).length >= 4) ? String(ev.bestMove) : null;
     if (!solutionUci) {
+      const solPos = positions[plyIdx + 1];
+      if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
+        solutionUci = solPos.lastMove;
+      }
+    }
+  } else {
+    // found / lichessStyle:
+    // plyIdx 는 전술 실행 직전 포지션의 인덱스여야 함
+    // 정답 수는 그 다음 포지션(plyIdx + 1)에 기록된 lastMove 임
+    if (positions[plyIdx + 1] && positions[plyIdx + 1].lastMove) {
+      solutionUci = positions[plyIdx + 1].lastMove;
+    } else {
       const solPos = positions[plyIdx];
       if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
         solutionUci = solPos.lastMove;
       }
     }
-    if (!solutionUci || solutionUci.length < 4) return;
+  }
 
-    // ── missed: 합법성 검증으로 올바른 FEN 탐색 ──────────────────────
-    // plyIdx가 "수를 둔 직후" 인덱스이므로 positions[plyIdx]가 올바른 시작 FEN.
-    // prevPos로 교정하지 않고, 합법성 검증으로 확정한다.
-    if (typeof Chess !== 'undefined' && solutionUci && pos.fen) {
-      const uciFrom = solutionUci.slice(0, 2);
-      const uciTo   = solutionUci.slice(2, 4);
-      const uciProm = solutionUci.length > 4 ? solutionUci[4] : undefined;
-      const mvObj   = { from: uciFrom, to: uciTo };
-      if (uciProm) mvObj.promotion = uciProm;
+  if (!solutionUci || solutionUci.length < 4) return;
 
-      let verified = false;
-      try { verified = !!(new Chess(pos.fen).move(mvObj)); } catch(e) {}
+  // ── 합법성 검증 및 FEN 교정 로직 ───────────────────────────────────
+  if (typeof Chess !== 'undefined' && solutionUci && pos.fen) {
+    const uciFrom = solutionUci.slice(0, 2);
+    const uciTo   = solutionUci.slice(2, 4);
+    const uciProm = solutionUci.length > 4 ? solutionUci[4] : undefined;
+    const mvObj   = { from: uciFrom, to: uciTo };
+    if (uciProm) mvObj.promotion = uciProm;
 
-      if (!verified) {
-        // plyIdx 자체 포함 ±2 범위 탐색
-        for (let delta = -2; delta <= 2; delta++) {
-          if (delta === 0) continue; // 이미 실패한 plyIdx 스킵
-          const candidate = positions[plyIdx + delta];
-          if (!candidate || !candidate.fen) continue;
-          try {
-            if (new Chess(candidate.fen).move(mvObj)) {
-              Object.assign(pos, { fen: candidate.fen, lastMove: candidate.lastMove, turn: candidate.turn });
-              console.log('[puzzleFix/missed] FEN 교정 성공 delta=' + delta, solutionUci, candidate.fen);
-              verified = true;
-              break;
-            }
-          } catch(e2) {}
-        }
-        if (!verified) {
-          console.warn('[puzzleFix/missed] 합법 FEN 못 찾음, 퍼즐 스킵:', solutionUci);
-          return;
-        }
+    let verified = false;
+    try { verified = !!(new Chess(pos.fen).move(mvObj)); } catch(e) {}
+
+    if (!verified) {
+      // 현재 plyIdx ±2 범위 탐색하여 합법적인 FEN 찾기
+      for (let delta = -2; delta <= 2; delta++) {
+        if (delta === 0) continue;
+        const candidate = positions[plyIdx + delta];
+        if (!candidate || !candidate.fen) continue;
+        try {
+          if (new Chess(candidate.fen).move(mvObj)) {
+            Object.assign(pos, { fen: candidate.fen, lastMove: candidate.lastMove, turn: candidate.turn });
+            console.log('[puzzleFix] FEN 교정 성공 delta=' + delta, solutionUci, candidate.fen);
+            verified = true;
+            break;
+          }
+        } catch(e2) {}
       }
-    }
-  } else {
-    // found / lichessStyle:
-    // positions[plyIdx].lastMove = plyIdx번째 수 (이미 둔 수)
-    const solPos = positions[plyIdx];
-    if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
-      solutionUci = solPos.lastMove;
-    } else if (positions[plyIdx + 1] && positions[plyIdx + 1].lastMove) {
-      solutionUci = positions[plyIdx + 1].lastMove;
-    } else {
-      return;
-    }
-
-    // ── FEN 교정 ──────────────────────────────────────────────────────
-    // ChessGrammar(lichessStyle): positions[plyIdx].fen = "전술이 가능한 포지션"
-    //   → solutionUci를 여기서 두면 되므로 prevPos로 이동하지 않는다.
-    // found: positions[plyIdx] = solutionUci를 둔 직후
-    //   → prevPos(plyIdx-1)가 올바른 시작 FEN.
-    if (!lichessStyle && prevPos && prevPos.fen) {
-      Object.assign(pos, { fen: prevPos.fen, lastMove: prevPos.lastMove, turn: prevPos.turn });
-    }
-
-    // ── 합법성 검증 ───────────────────────────────────────────────────
-    if (typeof Chess !== 'undefined' && solutionUci && pos.fen) {
-      const uciFrom = solutionUci.slice(0, 2);
-      const uciTo   = solutionUci.slice(2, 4);
-      const uciProm = solutionUci.length > 4 ? solutionUci[4] : undefined;
-      const mvObj   = { from: uciFrom, to: uciTo };
-      if (uciProm) mvObj.promotion = uciProm;
-
-      let verified = false;
-      try {
-        verified = !!(new Chess(pos.fen).move(mvObj));
-      } catch(e) {}
-
       if (!verified) {
-        // pos.fen이 틀렸으면 plyIdx 자체와 ±1 범위를 모두 탐색
-        for (let delta = -1; delta <= 2; delta++) {
-          const candidate = positions[plyIdx + delta];
-          if (!candidate || !candidate.fen) continue;
-          try {
-            if (new Chess(candidate.fen).move(mvObj)) {
-              Object.assign(pos, { fen: candidate.fen, lastMove: candidate.lastMove, turn: candidate.turn });
-              console.log('[puzzleFix] FEN 재교정 성공 delta=' + delta, solutionUci, candidate.fen);
-              verified = true;
-              break;
-            }
-          } catch(e2) {}
-        }
-        if (!verified) {
-          console.warn('[puzzleFix] 합법 FEN 못 찾음, 퍼즐 스킵:', solutionUci);
-          return;
-        }
+        console.warn('[puzzleFix] 합법 FEN 못 찾음, 퍼즐 스킵:', solutionUci);
+        return;
       }
     }
   }
@@ -1684,9 +1640,18 @@ function findKing(board, color) {
   return null;
 }
 
-// PGN → 포지션 배열 (FEN + lastMove + turn)
+// PGN → 포지션 배열 (FEN + lastMove + turn) — robust version
 function parsePgnToPositions(pgn) {
   try {
+    if (typeof parsePgnToStates === 'function') {
+      const states = parsePgnToStates(pgn);
+      return states.map(st => ({
+        fen: st.fen,
+        lastMove: st.move ? (st.move.fromAlg + st.move.toAlg + (st.move.promoPiece || '').toLowerCase()) : null,
+        turn: st.turn
+      }));
+    }
+    // fallback
     const chess = new Chess();
     const moves = pgn.trim().split(/\s+/).filter(t => !/^\d+\./.test(t) && t !== '' && !t.startsWith('{') && !['1-0','0-1','1/2-1/2','*'].includes(t));
     const positions = [{ fen: chess.fen(), lastMove: null, turn: 'w' }];
@@ -2187,6 +2152,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       _arrowStart = null;
     });
+
+    board.addEventListener('mousedown', function(e) {
+      if (e.button === 0) {
+        _userArrows = [];
+        redrawArrows();
+        _arrowStart = null;
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachEvents);
+  } else {
+    attachEvents();
+  }
+})();});
 
     board.addEventListener('mousedown', function(e) {
       if (e.button === 0) {
