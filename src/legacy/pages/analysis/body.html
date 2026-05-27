@@ -764,160 +764,150 @@
   </script>
 
   <!-- ══════════════════════════════════════════════════════
-       삭제 버튼 수정 패치:
-       저장된 게임 삭제 시 Firebase에서도 실제 삭제되도록 오버라이드
-       - loadSavedGames() 를 패치하여 삭제 버튼 클릭 시
-         원본 deleteSavedGame() 도 함께 호출 + 대국 기록도 동기화
+       삭제 동기화 패치 v3
+       Firebase 구조:
+         saved_pgns/{docId}   → 저장된 게임 (pgn 필드로 매칭)
+         game_records/{docId} → 대국 기록  (pgn 필드로 매칭)
+       두 컬렉션의 docId가 다르므로 PGN 문자열로 교차 삭제
   ══════════════════════════════════════════════════════ -->
   <script>
   (function () {
     'use strict';
 
-    // 원본 함수가 정의될 때까지 대기 후 패치
-    function waitAndPatch(name, maxMs, cb) {
-      var elapsed = 0;
-      var iv = setInterval(function () {
-        if (typeof window[name] === 'function') {
-          clearInterval(iv);
-          cb(window[name]);
-        }
-        elapsed += 100;
-        if (elapsed >= maxMs) clearInterval(iv);
-      }, 100);
+    /* ── Firebase 직접 삭제 헬퍼 ─────────────────────────
+       pgn 문자열이 일치하는 game_records 문서를 모두 삭제한다.
+       firebase (compat SDK) 는 전역 window.firebase 로 접근 가능.
+    ──────────────────────────────────────────────────── */
+    function deleteMatchingGameRecords(pgn) {
+      if (!pgn) return;
+      try {
+        var db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
+        if (!db) { console.warn('[patch] Firestore 미초기화'); return; }
+
+        // 현재 로그인 uid 확보
+        var user = window.firebase.auth().currentUser;
+        if (!user) { console.warn('[patch] 로그인 사용자 없음'); return; }
+        var uid = user.uid;
+
+        // pgn이 일치하는 game_records 문서 조회 후 삭제
+        db.collection('game_records')
+          .where('uid', '==', uid)
+          .where('pgn', '==', pgn)
+          .get()
+          .then(function (snap) {
+            if (snap.empty) {
+              console.log('[patch] game_records: 매칭 문서 없음');
+              return;
+            }
+            snap.forEach(function (doc) {
+              doc.ref.delete()
+                .then(function () { console.log('[patch] game_records 삭제 완료:', doc.id); })
+                .catch(function (e) { console.error('[patch] game_records 삭제 실패:', e); });
+            });
+          })
+          .catch(function (e) { console.error('[patch] game_records 조회 실패:', e); });
+      } catch (e) {
+        console.error('[patch] deleteMatchingGameRecords 오류:', e);
+      }
     }
 
-    // ── loadSavedGames 패치 ──────────────────────────────
-    // 원본이 렌더링한 뒤 각 삭제 버튼의 onclick을 교체한다.
-    waitAndPatch('loadSavedGames', 15000, function (origLoad) {
-      window.loadSavedGames = function () {
-        // 원본 실행 → DOM에 목록 렌더링
-        var result = origLoad.apply(this, arguments);
+    /* ── 카드에서 PGN 추출 ───────────────────────────────
+       원본이 렌더링한 카드 요소에서 pgn을 꺼내는 방법 3가지를 순서대로 시도:
+       1) data-pgn 속성
+       2) onclick 문자열 안에 포함된 PGN (드물지만 가능)
+       3) 삭제 버튼의 onclick에 있는 saved_pgns id → Firestore에서 직접 읽기
+    ──────────────────────────────────────────────────── */
+    function getPgnFromCard(card, savedDocId) {
+      // 1) data-pgn
+      if (card && card.dataset && card.dataset.pgn) return card.dataset.pgn;
 
-        // 렌더링이 비동기일 수 있으므로 짧은 대기 후 버튼 패치
-        setTimeout(patchSavedGameDeleteBtns, 300);
-        setTimeout(patchSavedGameDeleteBtns, 800);  // 혹시 늦으면 한 번 더
-        return result;
-      };
-    });
+      // 2) 부모 체인 전체에서 data-pgn 탐색
+      var el = card;
+      while (el && el !== document.body) {
+        if (el.dataset && el.dataset.pgn) return el.dataset.pgn;
+        el = el.parentElement;
+      }
 
-    // MutationObserver로 saved-games-list 변화 감지 → 항상 패치
-    document.addEventListener('DOMContentLoaded', function () {
-      var container = document.getElementById('saved-games-list');
-      if (!container) return;
-      var obs = new MutationObserver(function () {
-        setTimeout(patchSavedGameDeleteBtns, 150);
-      });
-      obs.observe(container, { childList: true, subtree: true });
-    });
+      // 3) Firestore에서 직접 읽어서 삭제 (비동기)
+      if (savedDocId) {
+        try {
+          var db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
+          if (db) {
+            db.collection('saved_pgns').doc(savedDocId).get().then(function (doc) {
+              if (doc.exists) {
+                var pgn = doc.data().pgn;
+                if (pgn) deleteMatchingGameRecords(pgn);
+              }
+            });
+          }
+        } catch(e) {}
+      }
+      return null;
+    }
 
-    // ── 삭제 버튼 onclick 교체 ──────────────────────────
-    function patchSavedGameDeleteBtns() {
+    /* ── MutationObserver 기반 버튼 패치 ────────────────
+       saved-games-list 안에 렌더링되는 삭제 버튼마다
+       "게임 기록도 함께 삭제" 리스너를 추가한다.
+    ──────────────────────────────────────────────────── */
+    function patchDeleteBtns() {
       var list = document.getElementById('saved-games-list');
       if (!list) return;
 
-      // 삭제처럼 보이는 버튼 모두 탐색
-      // 원본은 보통 onclick="deleteSavedGame('id')" 형태 또는 data-id 속성을 사용
-      var btns = list.querySelectorAll('button');
-      btns.forEach(function (btn) {
-        var txt = (btn.textContent || '').trim();
-        var oc  = (btn.getAttribute('onclick') || '');
+      list.querySelectorAll('button').forEach(function (btn) {
+        if (btn._syncDeletePatched) return;
+
+        var oc  = btn.getAttribute('onclick') || '';
+        var txt = (btn.textContent || btn.innerText || '').trim();
+
+        // 삭제 버튼 판별
         var isDelete = /삭제|delete|🗑|✕|×/i.test(txt) || /deleteSavedGame/i.test(oc);
         if (!isDelete) return;
-        if (btn._deletePatchedV2) return;  // 이미 패치됨
-        btn._deletePatchedV2 = true;
 
-        // onclick 문자열에서 id 추출 시도
+        btn._syncDeletePatched = true;
+
+        // onclick에서 saved_pgns 문서 ID 추출
         var idMatch = oc.match(/deleteSavedGame\s*\(\s*['"]([^'"]+)['"]/);
-        var gameId  = idMatch ? idMatch[1] : (btn.dataset.id || btn.dataset.gameId || null);
+        var savedDocId = idMatch ? idMatch[1]
+                       : (btn.dataset.id || btn.dataset.gameId || null);
 
-        btn.addEventListener('click', function (e) {
-          e.stopPropagation();
+        btn.addEventListener('click', function () {
+          var card = btn.closest('.saved-game-item')
+                  || btn.closest('[data-pgn]')
+                  || btn.closest('li')
+                  || btn.parentElement;
 
-          // 1) Firebase에서 실제 삭제 (원본 함수 호출)
-          if (gameId && typeof window.deleteSavedGame === 'function') {
-            try { window.deleteSavedGame(gameId); } catch(err) { console.warn('[patch] deleteSavedGame err:', err); }
+          // PGN을 카드에서 즉시 꺼낼 수 있으면 바로 삭제
+          var pgn = getPgnFromCard(card, savedDocId);
+          if (pgn) {
+            deleteMatchingGameRecords(pgn);
           }
+          // (getPgnFromCard 내부에서 비동기로도 처리됨)
 
-          // 2) DOM에서 카드 즉시 제거
-          var card = btn.closest('.saved-game-item') || btn.closest('li') || btn.closest('[data-id]') || btn.parentElement;
-          if (card && card !== list) card.remove();
-
-          // 3) 대국 기록도 Firebase에서 같은 id로 삭제 시도
-          if (gameId && typeof window.deleteGameRecord === 'function') {
-            try { window.deleteGameRecord(gameId); } catch(err) { /* 없으면 무시 */ }
-          }
-
-          // 4) 양쪽 목록 새로고침 (삭제 반영)
+          // 목록 새로고침 (조금 늦게 — Firebase 삭제 완료 후)
           setTimeout(function () {
             if (typeof window.loadSavedGames  === 'function') window.loadSavedGames();
             if (typeof window.loadGameRecords === 'function') window.loadGameRecords();
-          }, 600);
-        }, true);  // capture 단계에서 먼저 처리
+          }, 800);
+        });
       });
     }
 
-    // ── loadGameRecords 패치 ────────────────────────────
-    // 대국 기록에 삭제 버튼이 없더라도, 저장된 게임 삭제 시
-    // 대국 기록도 함께 제거되도록 deleteGameRecord 래퍼를 준비.
-    // (원본 함수가 없으면 Firebase를 직접 지운다)
-    waitAndPatch('loadGameRecords', 15000, function (origRecords) {
-      window.loadGameRecords = function () {
-        var result = origRecords.apply(this, arguments);
-        setTimeout(patchGameRecordDeleteBtns, 300);
-        setTimeout(patchGameRecordDeleteBtns, 800);
-        return result;
-      };
-    });
+    // DOMContentLoaded 이후 MutationObserver 등록
+    function setupObserver() {
+      var list = document.getElementById('saved-games-list');
+      if (!list) { setTimeout(setupObserver, 200); return; }
 
-    var recordsObs = null;
-    document.addEventListener('DOMContentLoaded', function () {
-      var container = document.getElementById('game-records-list');
-      if (!container) return;
-      recordsObs = new MutationObserver(function () {
-        setTimeout(patchGameRecordDeleteBtns, 150);
-      });
-      recordsObs.observe(container, { childList: true, subtree: true });
-    });
+      var obs = new MutationObserver(function () { setTimeout(patchDeleteBtns, 150); });
+      obs.observe(list, { childList: true, subtree: true });
 
-    function patchGameRecordDeleteBtns() {
-      var list = document.getElementById('game-records-list');
-      if (!list) return;
-      var btns = list.querySelectorAll('button');
-      btns.forEach(function (btn) {
-        var txt = (btn.textContent || '').trim();
-        var oc  = (btn.getAttribute('onclick') || '');
-        var isDelete = /삭제|delete|🗑|✕|×/i.test(txt) || /deleteGame/i.test(oc);
-        if (!isDelete) return;
-        if (btn._recordDeletePatched) return;
-        btn._recordDeletePatched = true;
+      // 이미 렌더링된 버튼도 패치
+      patchDeleteBtns();
+    }
 
-        var idMatch = oc.match(/deleteGame\w*\s*\(\s*['"]([^'"]+)['"]/);
-        var gameId  = idMatch ? idMatch[1] : (btn.dataset.id || btn.dataset.gameId || null);
-
-        btn.addEventListener('click', function (e) {
-          e.stopPropagation();
-
-          // 1) 원본 deleteGameRecord 또는 deleteSavedGame 호출
-          if (gameId) {
-            if (typeof window.deleteGameRecord === 'function') {
-              try { window.deleteGameRecord(gameId); } catch(err) {}
-            }
-            if (typeof window.deleteSavedGame === 'function') {
-              try { window.deleteSavedGame(gameId); } catch(err) {}
-            }
-          }
-
-          // 2) DOM 즉시 제거
-          var card = btn.closest('.game-record-item') || btn.closest('li') || btn.closest('[data-id]') || btn.parentElement;
-          if (card && card !== list) card.remove();
-
-          // 3) 양쪽 새로고침
-          setTimeout(function () {
-            if (typeof window.loadSavedGames  === 'function') window.loadSavedGames();
-            if (typeof window.loadGameRecords === 'function') window.loadGameRecords();
-          }, 600);
-        }, true);
-      });
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupObserver);
+    } else {
+      setupObserver();
     }
 
   })();
