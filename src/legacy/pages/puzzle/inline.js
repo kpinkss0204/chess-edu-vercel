@@ -1122,7 +1122,6 @@ function firebaseDbReady() {
 }
 
 function _puzzlePlayedAtMs(doc) {
-  const pa = doc && pa.playedAt; // Note: pa was already checked in doc && doc.playedAt earlier? Wait, pa is doc.playedAt.
   const paOrig = doc && doc.playedAt;
   if (!paOrig) return 0;
   if (typeof paOrig.seconds === 'number') return paOrig.seconds * 1000;
