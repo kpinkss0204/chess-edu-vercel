@@ -705,11 +705,11 @@ function applyOpponentMove(uci) {
 }
 
 /* ============ BOARD RENDERING ============ */
-const PIECES = {
+const PUZZLE_PIECES = {
   'K':'♔','Q':'♕','R':'♖','B':'♗','N':'♘','P':'♙',
   'k':'♚','q':'♛','r':'♜','b':'♝','n':'♞','p':'♟'
 };
-const FILES = ['a','b','c','d','e','f','g','h'];
+const PUZZLE_FILES = ['a','b','c','d','e','f','g','h'];
 
 function parseFenAndDraw(fen) {
   if (!fen || typeof fen !== 'string') {
