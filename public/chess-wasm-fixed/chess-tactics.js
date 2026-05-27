@@ -7,7 +7,7 @@
   'use strict';
 
   const API_BASE = 'https://chessgrammar.com/api/v1';
-  const MIN_ANALYSIS_INTERVAL = 2200; // 30 req/min (약 2초 간격, 안전하게 2.2초)
+  const MIN_ANALYSIS_INTERVAL = 2100; // 30 req/min (약 2초 간격, 안전하게 2.2초)
   const BAD_JUDGMENTS = ['blunder', 'mistake', 'inaccuracy'];
   const JUDGMENT_LABEL = {
     blunder: '블런더 (??)',
@@ -436,4 +436,4 @@
     BAD_JUDGMENTS,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
-
+

@@ -1207,7 +1207,8 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
 
   const plyIdx = inferTacticPlyIndex(ev);
   if (plyIdx == null || plyIdx < 0 || plyIdx >= positions.length) return;
-  const pos = positions[plyIdx];
+  // pos를 let으로 선언 - found 이벤트에서 퍼즐 시작 FEN 교정 가능하도록
+  let pos = Object.assign({}, positions[plyIdx]);
   if (!pos || !pos.fen) return;
 
   let solutionUci = null;
@@ -1215,8 +1216,24 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
     solutionUci = (ev.bestMove && String(ev.bestMove)) || null;
     if (!solutionUci || solutionUci.length < 4) return;
   } else {
-    if (!positions[plyIdx + 1] || !positions[plyIdx + 1].lastMove) return;
-    solutionUci = positions[plyIdx + 1].lastMove;
+    // found 이벤트: plyIdx는 수가 두어진 후 포지션 인덱스
+    // positions[plyIdx].lastMove = 바로 그 전술 수 (이미 둔 수)
+    // positions[plyIdx-1]이 퍼즐 시작 FEN, positions[plyIdx].lastMove가 정답
+    const solPos = positions[plyIdx];
+    const prevPos = plyIdx > 0 ? positions[plyIdx - 1] : null;
+    if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
+      solutionUci = solPos.lastMove;
+    } else if (positions[plyIdx + 1] && positions[plyIdx + 1].lastMove) {
+      // 폴백: 기존 방식
+      solutionUci = positions[plyIdx + 1].lastMove;
+    } else {
+      return;
+    }
+    // 퍼즐 시작 FEN은 전술 수 이전 포지션으로 교정
+    if (prevPos && prevPos.fen) {
+      // pos를 이전 포지션으로 교정 (아래 push에서 pos.fen 사용)
+      Object.assign(pos, { fen: prevPos.fen, lastMove: prevPos.lastMove, turn: prevPos.turn });
+    }
   }
   if (!solutionUci || solutionUci.length < 4) return;
 
@@ -1288,16 +1305,20 @@ async function loadGamePuzzles() {
     const dateStr = _puzzleGameDateStr(doc);
 
     if (doc.tacticAnalysis && doc.tacticAnalysis.tacticEvents && doc.tacticAnalysis.tacticEvents.length > 0) {
+      let extractedFromCache = false;
       try {
         const pgnClean = (doc.pgn || '').replace(/\[[^\]]*\]/g, '').trim();
         const positions = parsePgnToPositions(pgnClean);
+        const beforeCount = puzzles.length;
         for (let ei = 0; ei < doc.tacticAnalysis.tacticEvents.length; ei++) {
           pushPuzzleFromTacticEvent(puzzles, doc, doc.tacticAnalysis.tacticEvents[ei], positions, myColor, whiteName, blackName, dateStr);
         }
-        if (puzzles.some(function (p) { return p.gameId === doc.id; })) continue;
+        // 실제로 퍼즐이 추가된 경우에만 2루프 스킵
+        extractedFromCache = puzzles.length > beforeCount;
       } catch (e) {
         console.warn('[gamePuzzle] 캐시 추출 실패:', e);
       }
+      if (extractedFromCache) continue;
     }
   }
 
