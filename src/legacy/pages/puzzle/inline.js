@@ -1436,7 +1436,7 @@ window.toggleMobilePanel = toggleMobilePanel;
 async function loadGamePuzzles() {
   if (!firebaseDbReady() || !_fbUser) return [];
 
-  const docs = await fetchUserGameRecordDocs(40);
+  const docs = await fetchUserGameRecordDocs(60);
   if (!docs.length) return [];
 
   const puzzles = [];
@@ -1645,11 +1645,21 @@ function parsePgnToPositions(pgn) {
   try {
     if (typeof parsePgnToStates === 'function') {
       const states = parsePgnToStates(pgn);
-      return states.map(st => ({
-        fen: st.fen,
-        lastMove: st.move ? (st.move.fromAlg + st.move.toAlg + (st.move.promoPiece || '').toLowerCase()) : null,
-        turn: st.turn
-      }));
+      return states.map(st => {
+        let lastMove = null;
+        if (st.move) {
+          const files = 'abcdefgh';
+          const from = st.move.fromAlg || (st.move.from ? (files[st.move.from[1]] + (8 - st.move.from[0])) : null);
+          const to = st.move.toAlg || (st.move.to ? (files[st.move.to[1]] + (8 - st.move.to[0])) : null);
+          const promo = (st.move.promoPiece || '').toLowerCase();
+          if (from && to) lastMove = from + to + promo;
+        }
+        return {
+          fen: st.fen,
+          lastMove: lastMove,
+          turn: st.turn
+        };
+      });
     }
     // fallback
     const chess = new Chess();

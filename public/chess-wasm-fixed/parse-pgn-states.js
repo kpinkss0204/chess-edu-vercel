@@ -43,6 +43,11 @@
         break;
       }
 
+      // algebraic 좌표 추가 (호환성 보장)
+      const files = 'abcdefgh';
+      move.fromAlg = files[move.from[1]] + (8 - move.from[0]);
+      move.toAlg = files[move.to[1]] + (8 - move.to[0]);
+
       const isCapture = !!(board[move.to[0]][move.to[1]] || move.enPassant);
       const fromPiece = board[move.from[0]][move.from[1]];
       const isPawn = fromPiece && fromPiece[1] === 'P';
