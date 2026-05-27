@@ -143,6 +143,41 @@
       ) || null;
     }
 
+    async function practiceTactic(docId, plyIdx, type, subtype, bestMove) {
+      const doc = _loadedDocs.find(d => d.id === docId);
+      if (!doc || !doc.pgn) {
+        showToast('게임을 찾을 수 없습니다.');
+        return;
+      }
+      
+      const states = parsePgnToStates(doc.pgn);
+      if (!states || states.length <= plyIdx) {
+        showToast('포지션을 생성할 수 없습니다.');
+        return;
+      }
+      
+      const fen = states[plyIdx].fen;
+      let solution = bestMove;
+      
+      if (subtype === 'found') {
+        if (states[plyIdx + 1] && states[plyIdx + 1].move) {
+          solution = moveToUci(states[plyIdx + 1].move);
+        }
+      }
+      
+      if (!solution) {
+        showToast('정답 수를 찾을 수 없습니다.');
+        return;
+      }
+      
+      const typeLabel = { fork: '포크', oppFork: '포크', pin: '핀', skewer: '스큐어', discovered: '디스커버 어택', trap: '기물 트랩', decoy: '유인' }[type] || type;
+      const title = `${typeLabel} 전술 연습 (${doc.whiteName} vs ${doc.blackName})`;
+      const url = `/puzzle.html?mode=custom&fen=${encodeURIComponent(fen)}&solution=${encodeURIComponent(solution)}&title=${encodeURIComponent(title)}`;
+      
+      window.location.href = url;
+    }
+    window.practiceTactic = practiceTactic;
+
     // ════════════════════════════════════════
     // 오프닝 데이터베이스 & 감지
     // ════════════════════════════════════════
@@ -1129,7 +1164,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           foundEvs.forEach(ev => {
             const key = `${ev.plyIdx}|${ev.type}`;
             if (!seen.has(key)) {
-              tagHtml += `<span class="tg-tag found">${tacticType === 'oppFork' ? '⚔' : '✔'} ${ev.moveNum}수${ev.piece && ev.piece !== '' ? ' ' + PIECE_ICONS[ev.piece] : ''} (${ev.san || '?'})</span>`;
+              tagHtml += `<span class="tg-tag found" onclick="event.stopPropagation(); practiceTactic('${doc.id}', ${ev.plyIdx}, '${ev.type}', '${ev.subtype}', '${ev.bestMove || ''}')" title="퍼즐로 연습하기">${tacticType === 'oppFork' ? '⚔' : '✔'} ${ev.moveNum}수${ev.piece && ev.piece !== '' ? ' ' + PIECE_ICONS[ev.piece] : ''} (${ev.san || '?'}) 🧩</span>`;
               seen.add(key);
             }
           });
@@ -1140,7 +1175,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           missedEvs.forEach(ev => {
             const key = `${ev.plyIdx}|${ev.type}|${ev.bestMove}`;
             if (!seen.has(key)) {
-              tagHtml += `<span class="tg-tag">✘ ${ev.moveNum}수${ev.piece && ev.piece !== '' ? ' ' + PIECE_ICONS[ev.piece] : ''} (${ev.san || '?'})</span>`;
+              tagHtml += `<span class="tg-tag" onclick="event.stopPropagation(); practiceTactic('${doc.id}', ${ev.plyIdx}, '${ev.type}', '${ev.subtype}', '${ev.bestMove || ''}')" title="퍼즐로 연습하기">✘ ${ev.moveNum}수${ev.piece && ev.piece !== '' ? ' ' + PIECE_ICONS[ev.piece] : ''} (${ev.san || '?'}) 🧩</span>`;
               seen.add(key);
             }
           });

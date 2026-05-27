@@ -277,6 +277,7 @@ let state = {
   hintShown: false,
   solutionShown: false,
   puzzleSolved: false,
+  flipped: false,
   moveHistory: [],
   currentPuzzle: null,
   puzzles: [],
@@ -332,10 +333,51 @@ function setDifficultySelection(diff) {
 
 function applyQueryFromUrl() {
   var params = new URLSearchParams(window.location.search);
+  var mode = params.get('mode');
+  if (mode === 'custom') {
+    const fen = params.get('fen');
+    const solution = params.get('solution');
+    const title = params.get('title') || '맞춤 전술 퍼즐';
+    if (fen && solution) {
+      startCustomPuzzle(fen, solution, title);
+      return;
+    }
+  }
   var themeId = params.get('theme');
   if (!themeId || !findTheme(themeId)) return;
   var preset = normalizeDiffParam(params.get('diff')) || 'beginner';
   openTheme(themeId, preset);
+}
+
+async function startCustomPuzzle(fen, solutionStr, title) {
+  document.getElementById('theme-list-view').style.display = 'none';
+  document.getElementById('puzzle-board-view').classList.add('show');
+  
+  const solution = solutionStr.split(',');
+  const fenParts = fen.split(' ');
+  const turn = fenParts[1] === 'w' ? 'white' : 'black';
+  
+  const customPuzzle = {
+    lichessId: 'custom',
+    title: title,
+    rating: 0,
+    fen: fen,
+    opponentMove: null,
+    solution: solution,
+    fullSolution: solution,
+    hint: '최선의 전술을 찾아보세요',
+    moves: Math.ceil(solution.length / 2),
+    themes: ['custom'],
+    turn: turn
+  };
+  
+  state.puzzles = [customPuzzle];
+  state.totalPuzzles = 1;
+  state.currentTheme = { icon: '🧩', name: '맞춤 퍼즐', id: 'custom' };
+  state.flipped = (turn === 'black');
+  
+  document.getElementById('psp-theme-tag').textContent = `🧩 맞춤 퍼즐`;
+  loadPuzzle(0);
 }
 
 function findTheme(id) {
@@ -695,11 +737,15 @@ function parseFenAndDraw(fen) {
 function drawBoard() {
   const container = document.getElementById('puzzle-chessboard');
   container.innerHTML = '';
+  const flipped = state.flipped;
 
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
+  for (let ri = 0; ri < 8; ri++) {
+    for (let ci = 0; ci < 8; ci++) {
+      const r = flipped ? 7 - ri : ri;
+      const c = flipped ? 7 - ci : ci;
+
       const sq = document.createElement('div');
-      const isLight = (r + c) % 2 === 0;
+      const isLight = (ri + ci) % 2 === 0;
       sq.className = 'chess-square ' + (isLight ? 'light' : 'dark');
       sq.dataset.r = r;
       sq.dataset.c = c;
@@ -717,13 +763,13 @@ function drawBoard() {
       }
 
       // labels
-      if (c === 7) {
+      if (ci === (flipped ? 0 : 7)) {
         const rl = document.createElement('span');
         rl.className = 'sq-label-rank';
         rl.textContent = 8 - r;
         sq.appendChild(rl);
       }
-      if (r === 7) {
+      if (ri === (flipped ? 0 : 7)) {
         const fl = document.createElement('span');
         fl.className = 'sq-label-file';
         fl.textContent = FILES[c];
