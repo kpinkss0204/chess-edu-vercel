@@ -1345,42 +1345,31 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   let solutionUci = null;
 
   if (missed) {
-    // missed: plyIdx는 실제 수(나쁜 수)가 이미 적용된 포지션
-    // 퍼즐로 만들 때는 수를 두기 직전(positions[plyIdx-1])에서 bestMove를 찾는 것
+    // missed: plyIdx는 수 둚 직전 포지션 (0-based ply)
     solutionUci = (ev.bestMove && String(ev.bestMove).length >= 4) ? String(ev.bestMove) : null;
-    if (solutionUci) {
-      // FEN을 수 두기 직전으로 교정
-      const preFen = positions[plyIdx - 1];
-      if (preFen && preFen.fen) {
-        pos = Object.assign({}, preFen);
-      }
-    } else {
-      // bestMove가 없으면 positions[plyIdx].lastMove 시도
+    if (!solutionUci) {
+      // bestMove가 없으면 positions[plyIdx+1].lastMove 시도
       const solPos = positions[plyIdx + 1];
       if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
         solutionUci = solPos.lastMove;
       }
     }
+    // pos = positions[plyIdx] 그대로 사용 (되돌리지 않음)
   } else {
     // found / lichessStyle:
-    // Firebase tacticEvents의 plyIdx는 전술 수가 이미 적용된 포지션의 인덱스 (0-based)
-    // 즉 positions[plyIdx].lastMove = 실제로 둔 전술 수 = 정답
-    // 퍼즐 FEN = positions[plyIdx - 1] (수를 두기 직전 포지션)
-    const solMove = positions[plyIdx] && positions[plyIdx].lastMove;
-    if (solMove && solMove.length >= 4) {
-      solutionUci = solMove;
-      // FEN을 한 칸 앞으로 교정
-      const preFen = positions[plyIdx - 1];
-      if (preFen && preFen.fen) {
-        pos = Object.assign({}, preFen);
-      }
+    // 기보 데이터의 plyIdx는 수 둚 직전 포지션이므로 그대로 사용하고, 
+    // 정답(solutionUci)은 그 다음 포지션에 기록된 lastMove를 가져옴.
+    const solPos = positions[plyIdx + 1];
+    if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
+      solutionUci = solPos.lastMove;
     } else {
-      // 폴백: plyIdx+1에서 찾기
-      const solPos = positions[plyIdx + 1];
-      if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
-        solutionUci = solPos.lastMove;
+      // 폴백: 현재 위치의 move 시도 (데이터 형식이 다를 경우 대비)
+      const currentMove = positions[plyIdx] && positions[plyIdx].lastMove;
+      if (currentMove && currentMove.length >= 4) {
+        solutionUci = currentMove;
       }
     }
+    // pos = positions[plyIdx] 그대로 사용 (되돌리지 않음)
   }
 
   if (!solutionUci || solutionUci.length < 4) return;
