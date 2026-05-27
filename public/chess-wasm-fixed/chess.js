@@ -417,4 +417,10 @@
   global.isInCheck = global.WasmChess.isInCheck;
   global.findKing = global.WasmChess.findKing;
 
+  // Backwards compatibility for constants
+  global.FILES = global.WasmChess.FILES;
+  global.INIT_BOARD = global.WasmChess.INIT_BOARD;
+  global.PIECE_NAMES = global.WasmChess.PIECE_NAMES;
+  global.PIECE_VALUES = global.WasmChess.PIECE_VALUES;
+
 })(typeof window !== 'undefined' ? window : globalThis);
