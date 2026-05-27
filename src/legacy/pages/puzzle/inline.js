@@ -519,6 +519,10 @@ function loadPuzzle(idx) {
   state.wrongMove = false;
   state.waitingEngine = false;
 
+  // 보드 방향 설정 (흑 차례면 뒤집기)
+  const wt = normalizePuzzleTurn(puzzle.turn);
+  state.flipped = (wt === 'black');
+
   document.getElementById('puzzle-nav-info').textContent = `퍼즐 ${idx+1} / ${state.totalPuzzles}`;
   document.getElementById('psp-puzzle-title').textContent = puzzle.title;
   document.getElementById('psp-rating').textContent = `레이팅: ${puzzle.rating}`;
