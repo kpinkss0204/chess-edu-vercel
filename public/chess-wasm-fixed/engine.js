@@ -229,6 +229,15 @@ function connectSharedMainEngine() {
 }
 
 // ── 엔진 초기화 ──────────────────────────────────────────────
+function hideLoading() {
+  var el = document.getElementById('engine-loading');
+  if (el) el.classList.add('hidden');
+}
+function showLoading() {
+  var el = document.getElementById('engine-loading');
+  if (el) el.classList.remove('hidden');
+}
+
 async function initEngine() {
   var skipFullScreenOverlay = false;
   try {
