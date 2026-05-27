@@ -648,9 +648,9 @@ function loadPuzzle(idx) {
 /* ============ UCI MOVE APPLICATION ============ */
 function uciToCoords(uci) {
   // e.g. "e2e4" → { fr:6, fc:4, tr:4, tc:4 }
-  const fc = FILES.indexOf(uci[0]);
+  const fc = PUZZLE_FILES.indexOf(uci[0]);
   const fr = 8 - parseInt(uci[1]);
-  const tc = FILES.indexOf(uci[2]);
+  const tc = PUZZLE_FILES.indexOf(uci[2]);
   const tr = 8 - parseInt(uci[3]);
   return { fr, fc, tr, tc };
 }
@@ -697,8 +697,8 @@ function applyOpponentMove(uci) {
     const { fr, fc, tr, tc } = coords;
     getSquareEl(fr, fc)?.classList.add('last-move');
     getSquareEl(tr, tc)?.classList.add('last-move');
-    const fromAlg = FILES[fc] + (8-fr);
-    const toAlg   = FILES[tc] + (8-tr);
+    const fromAlg = PUZZLE_FILES[fc] + (8-fr);
+    const toAlg   = PUZZLE_FILES[tc] + (8-tr);
     state.moveHistory.push({ alg: fromAlg+'-'+toAlg, type:'engine' });
     updateMoveHistory();
   }
@@ -776,7 +776,7 @@ function drawBoard() {
       if (ri === (flipped ? 0 : 7)) {
         const fl = document.createElement('span');
         fl.className = 'sq-label-file';
-        fl.textContent = FILES[c];
+        fl.textContent = PUZZLE_FILES[c];
         sq.appendChild(fl);
       }
 
@@ -856,11 +856,11 @@ function getLegalMovesFrom(r, c) {
   try {
     syncLegalChessFromSolution();
     if (!state._legalChess) return [];
-    const fromSq = FILES[c] + (8 - r);
+    const fromSq = PUZZLE_FILES[c] + (8 - r);
     const moves = state._legalChess.moves({ square: fromSq, verbose: true });
     return moves.map(m => ({
       tr: 8 - parseInt(m.to[1], 10),
-      tc: FILES.indexOf(m.to[0]),
+      tc: PUZZLE_FILES.indexOf(m.to[0]),
       capture: !!m.captured
     }));
   } catch (e) { return []; }
@@ -871,7 +871,7 @@ function getLegalUciFrom(r, c) {
   try {
     syncLegalChessFromSolution();
     if (!state._legalChess) return new Set();
-    const fromSq = FILES[c] + (8 - r);
+    const fromSq = PUZZLE_FILES[c] + (8 - r);
     const moves = state._legalChess.moves({ square: fromSq, verbose: true });
     const uciSet = new Set();
     moves.forEach(m => {
@@ -932,8 +932,8 @@ function handleSquareClick(r, c) {
       return;
     }
 
-    const fromAlg = FILES[sc] + (8 - sr);
-    const toAlg   = FILES[c]  + (8 - r);
+    const fromAlg = PUZZLE_FILES[sc] + (8 - sr);
+    const toAlg   = PUZZLE_FILES[c]  + (8 - r);
     tryMove(sr, sc, r, c, fromAlg + toAlg);
   } else {
     // 내 기물 선택
@@ -1012,8 +1012,8 @@ function tryMove(fr, fc, tr, tc, moveStr) {
     getSquareEl(fr, fc)?.classList.add('last-move');
     getSquareEl(tr, tc)?.classList.add('correct');
 
-    const fromAlg = FILES[fc] + (8-fr);
-    const toAlg   = FILES[tc] + (8-tr);
+    const fromAlg = PUZZLE_FILES[fc] + (8-fr);
+    const toAlg   = PUZZLE_FILES[tc] + (8-tr);
     state.moveHistory.push({ alg: fromAlg+'-'+toAlg, type:'user' });
     state.solutionMoveIdx++;
     updateMoveHistory();
@@ -1940,17 +1940,20 @@ function startGamePuzzleByType(tacticType) {
 
 // 기보 퍼즐 로드 후 그리드 자동 업데이트 (Firebase 인증 후)
 async function initGamePuzzleGrid() {
+  console.log('[puzzle] initGamePuzzleGrid started, user:', _fbUser?.uid);
   try {
     if (!firebaseDbReady() || !_fbUser) {
+      console.warn('[puzzle] firebase not ready or no user');
       _gamePuzzles = [];
     } else {
       _gamePuzzles = await loadGamePuzzles();
+      console.log('[puzzle] loaded game puzzles count:', _gamePuzzles.length);
       if (_gamePuzzles.length === 0) _gamePuzzles = [];
     }
     _gamePuzzleLoaded = true;
     renderGamePuzzleThemeGrid(_gamePuzzles);
   } catch(e) {
-    console.warn('[puzzle] 기보 그리드 초기화 실패:', e);
+    console.error('[puzzle] 기보 그리드 초기화 실패:', e);
     renderGamePuzzleThemeGrid([]);
   }
 }
