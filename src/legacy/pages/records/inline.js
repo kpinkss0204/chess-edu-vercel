@@ -340,7 +340,7 @@ window.toggleMobilePanel = toggleMobilePanel;
         myAccuracy: 0,
         totalMoves: Math.max(0, states.length - 1),
         forkFound: emptyFork(), forkMissed: emptyFork(), oppForkCreated: emptyFork(),
-        absPinFound: 0, absPinMissed: 0, relPinFound: 0, relPinMissed: 0,
+        pinFound: 0, pinMissed: 0,
         skewerFound: 0, skewerMissed: 0, discoveredFound: 0, discoveredMissed: 0,
         trapFound: 0, trapMissed: 0, decoyFound: 0, decoyMissed: 0,
         tacticEvents: [], moveJudgments: []
@@ -400,11 +400,10 @@ window.toggleMobilePanel = toggleMobilePanel;
               const pattern = (t.pattern || '').toLowerCase();
               const gain = t.gain || 0;
               
-              // 내부 타입 매핑 (fork, absPin, relPin, skewer, discovered, trap, decoy, checkmate)
+              // 내부 타입 매핑 (fork, pin, skewer, discovered, trap, decoy)
               let type = pattern;
               if (pattern === 'pin') {
-                const hasKing = (t.targets || []).some(tgt => tgt.piece_name === 'king');
-                type = hasKing ? 'absPin' : 'relPin';
+                type = 'pin';
               } else if (pattern === 'discovered_attack') {
                 type = 'discovered';
               } else if (pattern === 'deflection') {
@@ -416,20 +415,24 @@ window.toggleMobilePanel = toggleMobilePanel;
               if (trigger === playedUci) {
                 // [Found] 전술 성공
                 if (isMe) {
-                  result.tacticEvents.push({ type, subtype: 'found', piece: pt, moveNum, san, plyIdx: i });
-                  // 통계 반영
-                  if (type === 'fork') { result.forkFound[pt] = (result.forkFound[pt] || 0) + 1; }
-                  else if (result[type + 'Found'] !== undefined) { result[type + 'Found']++; }
+                  // 중복 방지 (동일 지점, 동일 타입이 이미 발견됨으로 기록되었는지)
+                  const alreadyFound = result.tacticEvents.some(e => e.plyIdx === i && e.type === type && e.subtype === 'found');
+                  if (!alreadyFound) {
+                    result.tacticEvents.push({ type, subtype: 'found', piece: pt, moveNum, san, plyIdx: i });
+                    // 통계 반영
+                    if (type === 'fork') { result.forkFound[pt] = (result.forkFound[pt] || 0) + 1; }
+                    else if (result[type + 'Found'] !== undefined) { result[type + 'Found']++; }
+                  }
                 } else {
-                  // 상대방이 나에게 전술을 성공시킴 (통계에는 oppFork만 기록)
+                  // 상대방이 나에게 전술을 성공시킴
                   if (type === 'fork') { result.oppForkCreated[pt] = (result.oppForkCreated[pt] || 0) + 1; }
                 }
               } else if (gain >= 100) {
                 // [Missed] 전술 기회를 놓침 (이득이 폰 1개 이상일 때만)
                 if (isMe) {
-                  // 이미 해당 지점에서 동일 타입의 전술을 찾았다면(중복 탐지 등) 무시
-                  const alreadyFound = result.tacticEvents.some(e => e.plyIdx === i && e.type === type && e.subtype === 'found');
-                  if (!alreadyFound) {
+                  // 중복 방지 (동일 지점, 동일 타입, 동일 정답수순이 이미 기록되었는지)
+                  const isDuplicate = result.tacticEvents.some(e => e.plyIdx === i && e.type === type && (e.subtype === 'found' || e.bestMove === trigger));
+                  if (!isDuplicate) {
                     result.tacticEvents.push({ type, subtype: 'missed', piece: pt, moveNum, san, plyIdx: i, bestMove: trigger });
                     if (type === 'fork') { result.forkMissed[pt] = (result.forkMissed[pt] || 0) + 1; }
                     else if (result[type + 'Missed'] !== undefined) { result[type + 'Missed']++; }
@@ -867,7 +870,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         const myColor_counts = { w: 0, b: 0 }; let totalMovesSum = 0;
         let sumMyBlunders = 0, sumMyMistakes = 0, sumMyInaccuracies = 0;
         let sumOppBlunders = 0, sumOppMistakes = 0, sumOppInaccuracies = 0, sumOppBF = 0, sumOppBM = 0;
-        let sumCheckmates = 0, sumAbsPinFound = 0, sumAbsPinMissed = 0, sumRelPinFound = 0, sumRelPinMissed = 0;
+        let sumCheckmates = 0, sumPinFound = 0, sumPinMissed = 0;
         let sumSkewerFound = 0, sumSkewerMissed = 0, sumDiscoveredFound = 0, sumDiscoveredMissed = 0;
         let sumTrapFound = 0, sumTrapMissed = 0, sumDecoyFound = 0, sumDecoyMissed = 0;
         let sumForkFound = { P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 }, sumForkMissed = { P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 }, sumOppForkCreated = { P: 0, N: 0, B: 0, R: 0, Q: 0, K: 0 };
@@ -890,10 +893,11 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           sumOppBF += a.oppBlunderFound || 0;
           sumOppBM += a.oppBlunderMissed || 0;
           sumCheckmates += a.checkmates || 0;
-          sumAbsPinFound += a.absPinFound || 0;
-          sumAbsPinMissed += a.absPinMissed || 0;
-          sumRelPinFound += a.relPinFound || 0;
-          sumRelPinMissed += a.relPinMissed || 0;
+          
+          // 핀 통합 집계 (기존 abs/rel 데이터와 신규 v5 pin 데이터 모두 대응)
+          sumPinFound += (a.pinFound || 0) + (a.absPinFound || 0) + (a.relPinFound || 0);
+          sumPinMissed += (a.pinMissed || 0) + (a.absPinMissed || 0) + (a.relPinMissed || 0);
+          
           sumSkewerFound += a.skewerFound || 0;
           sumSkewerMissed += a.skewerMissed || 0;
           sumDiscoveredFound += a.discoveredFound || 0;
@@ -1005,8 +1009,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
                 oppBlunders: a.oppBlunders, oppMistakes: a.oppMistakes, oppInaccuracies: a.oppInaccuracies,
                 oppBlunderFound: a.oppBlunderFound, oppBlunderMissed: a.oppBlunderMissed,
                 checkmates: a.checkmates,
-                absPinFound: a.absPinFound || 0, absPinMissed: a.absPinMissed || 0,
-                relPinFound: a.relPinFound || 0, relPinMissed: a.relPinMissed || 0,
+                pinFound: a.pinFound || 0, pinMissed: a.pinMissed || 0,
                 skewerFound: a.skewerFound || 0, skewerMissed: a.skewerMissed || 0,
                 discoveredFound: a.discoveredFound || 0, discoveredMissed: a.discoveredMissed || 0,
                 trapFound: a.trapFound || 0, trapMissed: a.trapMissed || 0,
@@ -1046,14 +1049,12 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           oppBlunderFound: sumOppBF, oppBlunderMissed: sumOppBM,
           checkmates: sumCheckmates,
           forkFound: sumForkFound, forkMissed: sumForkMissed, oppForkCreated: sumOppForkCreated,
-          absPinFound: sumAbsPinFound, absPinMissed: sumAbsPinMissed,
-          relPinFound: sumRelPinFound, relPinMissed: sumRelPinMissed,
+          pinFound: sumPinFound,
+          pinMissed: sumPinMissed,
           skewerFound: sumSkewerFound, skewerMissed: sumSkewerMissed,
           discoveredFound: sumDiscoveredFound, discoveredMissed: sumDiscoveredMissed,
           trapFound: sumTrapFound, trapMissed: sumTrapMissed,
           decoyFound: sumDecoyFound, decoyMissed: sumDecoyMissed,
-          pinFound: sumAbsPinFound + sumRelPinFound,
-          pinMissed: sumAbsPinMissed + sumRelPinMissed,
           avgCpLoss: sumMoves > 0 ? Math.round(sumCp / sumMoves) : 0,
           myAccuracy: avgMyAccuracy,
           openingStats: Array.from(openingStatsMap.values())
@@ -1077,15 +1078,24 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       const titleEl = document.getElementById('tmodal-title');
       const bodyEl = document.getElementById('tmodal-body');
 
-      const typeLabel = { fork: '포크', oppFork: '상대 포크', absPin: '절대 핀', relPin: '상대 핀', pin: '핀', oppBlunder: '상대 블런더 포착', skewer: '스큐어', discovered: '디스커버 어택', trap: '기물 트랩', decoy: '유인' }[tacticType] || tacticType;
+      const typeLabel = { fork: '포크', oppFork: '상대 포크', pin: '핀', oppBlunder: '상대 블런더 포착', skewer: '스큐어', discovered: '디스커버 어택', trap: '기물 트랩', decoy: '유인' }[tacticType] || tacticType;
       const subtypeLabel = subtypeFilter === 'found' ? '찾음' : subtypeFilter === 'missed' ? '놓침' : '';
       titleEl.innerHTML = `<span>${icon}</span> ${name} — ${typeLabel}${subtypeLabel ? ' (' + subtypeLabel + ')' : ''} 게임 목록`;
+
+      // UI 카테고리와 내부 저장 타입 매핑 (구 버전/신 버전 호환성)
+      const typeMap = {
+        'pin': ['absPin', 'relPin', 'pin'],
+        'discovered': ['discovered', 'discovery', 'discoveredattack'],
+        'trap': ['trap', 'trapped_piece'],
+        'decoy': ['decoy', 'deflection']
+      };
+      const searchTypes = typeMap[tacticType] || [tacticType];
 
       // 해당 전술이 있는 게임만 필터
       const PIECE_ICONS = { P: '♙', N: '♞', B: '♝', R: '♜', Q: '♛', K: '♚' };
       const matchingGames = _statsGameDetails.filter(gd =>
         gd.tacticEvents.some(ev =>
-          ev.type === tacticType &&
+          searchTypes.includes(ev.type) &&
           (tacticPiece === '' || ev.piece === tacticPiece) &&
           (!subtypeFilter || ev.subtype === subtypeFilter)
         )
@@ -1108,13 +1118,33 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         const whiteName = doc.whiteName || '백', blackName = doc.blackName || '흑';
 
         // 해당 게임에서 이 전술의 이벤트들
-        const evs = gd.tacticEvents.filter(ev => ev.type === tacticType && (tacticPiece === '' || ev.piece === tacticPiece) && (!subtypeFilter || ev.subtype === subtypeFilter));
+        const evs = gd.tacticEvents.filter(ev => searchTypes.includes(ev.type) && (tacticPiece === '' || ev.piece === tacticPiece) && (!subtypeFilter || ev.subtype === subtypeFilter));
         const foundEvs = evs.filter(ev => ev.subtype === 'found');
         const missedEvs = evs.filter(ev => ev.subtype === 'missed');
 
         let tagHtml = '';
-        if (foundEvs.length) tagHtml += foundEvs.map(ev => `<span class="tg-tag found">${tacticType === 'oppFork' ? '⚔' : '✔'} ${ev.moveNum}수${ev.piece && ev.piece !== '' ? ' ' + PIECE_ICONS[ev.piece] : ''} (${ev.san || '?'})</span>`).join('');
-        if (missedEvs.length) tagHtml += missedEvs.map(ev => `<span class="tg-tag">✘ ${ev.moveNum}수${ev.piece && ev.piece !== '' ? ' ' + PIECE_ICONS[ev.piece] : ''} (${ev.san || '?'})</span>`).join('');
+        if (foundEvs.length) {
+          // 중복 표시 방지 (동일 지점, 동일 타입)
+          const seen = new Set();
+          foundEvs.forEach(ev => {
+            const key = `${ev.plyIdx}|${ev.type}`;
+            if (!seen.has(key)) {
+              tagHtml += `<span class="tg-tag found">${tacticType === 'oppFork' ? '⚔' : '✔'} ${ev.moveNum}수${ev.piece && ev.piece !== '' ? ' ' + PIECE_ICONS[ev.piece] : ''} (${ev.san || '?'})</span>`;
+              seen.add(key);
+            }
+          });
+        }
+        if (missedEvs.length) {
+          // 중복 표시 방지 (동일 지점, 동일 타입, 동일 정답)
+          const seen = new Set();
+          missedEvs.forEach(ev => {
+            const key = `${ev.plyIdx}|${ev.type}|${ev.bestMove}`;
+            if (!seen.has(key)) {
+              tagHtml += `<span class="tg-tag">✘ ${ev.moveNum}수${ev.piece && ev.piece !== '' ? ' ' + PIECE_ICONS[ev.piece] : ''} (${ev.san || '?'})</span>`;
+              seen.add(key);
+            }
+          });
+        }
 
         html += `<div class="tmodal-game-item" onclick="closeTacticModalAndOpen(${JSON.stringify(doc).replace(/"/g, '&quot;')})">
       <div class="tg-header">
