@@ -1210,27 +1210,41 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   let pos = Object.assign({}, positions[plyIdx]);
   if (!pos || !pos.fen) return;
 
+  // 중복 체크: 같은 gameId + plyIdx + type 조합이 이미 있으면 스킵
+  const isDuplicate = puzzles.some(function(p) {
+    return p.gameId === doc.id && p._plyIdx === plyIdx && p.tacticBaseType === tacticBaseType;
+  });
+  if (isDuplicate) return;
+
   let solutionUci = null;
+  const prevPos = plyIdx > 0 ? positions[plyIdx - 1] : null;
+
   if (missed) {
-    solutionUci = (ev.bestMove && String(ev.bestMove)) || null;
+    solutionUci = (ev.bestMove && String(ev.bestMove).length >= 4) ? String(ev.bestMove) : null;
+    // bestMove가 없으면 positions[plyIdx].lastMove 폴백 (그 수가 실은 최선수였던 경우)
+    if (!solutionUci) {
+      const solPos = positions[plyIdx];
+      if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
+        solutionUci = solPos.lastMove;
+      }
+    }
     if (!solutionUci || solutionUci.length < 4) return;
+    // missed: 퍼즐 시작 FEN은 전술 수 이전 포지션
+    if (prevPos && prevPos.fen) {
+      Object.assign(pos, { fen: prevPos.fen, lastMove: prevPos.lastMove, turn: prevPos.turn });
+    }
   } else {
     // found 이벤트: plyIdx는 수가 두어진 후 포지션 인덱스
-    // positions[plyIdx].lastMove = 바로 그 전술 수 (이미 둔 수)
-    // positions[plyIdx-1]이 퍼즐 시작 FEN, positions[plyIdx].lastMove가 정답
     const solPos = positions[plyIdx];
-    const prevPos = plyIdx > 0 ? positions[plyIdx - 1] : null;
     if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
       solutionUci = solPos.lastMove;
     } else if (positions[plyIdx + 1] && positions[plyIdx + 1].lastMove) {
-      // 폴백: 기존 방식
       solutionUci = positions[plyIdx + 1].lastMove;
     } else {
       return;
     }
     // 퍼즐 시작 FEN은 전술 수 이전 포지션으로 교정
     if (prevPos && prevPos.fen) {
-      // pos를 이전 포지션으로 교정 (아래 push에서 pos.fen 사용)
       Object.assign(pos, { fen: prevPos.fen, lastMove: prevPos.lastMove, turn: prevPos.turn });
     }
   }
@@ -1243,6 +1257,7 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   puzzles.push({
     isGameBased: true,
     gameId: doc.id,
+    _plyIdx: plyIdx,
     gameDateStr: dateStr,
     gameVs: myColor === 'w' ? ('vs ' + blackName) : ('vs ' + whiteName),
     gameResult: doc.result,
