@@ -253,6 +253,20 @@
     return winProb(cpRaw) * 2 - 1;
   }
 
+  /** UCI(e2e4) -> move object */
+  function uciToMove(uci, board, turn, castling, enPassant) {
+    if (!uci || uci.length < 4) return null;
+    const fr = 8 - parseInt(uci[1]), fc = FILES.indexOf(uci[0]);
+    const tr = 8 - parseInt(uci[3]), tc = FILES.indexOf(uci[2]);
+    if (fr < 0 || fr > 7 || fc < 0 || fc > 7 || tr < 0 || tr > 7 || tc < 0 || tc > 7) return null;
+    const promo = uci.length === 5 ? uci[4].toUpperCase() : null;
+    const all = legalMoves(board, fr, fc, castling, enPassant);
+    return all.find(m => 
+      m.to[0] === tr && m.to[1] === tc && 
+      (!promo || m.promoPiece === promo)
+    ) || null;
+  }
+
   const PIECE_VALUE = { P:100, N:320, B:330, R:500, Q:900, K:0 };
 
   function isSacrifice(h) {
@@ -403,6 +417,7 @@
     classifyMove,
     boardToFen,
     pieceImg,
+    uciToMove,
     PIECE_NAMES,
     PIECE_VALUES,
     INIT_BOARD,
@@ -416,6 +431,12 @@
   global.boardToFen = global.WasmChess.boardToFen;
   global.isInCheck = global.WasmChess.isInCheck;
   global.findKing = global.WasmChess.findKing;
+  global.pieceImg = global.WasmChess.pieceImg;
+  global.legalMoves = global.WasmChess.legalMoves;
+  global.moveToSAN = global.WasmChess.moveToSAN;
+  global.parseFenBoard = global.WasmChess.parseFenBoard;
+  global.uciToMove = global.WasmChess.uciToMove;
+  global.classifyMove = global.WasmChess.classifyMove;
 
   // Backwards compatibility for constants
   global.FILES = global.WasmChess.FILES;
