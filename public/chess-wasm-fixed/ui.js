@@ -464,7 +464,35 @@ function renderTopMoves(msg) {
   if (!el) return;
   if (msg) {
     el.innerHTML = `<div class="top-moves-empty">${msg}</div>`;
+    return;
   }
+  
+  if (typeof window.pvData === 'undefined' || !window.pvData) return;
+  
+  let html = '';
+  // pvData keys are strings '1', '2', '3'
+  Object.keys(window.pvData).sort().forEach(key => {
+    const pv = window.pvData[key];
+    const isRank1 = key === '1';
+    
+    // Formatting move list
+    const firstMove = pv.moves[0] || '';
+    const restMoves = pv.moves.slice(1).join(' ');
+
+    html += `
+      <div class="top-move-row ${isRank1 ? 'rank-1' : ''}" onclick="game._applyEngineLine(game.historyIndex, ${key}, 0)">
+        <div class="top-move-score-col ${isRank1 ? 'rank-1' : ''}">
+          <div class="top-move-score ${pv.cpFromWhite >= 0 ? 'positive' : 'negative'}">${pv.eval}</div>
+          <div class="top-move-depth-badge">d${pv.depth}</div>
+        </div>
+        <div class="top-move-moves-col">
+          <div class="top-move-first">${firstMove}</div>
+          <div class="top-move-rest">${restMoves}</div>
+        </div>
+      </div>
+    `;
+  });
+  el.innerHTML = html;
 }
 window.renderTopMoves = renderTopMoves;
 
