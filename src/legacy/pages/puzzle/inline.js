@@ -1434,16 +1434,24 @@ window.toggleMobilePanel = toggleMobilePanel;
 
 // Firestore에서 기보 불러와 전술 포지션 추출
 async function loadGamePuzzles() {
-  if (!firebaseDbReady() || !_fbUser) return [];
+  if (!firebaseDbReady() || !_fbUser) {
+    console.warn('[gamePuzzle] firebase not ready or no user');
+    return [];
+  }
 
+  console.log('[gamePuzzle] loading puzzles for user:', _fbUser.uid);
   const docs = await fetchUserGameRecordDocs(60);
+  console.log('[gamePuzzle] fetched docs count:', docs.length);
   if (!docs.length) return [];
 
   const puzzles = [];
 
   for (let di = 0; di < docs.length; di++) {
     const doc = docs[di];
-    if (!doc.pgn || !doc.myColor) continue;
+    if (!doc.pgn || !doc.myColor) {
+      console.log('[gamePuzzle] skipping doc (no pgn/color):', doc.id);
+      continue;
+    }
 
     const myColor = doc.myColor;
     const whiteName = doc.whiteName || '백';
@@ -1455,12 +1463,16 @@ async function loadGamePuzzles() {
       try {
         const pgnClean = (doc.pgn || '').replace(/\[[^\]]*\]/g, '').trim();
         const positions = parsePgnToPositions(pgnClean);
+        console.log('[gamePuzzle] doc:', doc.id, '| positions parsed:', positions.length, '| tacticEvents:', doc.tacticAnalysis.tacticEvents.length);
+        
         const beforeCount = puzzles.length;
         for (let ei = 0; ei < doc.tacticAnalysis.tacticEvents.length; ei++) {
           pushPuzzleFromTacticEvent(puzzles, doc, doc.tacticAnalysis.tacticEvents[ei], positions, myColor, whiteName, blackName, dateStr);
         }
-        // 실제로 퍼즐이 추가된 경우에만 2루프 스킵
         extractedFromCache = puzzles.length > beforeCount;
+        if (extractedFromCache) {
+          console.log('[gamePuzzle] extracted', (puzzles.length - beforeCount), 'puzzles from tacticAnalysis');
+        }
       } catch (e) {
         console.warn('[gamePuzzle] 캐시 추출 실패:', e);
       }
@@ -1490,6 +1502,7 @@ async function loadGamePuzzles() {
       }
 
       if (!puzzles.some(function (p) { return p.gameId === doc.id; })) {
+        console.log('[gamePuzzle] auto-detecting tactics for doc:', doc.id);
         const detected = detectTacticsInPgn(positions, myColor, doc);
         for (let j = 0; j < detected.length; j++) {
           puzzles.push(Object.assign({}, detected[j], {
@@ -1498,12 +1511,16 @@ async function loadGamePuzzles() {
             gameResult: doc.result,
           }));
         }
+        if (detected.length > 0) {
+          console.log('[gamePuzzle] detected', detected.length, 'puzzles via engine');
+        }
       }
     } catch (e) {
       console.warn('[gamePuzzle] PGN 파싱 실패:', e);
     }
   }
 
+  console.log('[gamePuzzle] total puzzles final count:', puzzles.length);
   return puzzles.slice(0, 40);
 }
 
@@ -1514,8 +1531,8 @@ function detectTacticsInPgn(positions, myColor, doc) {
   const whiteName = doc.whiteName || '백';
   const blackName = doc.blackName || '흑';
 
-  // 중반 포지션(6~40수) 위주로 분석
-  for (let i = 12; i < Math.min(positions.length - 2, 80); i += 2) {
+  // 분석 범위 확대: 8수 이후 ~ 기보 끝까지
+  for (let i = 16; i < Math.min(positions.length - 1, 100); i += 2) {
     const pos = positions[i];
     if (!pos || !pos.fen || pos.turn !== myColor) continue;
 

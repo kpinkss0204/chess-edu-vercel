@@ -28,8 +28,23 @@
   }
 
   function parsePgnToStates(pgn) {
-    const body = (pgn || '').replace(/\[[^\]]*\]/g, '').trim();
-    const tokens = body.replace(/\d+\./g, '').replace(/1-0|0-1|1\/2-1\/2|\*/g, '').trim().split(/\s+/).filter(Boolean);
+    // 1. 헤더 및 주석 제거
+    const body = (pgn || '')
+      .replace(/\[[^\]]*\]/g, '')             // [Header "Value"] 제거
+      .replace(/\{[^\}]*\}/g, '')             // { Comment } 제거
+      .replace(/\([^\)]*\)/g, '')             // ( Variation ) 제거
+      .trim();
+
+    // 2. 수 번호 및 불필요한 기호 제거
+    // "1. e4", "1... c6", "1.e4" 모두 대응
+    const cleaned = body
+      .replace(/\d+\s*\.{1,3}/g, ' ')         // "1.", "1. ", "1...", "1 ..." 제거
+      .replace(/\d+\//g, '')                  // "1/2-1/2" 에서 "1/" 부분 등 제거 방지 위해 주의
+      .replace(/1-0|0-1|1\/2-1\/2|\*/g, '')   // 결과 표시 제거
+      .trim();
+
+    const tokens = cleaned.split(/\s+/).filter(Boolean);
+    
     const INIT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     let { board, turn, castling, enPassant } = parseFen(INIT_FEN);
     let hm = 0, fm = 1;
@@ -39,7 +54,9 @@
       const allLegal = global.getAllLegalMoves(board, turn, castling, enPassant);
       const move = global.sanToMove(san, board, turn, allLegal);
       if (!move) {
-        console.warn('[parsePgnToStates] 수 파싱 실패:', san);
+        console.warn('[parsePgnToStates] 수 파싱 실패 (무시하고 계속):', san);
+        // 파싱 실패 시 해당 수는 건너뛰되, 전체 프로세스가 죽지 않도록 continue 처리 가능하나
+        // 체스 상태가 꼬일 수 있으므로 일단 warn 후 break (기존 로직 유지하되 로깅 강화)
         break;
       }
 
