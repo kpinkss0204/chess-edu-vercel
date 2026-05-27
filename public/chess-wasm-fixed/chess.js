@@ -425,18 +425,11 @@
   };
 
   // Backwards compatibility for global functions used in other WASM scripts
-  global.getAllLegalMoves = global.WasmChess.getAllLegalMoves;
-  global.sanToMove = global.WasmChess.sanToMove;
-  global.applyMoveToBoard = global.WasmChess.applyMoveToBoard;
-  global.boardToFen = global.WasmChess.boardToFen;
-  global.isInCheck = global.WasmChess.isInCheck;
-  global.findKing = global.WasmChess.findKing;
-  global.pieceImg = global.WasmChess.pieceImg;
-  global.legalMoves = global.WasmChess.legalMoves;
-  global.moveToSAN = global.WasmChess.moveToSAN;
-  global.parseFenBoard = global.WasmChess.parseFenBoard;
-  global.uciToMove = global.WasmChess.uciToMove;
-  global.classifyMove = global.WasmChess.classifyMove;
+  Object.keys(global.WasmChess).forEach(key => {
+    if (typeof global.WasmChess[key] === 'function') {
+      global[key] = global.WasmChess[key];
+    }
+  });
 
   // Backwards compatibility for constants
   global.FILES = global.WasmChess.FILES;
