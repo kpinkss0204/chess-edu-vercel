@@ -102,7 +102,7 @@
         const requestBody = {
           fen: fen,
           depth: options.depth || 'l2',
-          with_sequence: options.withSequence !== undefined ? options.withSequence : true
+          with_sequence: options.withSequence !== undefined ? options.withSequence : false  // true면 ~205ms/tactic → rate limit 위험
         };
         if (options.patterns && Array.isArray(options.patterns)) {
           requestBody.patterns = options.patterns;
@@ -154,7 +154,7 @@
       try {
         const requestBody = {
           pgn: pgn,
-          mode: options.mode || 'available',
+          mode: options.mode || 'played',
           depth: options.depth || 'l2',
           with_sequence: options.withSequence !== undefined ? options.withSequence : false
         };
@@ -213,43 +213,73 @@
   }
 
   function parseTacticList(tacticList) {
+    // API 10개 패턴 (pattern 필드값과 1:1 매핑)
+    // fork | pin | skewer | discovered_attack | double_check |
+    // back_rank_mate | smothered_mate | deflection | interference | trapped_piece
     const tactics = {
       fork: null,
-      absPin: null,
-      relPin: null,
       pin: null,
-      discovered: null,
-      checkmate: null,
-      trap: null,
-      decoy: null,
+      absPin: null,        // pin 중 absolute (target에 king 포함 → legally cannot move)
+      relPin: null,        // pin 중 relative (target에 queen/rook 등 → can move but costly)
       skewer: null,
-      interference: null,
-      doubleCheck: null,
-      list: tacticList, // 모든 전술 목록 유지
+      discovered: null,    // discovered_attack
+      doubleCheck: null,   // double_check
+      backRankMate: null,  // back_rank_mate
+      smotheredMate: null, // smothered_mate
+      deflection: null,    // deflection  ※ API에 'decoy' 없음
+      interference: null,  // interference
+      trap: null,          // trapped_piece
+      checkmate: null,     // 메이트 계열 통합 (back_rank_mate | smothered_mate 중 첫 번째)
+      list: tacticList,
       raw: tacticList
     };
 
     tacticList.forEach(t => {
+      // API는 항상 소문자 snake_case 반환
       const pattern = (t.pattern || '').toLowerCase();
       const targets = t.targets || [];
       const hasKingTarget = targets.some(tgt => tgt.piece_name === 'king');
 
-      if (pattern.includes('fork')) tactics.fork = t;
-      if (pattern === 'pin') {
-        tactics.pin = t;
-        if (hasKingTarget) tactics.absPin = t;
-        else tactics.relPin = t;
+      switch (pattern) {
+        case 'fork':
+          tactics.fork = t;
+          break;
+        case 'pin':
+          tactics.pin = t;
+          if (hasKingTarget) tactics.absPin = t;
+          else tactics.relPin = t;
+          break;
+        case 'skewer':
+          tactics.skewer = t;
+          break;
+        case 'discovered_attack':
+          tactics.discovered = t;
+          break;
+        case 'double_check':
+          tactics.doubleCheck = t;
+          break;
+        case 'back_rank_mate':
+          tactics.backRankMate = t;
+          tactics.checkmate = tactics.checkmate || t;
+          break;
+        case 'smothered_mate':
+          tactics.smotheredMate = t;
+          tactics.checkmate = tactics.checkmate || t;
+          break;
+        case 'deflection':
+          tactics.deflection = t;
+          break;
+        case 'interference':
+          tactics.interference = t;
+          break;
+        case 'trapped_piece':
+          tactics.trap = t;
+          break;
+        default:
+          // 미래 패턴 대응: mate 계열
+          if (pattern.includes('mate')) tactics.checkmate = tactics.checkmate || t;
+          break;
       }
-      if (pattern.includes('skewer')) tactics.skewer = t;
-      if (pattern.includes('discovered')) tactics.discovered = t;
-      
-      // 체크메이트 및 메이트 패턴
-      if (pattern.includes('mate')) tactics.checkmate = t;
-      if (pattern.includes('double_check') || pattern.includes('doublecheck')) tactics.doubleCheck = t;
-      
-      if (pattern.includes('trap')) tactics.trap = t;
-      if (pattern.includes('deflection') || pattern.includes('decoy')) tactics.decoy = t;
-      if (pattern.includes('interference')) tactics.interference = t;
     });
 
     return tactics;
@@ -405,15 +435,19 @@
   function formatTacticsSummary(tactics) {
     if (!tactics) return '';
     const names = [];
-    if (tactics.fork) names.push('포크');
-    if (tactics.absPin) names.push('절대 핀');
-    if (tactics.relPin) names.push('상대 핀');
+    if (tactics.fork)       names.push('포크');
+    if (tactics.absPin)     names.push('절대 핀');
+    if (tactics.relPin)     names.push('상대 핀');
     if (tactics.pin && !tactics.absPin && !tactics.relPin) names.push('핀');
-    if (tactics.skewer) names.push('스큐어');
+    if (tactics.skewer)     names.push('스큐어');
     if (tactics.discovered) names.push('디스커버드 어택');
-    if (tactics.trap) names.push('트랩');
-    if (tactics.decoy) names.push('유인');
-    if (tactics.checkmate) names.push('체크메이트');
+    if (tactics.doubleCheck)   names.push('더블 체크');
+    if (tactics.deflection)    names.push('편향');
+    if (tactics.interference)  names.push('간섭');
+    if (tactics.trap)          names.push('기물 트랩');
+    if (tactics.backRankMate)  names.push('백랭크 메이트');
+    if (tactics.smotheredMate) names.push('스모더드 메이트');
+    else if (tactics.checkmate && !tactics.backRankMate) names.push('체크메이트');
     return names.join(', ');
   }
 
@@ -436,4 +470,3 @@
     BAD_JUDGMENTS,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
-
