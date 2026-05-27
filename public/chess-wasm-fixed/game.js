@@ -1,4 +1,7 @@
 // ===== GAME CLASS =====
+function moveCellHTML(state) {
+  return `<span>${state.san}</span>`;
+}
 class ChessGame {
   constructor() {
     this.reset();

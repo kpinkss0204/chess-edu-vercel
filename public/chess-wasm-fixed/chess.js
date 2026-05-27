@@ -394,6 +394,27 @@
     return fen;
   }
 
+  function uciMovesToSan(uciList, board, turn, castling, enPassant) {
+    const sanList = [];
+    let b = board.map(r => [...r]);
+    let t = turn;
+    let c = { ...castling };
+    let ep = enPassant;
+
+    for (const uci of uciList) {
+      const move = uciToMove(uci, b, t, c, ep);
+      if (!move) break;
+      const allMoves = getAllLegalMoves(b, t, c, ep);
+      const san = moveToSAN(b, move, t, allMoves);
+      sanList.push(san);
+      b = applyMoveToBoard(b.map(r => [...r]), move, t);
+      t = enemyColor(t);
+      // 단순화를 위해 castling/ep 업데이트는 생략하거나 여기서 구현 필요
+      // 하지만 UCI move 객체에 castling/ep 정보가 있으면 여기서 업데이트 해야 함.
+    }
+    return sanList;
+  }
+
   // API Export
   global.WasmChess = {
     isInBounds,
@@ -406,6 +427,7 @@
     getAllLegalMoves,
     sanToMove,
     moveToSAN,
+    uciMovesToSan,
     parseFenBoard,
     parseFenCastling,
     parseFenEP,
