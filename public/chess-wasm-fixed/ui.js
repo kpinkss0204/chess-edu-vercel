@@ -457,6 +457,16 @@ function showToast(msg) {
   clearTimeout(t._timer);
   t._timer = setTimeout(()=>t.classList.remove('show'), 2500);
 }
+window.showToast = showToast;
+
+function renderTopMoves(msg) {
+  const el = document.getElementById('top-moves');
+  if (!el) return;
+  if (msg) {
+    el.innerHTML = `<div class="top-moves-empty">${msg}</div>`;
+  }
+}
+window.renderTopMoves = renderTopMoves;
 
 // ═══════════════════════════════════════════════════════════
 // 대국 기록 화살표 시스템
