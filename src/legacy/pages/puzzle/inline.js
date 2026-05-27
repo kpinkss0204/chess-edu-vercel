@@ -2167,20 +2167,4 @@ document.addEventListener('DOMContentLoaded', () => {
   } else {
     attachEvents();
   }
-})();});
-
-    board.addEventListener('mousedown', function(e) {
-      if (e.button === 0) {
-        _userArrows = [];
-        redrawArrows();
-        _arrowStart = null;
-      }
-    });
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', attachEvents);
-  } else {
-    attachEvents();
-  }
 })();
