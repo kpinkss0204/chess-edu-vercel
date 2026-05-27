@@ -762,3 +762,163 @@
     });
   })();
   </script>
+
+  <!-- ══════════════════════════════════════════════════════
+       삭제 버튼 수정 패치:
+       저장된 게임 삭제 시 Firebase에서도 실제 삭제되도록 오버라이드
+       - loadSavedGames() 를 패치하여 삭제 버튼 클릭 시
+         원본 deleteSavedGame() 도 함께 호출 + 대국 기록도 동기화
+  ══════════════════════════════════════════════════════ -->
+  <script>
+  (function () {
+    'use strict';
+
+    // 원본 함수가 정의될 때까지 대기 후 패치
+    function waitAndPatch(name, maxMs, cb) {
+      var elapsed = 0;
+      var iv = setInterval(function () {
+        if (typeof window[name] === 'function') {
+          clearInterval(iv);
+          cb(window[name]);
+        }
+        elapsed += 100;
+        if (elapsed >= maxMs) clearInterval(iv);
+      }, 100);
+    }
+
+    // ── loadSavedGames 패치 ──────────────────────────────
+    // 원본이 렌더링한 뒤 각 삭제 버튼의 onclick을 교체한다.
+    waitAndPatch('loadSavedGames', 15000, function (origLoad) {
+      window.loadSavedGames = function () {
+        // 원본 실행 → DOM에 목록 렌더링
+        var result = origLoad.apply(this, arguments);
+
+        // 렌더링이 비동기일 수 있으므로 짧은 대기 후 버튼 패치
+        setTimeout(patchSavedGameDeleteBtns, 300);
+        setTimeout(patchSavedGameDeleteBtns, 800);  // 혹시 늦으면 한 번 더
+        return result;
+      };
+    });
+
+    // MutationObserver로 saved-games-list 변화 감지 → 항상 패치
+    document.addEventListener('DOMContentLoaded', function () {
+      var container = document.getElementById('saved-games-list');
+      if (!container) return;
+      var obs = new MutationObserver(function () {
+        setTimeout(patchSavedGameDeleteBtns, 150);
+      });
+      obs.observe(container, { childList: true, subtree: true });
+    });
+
+    // ── 삭제 버튼 onclick 교체 ──────────────────────────
+    function patchSavedGameDeleteBtns() {
+      var list = document.getElementById('saved-games-list');
+      if (!list) return;
+
+      // 삭제처럼 보이는 버튼 모두 탐색
+      // 원본은 보통 onclick="deleteSavedGame('id')" 형태 또는 data-id 속성을 사용
+      var btns = list.querySelectorAll('button');
+      btns.forEach(function (btn) {
+        var txt = (btn.textContent || '').trim();
+        var oc  = (btn.getAttribute('onclick') || '');
+        var isDelete = /삭제|delete|🗑|✕|×/i.test(txt) || /deleteSavedGame/i.test(oc);
+        if (!isDelete) return;
+        if (btn._deletePatchedV2) return;  // 이미 패치됨
+        btn._deletePatchedV2 = true;
+
+        // onclick 문자열에서 id 추출 시도
+        var idMatch = oc.match(/deleteSavedGame\s*\(\s*['"]([^'"]+)['"]/);
+        var gameId  = idMatch ? idMatch[1] : (btn.dataset.id || btn.dataset.gameId || null);
+
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+
+          // 1) Firebase에서 실제 삭제 (원본 함수 호출)
+          if (gameId && typeof window.deleteSavedGame === 'function') {
+            try { window.deleteSavedGame(gameId); } catch(err) { console.warn('[patch] deleteSavedGame err:', err); }
+          }
+
+          // 2) DOM에서 카드 즉시 제거
+          var card = btn.closest('.saved-game-item') || btn.closest('li') || btn.closest('[data-id]') || btn.parentElement;
+          if (card && card !== list) card.remove();
+
+          // 3) 대국 기록도 Firebase에서 같은 id로 삭제 시도
+          if (gameId && typeof window.deleteGameRecord === 'function') {
+            try { window.deleteGameRecord(gameId); } catch(err) { /* 없으면 무시 */ }
+          }
+
+          // 4) 양쪽 목록 새로고침 (삭제 반영)
+          setTimeout(function () {
+            if (typeof window.loadSavedGames  === 'function') window.loadSavedGames();
+            if (typeof window.loadGameRecords === 'function') window.loadGameRecords();
+          }, 600);
+        }, true);  // capture 단계에서 먼저 처리
+      });
+    }
+
+    // ── loadGameRecords 패치 ────────────────────────────
+    // 대국 기록에 삭제 버튼이 없더라도, 저장된 게임 삭제 시
+    // 대국 기록도 함께 제거되도록 deleteGameRecord 래퍼를 준비.
+    // (원본 함수가 없으면 Firebase를 직접 지운다)
+    waitAndPatch('loadGameRecords', 15000, function (origRecords) {
+      window.loadGameRecords = function () {
+        var result = origRecords.apply(this, arguments);
+        setTimeout(patchGameRecordDeleteBtns, 300);
+        setTimeout(patchGameRecordDeleteBtns, 800);
+        return result;
+      };
+    });
+
+    var recordsObs = null;
+    document.addEventListener('DOMContentLoaded', function () {
+      var container = document.getElementById('game-records-list');
+      if (!container) return;
+      recordsObs = new MutationObserver(function () {
+        setTimeout(patchGameRecordDeleteBtns, 150);
+      });
+      recordsObs.observe(container, { childList: true, subtree: true });
+    });
+
+    function patchGameRecordDeleteBtns() {
+      var list = document.getElementById('game-records-list');
+      if (!list) return;
+      var btns = list.querySelectorAll('button');
+      btns.forEach(function (btn) {
+        var txt = (btn.textContent || '').trim();
+        var oc  = (btn.getAttribute('onclick') || '');
+        var isDelete = /삭제|delete|🗑|✕|×/i.test(txt) || /deleteGame/i.test(oc);
+        if (!isDelete) return;
+        if (btn._recordDeletePatched) return;
+        btn._recordDeletePatched = true;
+
+        var idMatch = oc.match(/deleteGame\w*\s*\(\s*['"]([^'"]+)['"]/);
+        var gameId  = idMatch ? idMatch[1] : (btn.dataset.id || btn.dataset.gameId || null);
+
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+
+          // 1) 원본 deleteGameRecord 또는 deleteSavedGame 호출
+          if (gameId) {
+            if (typeof window.deleteGameRecord === 'function') {
+              try { window.deleteGameRecord(gameId); } catch(err) {}
+            }
+            if (typeof window.deleteSavedGame === 'function') {
+              try { window.deleteSavedGame(gameId); } catch(err) {}
+            }
+          }
+
+          // 2) DOM 즉시 제거
+          var card = btn.closest('.game-record-item') || btn.closest('li') || btn.closest('[data-id]') || btn.parentElement;
+          if (card && card !== list) card.remove();
+
+          // 3) 양쪽 새로고침
+          setTimeout(function () {
+            if (typeof window.loadSavedGames  === 'function') window.loadSavedGames();
+            if (typeof window.loadGameRecords === 'function') window.loadGameRecords();
+          }, 600);
+        }, true);
+      });
+    }
+
+  })();
+  </script>
