@@ -1,4 +1,15 @@
-/* ===================== DATA ===================== */
+(function (window) {
+  'use strict';
+  
+  const document = window.document;
+  const localStorage = window.localStorage;
+  const fetch = window.fetch;
+  const Chess = window.Chess;
+  const firebase = window.firebase;
+  
+  /* ===================== DATA ===================== */
+  
+  // ... rest of the file ...
 
 const THEMES = {
   mate: [
@@ -635,8 +646,8 @@ function loadPuzzle(idx) {
       ? (puzzle.myColor === 'w' ? '승리' : '패배')
       : puzzle.gameResult === '0-1'
         ? (puzzle.myColor === 'b' ? '승리' : '패배') : '무승부';
-    const tactName = (typeof TACTIC_META !== 'undefined' && TACTIC_META[puzzle.tacticType])
-      ? TACTIC_META[puzzle.tacticType].name : '전술';
+    const tactName = (typeof getTacticMeta !== 'undefined')
+      ? getTacticMeta(puzzle.tacticType).name : '전술';
     srcText.innerHTML = '<b>내 대국 기반</b> — ' + puzzle.gameDateStr + ' ' + puzzle.gameVs + ' (' + resultLabel + ')<br>' + puzzle.moveNum + '수에서의 ' + tactName + ' 기회';
   } else if (srcEl) {
     srcEl.style.display = 'none';
@@ -1218,6 +1229,15 @@ const TACTIC_META = {
   interference:{ icon:'🚧', name:'간섭',      tagCls:'pin',       desc:'기물 사이의 방어선을 차단하는 전술' },
 };
 
+// compound tacticType(예: "fork_found", "fork_missed") → TACTIC_META 항목 조회
+function getTacticMeta(tacticType) {
+  if (!tacticType) return TACTIC_META.fork;
+  if (TACTIC_META[tacticType]) return TACTIC_META[tacticType];
+  // "baseType_subtype" 형태: baseType 부분으로 fallback
+  const base = tacticType.replace(/_(found|missed|oppBlunder_found)$/, '');
+  return TACTIC_META[base] || TACTIC_META.fork;
+}
+
 _auth.onAuthStateChanged(function (u) {
   _fbUser = u;
   if (u) {
@@ -1325,8 +1345,17 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   let solutionUci = null;
 
   if (missed) {
+    // missed: plyIdx는 실제 수(나쁜 수)가 이미 적용된 포지션
+    // 퍼즐로 만들 때는 수를 두기 직전(positions[plyIdx-1])에서 bestMove를 찾는 것
     solutionUci = (ev.bestMove && String(ev.bestMove).length >= 4) ? String(ev.bestMove) : null;
-    if (!solutionUci) {
+    if (solutionUci) {
+      // FEN을 수 두기 직전으로 교정
+      const preFen = positions[plyIdx - 1];
+      if (preFen && preFen.fen) {
+        pos = Object.assign({}, preFen);
+      }
+    } else {
+      // bestMove가 없으면 positions[plyIdx].lastMove 시도
       const solPos = positions[plyIdx + 1];
       if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
         solutionUci = solPos.lastMove;
@@ -1334,12 +1363,20 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
     }
   } else {
     // found / lichessStyle:
-    // plyIdx 는 전술 실행 직전 포지션의 인덱스여야 함
-    // 정답 수는 그 다음 포지션(plyIdx + 1)에 기록된 lastMove 임
-    if (positions[plyIdx + 1] && positions[plyIdx + 1].lastMove) {
-      solutionUci = positions[plyIdx + 1].lastMove;
+    // Firebase tacticEvents의 plyIdx는 전술 수가 이미 적용된 포지션의 인덱스 (0-based)
+    // 즉 positions[plyIdx].lastMove = 실제로 둔 전술 수 = 정답
+    // 퍼즐 FEN = positions[plyIdx - 1] (수를 두기 직전 포지션)
+    const solMove = positions[plyIdx] && positions[plyIdx].lastMove;
+    if (solMove && solMove.length >= 4) {
+      solutionUci = solMove;
+      // FEN을 한 칸 앞으로 교정
+      const preFen = positions[plyIdx - 1];
+      if (preFen && preFen.fen) {
+        pos = Object.assign({}, preFen);
+      }
     } else {
-      const solPos = positions[plyIdx];
+      // 폴백: plyIdx+1에서 찾기
+      const solPos = positions[plyIdx + 1];
       if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
         solutionUci = solPos.lastMove;
       }
@@ -1382,7 +1419,7 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   }
   if (!solutionUci || solutionUci.length < 4) return;
 
-  const meta = TACTIC_META[tacticBaseType] || TACTIC_META.fork;
+  const meta = getTacticMeta(tacticBaseType);
   const missedLabel = missed ? ' 놓침' : '';
   const titleBase = missed ? (meta.name + ' 놓침') : (meta.name + ' (기보)');
 
@@ -1639,7 +1676,7 @@ function detectPinOpportunities(chess, myColor, oppColor) {
     const test = new Chess(chess.fen());
     test.move(mv);
     // 이동 후 해당 기물이 상대 킹 방향 직선상에 고가치 기물 핀 가능한지 체크
-    const oppKingPos = findKing(test.board(), oppColor);
+    const oppKingPos = _puzzleFindKing(test.board(), oppColor);
     if (!oppKingPos) continue;
     // 단순히 이동 후 체크 또는 공격이 발생하면 핀 후보로 처리
     if (test.in_check()) {
@@ -1649,7 +1686,7 @@ function detectPinOpportunities(chess, myColor, oppColor) {
   return result;
 }
 
-function findKing(board, color) {
+function _puzzleFindKing(board, color) {
   for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
     const sq = board[r][c];
     if (sq && sq.color === color && sq.type === 'k') return { r, c };
@@ -1820,7 +1857,7 @@ function renderGamePuzzleList() {
           <span style="color:var(--text-muted)">${p.moveNum}수</span>
         </div>
         <div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap;">
-          <span class="gp-tag ${p.tagCls}">${p.icon} ${TACTIC_META[p.tacticType]?.name || p.tacticType}</span>
+          <span class="gp-tag ${p.tagCls}">${p.icon} ${getTacticMeta(p.tacticType).name}</span>
           <span class="gp-tag" style="background:rgba(80,80,80,0.15);color:var(--text-muted);">레이팅 ${p.rating}</span>
         </div>
       </div>
@@ -2218,3 +2255,24 @@ document.addEventListener('DOMContentLoaded', () => {
     attachEvents();
   }
 })();
+
+  // Export public API
+  window.openTheme = openTheme;
+  window.exitPuzzleView = exitPuzzleView;
+  window.showHint = showHint;
+  window.showSolution = showSolution;
+  window.retryPuzzle = retryPuzzle;
+  window.prevPuzzle = prevPuzzle;
+  window.nextPuzzle = nextPuzzle;
+  window.openInAnalysis = openInAnalysis;
+  window.closeGamePuzzleModal = closeGamePuzzleModal;
+  window.startGamePuzzle = startGamePuzzle;
+  window.selectGamePuzzle = selectGamePuzzle;
+  window.closeModal = closeModal;
+  window.selectDiff = selectDiff;
+  window.startRandom = startRandom;
+  window.startSelected = startSelected;
+  window.openGamePuzzleModal = openGamePuzzleModal;
+  window.startGamePuzzleByType = startGamePuzzleByType;
+
+  })(window);
