@@ -370,96 +370,76 @@ window.toggleMobilePanel = toggleMobilePanel;
       const missedRef = { count: 0 };
       const CT = typeof ChessTactics !== 'undefined' ? ChessTactics : null;
 
-      // ── [개선] FEN 기반 정밀 분석
-      const analyzeQueue = [];
-      for (let i = 1; i < states.length; i++) {
-        const mover = states[i - 1].turn;
-        const cpBefore = evalRows[i - 1].cpw;
-        const cpAfter = evalRows[i].cpw;
-        const bad = lichessCpAdviceJudgment(cpBefore, cpAfter, mover);
-        const isMe = (mover === myColor);
-        const bestUci = evalRows[i - 1].bestUci;
-        const move = states[i].move;
-        const playedUci = move ? (moveToUci(move) || '').toLowerCase() : '';
-
-        if (CT && isMe && bad && bestUci && playedUci && bestUci !== playedUci) {
-          analyzeQueue.push({
-            plyIdx: i - 1,
-            moveNum: Math.ceil(i / 2),
-            san: states[i].san || '',
-            bestUci: bestUci,
-            playedUci: playedUci,
-            stBefore: states[i - 1],
-            mover: mover,
-            pt: states[i - 1].board[move.from[0]][move.from[1]]?.[1] || 'P'
-          });
-        }
-      }
-
-      // 큐에 담긴 지점들을 순차 분석
-      for (let qi = 0; qi < analyzeQueue.length; qi++) {
-        const task = analyzeQueue[qi];
-        report(states.length, states.length, `전술 분석 중... (${qi + 1} / ${analyzeQueue.length})`);
-        try {
-          const prevFen = CT.snapshotFromState(task.stBefore);
+      // ── [개선] 모든 FEN 기반 전술 분석 (ChessGrammar API)
+      if (CT) {
+        for (let i = 0; i < states.length - 1; i++) {
+          report(i, states.length - 1, `전술 분석 중... (${i + 1} / ${states.length - 1})`);
           
-          // 1. 내가 둔 수 분석 (찾은 전술 확인)
-          const playedMv = uciToMoveFromState(task.playedUci, task.stBefore);
-          if (playedMv) {
-            const playedAfterFen = CT.applyMoveSnapshot(prevFen, playedMv);
-            const playedT = await CT.detectTactics(playedAfterFen, { depth: 'l2', withSequence: true });
-            if (playedT) {
-              const found = {
-                fork: playedT.fork, absPin: playedT.absPin, relPin: playedT.relPin,
-                trap: playedT.trap, decoy: playedT.decoy, skewer: playedT.skewer, discovered: playedT.discovered
-              };
-              const pt = task.stBefore.board[playedMv.from[0]][playedMv.from[1]]?.[1] || task.pt;
-              // 찾은 전술 기록 (result.tacticEvents에 push)
-              ['fork','absPin','relPin','trap','decoy','skewer','discovered'].forEach(t => {
-                if (found[t]) {
-                  // 중복 방지 로직은 간단히 생략하거나 타입별로 체크 가능
-                  result.tacticEvents.push({
-                    type: t, subtype: 'found', piece: pt, moveNum: task.moveNum, san: task.san, plyIdx: task.plyIdx
-                  });
-                  // 통계 반영 (forkFound 등)
-                  if (t === 'fork') { if(!result.forkFound[pt]) result.forkFound[pt]=0; result.forkFound[pt]++; }
-                  else { if(result[t+'Found'] !== undefined) result[t+'Found']++; }
-                }
-              });
-            }
-          }
-
-          // 2. 엔진 추천수 분석 (놓친 전술 확인)
-          const bestMv = uciToMoveFromState(task.bestUci, task.stBefore);
-          if (!bestMv) continue;
-
-          const bestAfterFen = CT.applyMoveSnapshot(prevFen, bestMv);
-          const bestT = await CT.detectTactics(bestAfterFen, { depth: 'l2', withSequence: true });
-
-          if (bestT) {
-            const miss = {
-              fork: bestT.fork, absPin: bestT.absPin, relPin: bestT.relPin,
-              trap: bestT.trap, decoy: bestT.decoy, skewer: bestT.skewer, discovered: bestT.discovered
-            };
-            const ptB = task.stBefore.board[bestMv.from[0]][bestMv.from[1]]?.[1] || task.pt;
+          try {
+            const stBefore = states[i];
+            const mover = stBefore.turn;
+            const isMe = (mover === myColor);
+            const fenBefore = stBefore.fen || CT.snapshotFromState(stBefore);
             
-            // 각 전술 타입별로 놓침 기록
-            ['fork','absPin','relPin','trap','decoy','skewer','discovered'].forEach(t => {
-              if (miss[t]) {
-                // 이미 해당 지점에서 이 전술을 "찾았다면" 놓친 것으로 보지 않음
-                const alreadyFound = result.tacticEvents.some(e => e.plyIdx === task.plyIdx && e.type === t && e.subtype === 'found');
-                if (!alreadyFound) {
-                  result.tacticEvents.push({
-                    type: t, subtype: 'missed', piece: ptB, moveNum: task.moveNum, san: task.san, plyIdx: task.plyIdx, bestMove: task.bestUci
-                  });
-                  if (t === 'fork') { if(!result.forkMissed[ptB]) result.forkMissed[ptB]=0; result.forkMissed[ptB]++; }
-                  else { if(result[t+'Missed'] !== undefined) result[t+'Missed']++; }
+            // 1. 해당 포지션의 전술 기회 파악
+            const tactics = await CT.detectTactics(fenBefore, { depth: 'l2', withSequence: false });
+            if (!tactics || !tactics.list || !tactics.list.length) continue;
+
+            // 2. 실제 둔 수 파악
+            const move = states[i + 1].move;
+            const playedUci = move ? (moveToUci(move) || '').toLowerCase() : '';
+            if (!playedUci) continue;
+
+            const pt = stBefore.board[move.from[0]][move.from[1]]?.[1] || 'P';
+            const moveNum = Math.ceil((i + 1) / 2);
+            const san = states[i + 1].san || '';
+
+            // 3. 탐지된 전술들을 순회하며 Found / Missed 판정
+            tactics.list.forEach(t => {
+              const trigger = (t.trigger_move || '').toLowerCase();
+              const pattern = (t.pattern || '').toLowerCase();
+              const gain = t.gain || 0;
+              
+              // 내부 타입 매핑 (fork, absPin, relPin, skewer, discovered, trap, decoy, checkmate)
+              let type = pattern;
+              if (pattern === 'pin') {
+                const hasKing = (t.targets || []).some(tgt => tgt.piece_name === 'king');
+                type = hasKing ? 'absPin' : 'relPin';
+              } else if (pattern === 'discovered_attack') {
+                type = 'discovered';
+              } else if (pattern === 'deflection') {
+                type = 'decoy';
+              } else if (pattern === 'trapped_piece') {
+                type = 'trap';
+              }
+
+              if (trigger === playedUci) {
+                // [Found] 전술 성공
+                if (isMe) {
+                  result.tacticEvents.push({ type, subtype: 'found', piece: pt, moveNum, san, plyIdx: i });
+                  // 통계 반영
+                  if (type === 'fork') { result.forkFound[pt] = (result.forkFound[pt] || 0) + 1; }
+                  else if (result[type + 'Found'] !== undefined) { result[type + 'Found']++; }
+                } else {
+                  // 상대방이 나에게 전술을 성공시킴 (통계에는 oppFork만 기록)
+                  if (type === 'fork') { result.oppForkCreated[pt] = (result.oppForkCreated[pt] || 0) + 1; }
+                }
+              } else if (gain >= 100) {
+                // [Missed] 전술 기회를 놓침 (이득이 폰 1개 이상일 때만)
+                if (isMe) {
+                  // 이미 해당 지점에서 동일 타입의 전술을 찾았다면(중복 탐지 등) 무시
+                  const alreadyFound = result.tacticEvents.some(e => e.plyIdx === i && e.type === type && e.subtype === 'found');
+                  if (!alreadyFound) {
+                    result.tacticEvents.push({ type, subtype: 'missed', piece: pt, moveNum, san, plyIdx: i, bestMove: trigger });
+                    if (type === 'fork') { result.forkMissed[pt] = (result.forkMissed[pt] || 0) + 1; }
+                    else if (result[type + 'Missed'] !== undefined) { result[type + 'Missed']++; }
+                  }
                 }
               }
             });
+          } catch (e) {
+            console.warn(`[analyzeGame] ply ${i} 분석 실패:`, e.message);
           }
-        } catch (e) {
-          console.warn('[analyzeGame] FEN 분석 실패:', e.message);
         }
       }
 

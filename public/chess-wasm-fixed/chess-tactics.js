@@ -7,7 +7,7 @@
   'use strict';
 
   const API_BASE = 'https://chessgrammar.com/api/v1';
-  const MIN_ANALYSIS_INTERVAL = 2050; // 30 req/min (약 2초 간격, 안전하게 2.05초)
+  const MIN_ANALYSIS_INTERVAL = 2200; // 30 req/min (약 2초 간격, 안전하게 2.2초)
   const BAD_JUDGMENTS = ['blunder', 'mistake', 'inaccuracy'];
   const JUDGMENT_LABEL = {
     blunder: '블런더 (??)',
@@ -99,15 +99,19 @@
       const timeout = setTimeout(() => controller.abort(), 10000);
 
       try {
+        const requestBody = {
+          fen: fen,
+          depth: options.depth || 'l2',
+          with_sequence: options.withSequence !== undefined ? options.withSequence : true
+        };
+        if (options.patterns && Array.isArray(options.patterns)) {
+          requestBody.patterns = options.patterns;
+        }
+
         const response = await fetch(`${API_BASE}/extract`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fen: fen,
-            depth: options.depth || 'l2',
-            with_sequence: options.withSequence !== undefined ? options.withSequence : true,
-            patterns: options.patterns || null
-          }),
+          body: JSON.stringify(requestBody),
           signal: controller.signal
         });
         clearTimeout(timeout);
@@ -148,16 +152,20 @@
       const timeout = setTimeout(() => controller.abort(), 10000);
 
       try {
+        const requestBody = {
+          pgn: pgn,
+          mode: options.mode || 'available',
+          depth: options.depth || 'l2',
+          with_sequence: options.withSequence !== undefined ? options.withSequence : false
+        };
+        if (options.patterns && Array.isArray(options.patterns)) {
+          requestBody.patterns = options.patterns;
+        }
+
         const response = await fetch(`${API_BASE}/extract_game`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pgn: pgn,
-            mode: options.mode || 'available',
-            depth: options.depth || 'l2',
-            with_sequence: options.withSequence !== undefined ? options.withSequence : false,
-            patterns: options.patterns || null
-          }),
+          body: JSON.stringify(requestBody),
           signal: controller.signal
         });
         clearTimeout(timeout);
@@ -206,16 +214,19 @@
 
   function parseTacticList(tacticList) {
     const tactics = {
-      fork: false,
-      absPin: false,
-      relPin: false,
-      pin: false,
-      discovered: false,
-      checkmate: false,
-      trap: false,
-      decoy: false,
-      skewer: false,
-      raw: tacticList // 원본 데이터 보관
+      fork: null,
+      absPin: null,
+      relPin: null,
+      pin: null,
+      discovered: null,
+      checkmate: null,
+      trap: null,
+      decoy: null,
+      skewer: null,
+      interference: null,
+      doubleCheck: null,
+      list: tacticList, // 모든 전술 목록 유지
+      raw: tacticList
     };
 
     tacticList.forEach(t => {
@@ -223,18 +234,22 @@
       const targets = t.targets || [];
       const hasKingTarget = targets.some(tgt => tgt.piece_name === 'king');
 
-      if (pattern.includes('fork')) tactics.fork = true;
+      if (pattern.includes('fork')) tactics.fork = t;
       if (pattern === 'pin') {
-        tactics.pin = true;
-        if (hasKingTarget) tactics.absPin = true;
-        else tactics.relPin = true;
+        tactics.pin = t;
+        if (hasKingTarget) tactics.absPin = t;
+        else tactics.relPin = t;
       }
-      if (pattern.includes('skewer')) tactics.skewer = true;
-      if (pattern.includes('discovered')) tactics.discovered = true;
-      if (pattern.includes('mate') || pattern.includes('double_check')) tactics.checkmate = true;
-      if (pattern.includes('trap')) tactics.trap = true;
-      if (pattern.includes('deflection') || pattern.includes('decoy')) tactics.decoy = true;
-      if (pattern.includes('interference')) tactics.pin = true; // 간섭도 핀의 일종으로 분류하거나 무시
+      if (pattern.includes('skewer')) tactics.skewer = t;
+      if (pattern.includes('discovered')) tactics.discovered = t;
+      
+      // 체크메이트 및 메이트 패턴
+      if (pattern.includes('mate')) tactics.checkmate = t;
+      if (pattern.includes('double_check') || pattern.includes('doublecheck')) tactics.doubleCheck = t;
+      
+      if (pattern.includes('trap')) tactics.trap = t;
+      if (pattern.includes('deflection') || pattern.includes('decoy')) tactics.decoy = t;
+      if (pattern.includes('interference')) tactics.interference = t;
     });
 
     return tactics;

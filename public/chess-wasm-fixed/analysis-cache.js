@@ -15,7 +15,9 @@
   function isTacticAnalysisComplete(ta, expectedMoveCount) {
     if (!ta || !Array.isArray(ta.moveJudgments) || ta.moveJudgments.length === 0) return false;
     if (expectedMoveCount > 0 && ta.moveJudgments.length < expectedMoveCount) return false;
-    return ta.analyzedAt != null || (ta.analysisVersion != null && ta.analysisVersion >= 3);
+    
+    // [개선] ChessGrammar 모든 수 분석이 포함된 버전(v5)이어야 완료로 간주
+    return ta.analysisVersion != null && ta.analysisVersion >= 5;
   }
 
   function clearGameAnalysisCache(game) {
