@@ -85,16 +85,24 @@ function pseudoMoves(board, r, c, castling, enPassant) {
 }
 
 function isAttacked(board, r, c, byColor) {
+  if (!board || !board[r]) return false;
   const enemy=byColor, pDir=enemy==='w'?1:-1;
-  for(const dc of[-1,1]){const pr=r+pDir,pc=c+dc;if(isInBounds(pr,pc)&&board[pr][pc]===`${enemy}P`)return true;}
-  for(const[dr,dc]of[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]){const nr=r+dr,nc=c+dc;if(isInBounds(nr,nc)&&board[nr][nc]===`${enemy}N`)return true;}
-  for(const[dr,dc]of[[-1,-1],[-1,1],[1,-1],[1,1]]){let nr=r+dr,nc=c+dc;while(isInBounds(nr,nc)){const t=board[nr][nc];if(t){if(t===`${enemy}B`||t===`${enemy}Q`)return true;break;}nr+=dr;nc+=dc;}}
-  for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]]){let nr=r+dr,nc=c+dc;while(isInBounds(nr,nc)){const t=board[nr][nc];if(t){if(t===`${enemy}R`||t===`${enemy}Q`)return true;break;}nr+=dr;nc+=dc;}}
-  for(const[dr,dc]of[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]){const nr=r+dr,nc=c+dc;if(isInBounds(nr,nc)&&board[nr][nc]===`${enemy}K`)return true;}
+  for(const dc of[-1,1]){const pr=r+pDir,pc=c+dc;if(isInBounds(pr,pc)&&board[pr]&&board[pr][pc]===`${enemy}P`)return true;}
+  for(const[dr,dc]of[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]){const nr=r+dr,nc=c+dc;if(isInBounds(nr,nc)&&board[nr]&&board[nr][nc]===`${enemy}N`)return true;}
+  for(const[dr,dc]of[[-1,-1],[-1,1],[1,-1],[1,1]]){let nr=r+dr,nc=c+dc;while(isInBounds(nr,nc)){if(!board[nr])break;const t=board[nr][nc];if(t){if(t===`${enemy}B`||t===`${enemy}Q`)return true;break;}nr+=dr;nc+=dc;}}
+  for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]]){let nr=r+dr,nc=c+dc;while(isInBounds(nr,nc)){if(!board[nr])break;const t=board[nr][nc];if(t){if(t===`${enemy}R`||t===`${enemy}Q`)return true;break;}nr+=dr;nc+=dc;}}
+  for(const[dr,dc]of[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]){const nr=r+dr,nc=c+dc;if(isInBounds(nr,nc)&&board[nr]&&board[nr][nc]===`${enemy}K`)return true;}
   return false;
 }
 
-function findKing(board,color){for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]===`${color}K`)return[r,c];return null;}
+function findKing(board,color){
+  if(!board)return null;
+  for(let r=0;r<8;r++){
+    if(!board[r])continue;
+    for(let c=0;c<8;c++)if(board[r][c]===`${color}K`)return[r,c];
+  }
+  return null;
+}
 function isInCheck(board,color){const k=findKing(board,color);if(!k)return false;return isAttacked(board,k[0],k[1],enemyColor(color));}
 
 function applyMoveToBoard(board, move, color) {

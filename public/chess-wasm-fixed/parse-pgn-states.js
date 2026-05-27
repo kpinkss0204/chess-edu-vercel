@@ -36,18 +36,27 @@
       .trim();
 
     // 2. 수 번호 및 불필요한 기호 제거
-    // "1. e4", "1... c6", "1.e4" 모두 대응
     const cleaned = body
       .replace(/\d+\s*\.{1,3}/g, ' ')         // "1.", "1. ", "1...", "1 ..." 제거
-      .replace(/\d+\//g, '')                  // "1/2-1/2" 에서 "1/" 부분 등 제거 방지 위해 주의
-      .replace(/1-0|0-1|1\/2-1\/2|\*/g, '')   // 결과 표시 제거
+      .replace(/\d+\//g, '')                  
+      .replace(/1-0|0-1|1\/2-1\/2|\*/g, '')   
       .trim();
 
     const tokens = cleaned.split(/\s+/).filter(Boolean);
     
     const INIT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    let { board, turn, castling, enPassant } = parseFen(INIT_FEN);
+    let rawPos = parseFen(INIT_FEN);
+    let board = rawPos.board, turn = rawPos.turn, castling = rawPos.castling, enPassant = rawPos.enPassant;
     let hm = 0, fm = 1;
+    
+    // board 배열의 8x8 구조 강제 보장
+    const ensure8x8 = (b) => {
+      const nb = [];
+      for(let r=0; r<8; r++) nb.push(b[r] ? [...b[r]] : Array(8).fill(null));
+      return nb;
+    };
+    board = ensure8x8(board);
+
     const states = [{ board: board.map(r => [...r]), turn, castling: { ...castling }, enPassant, move: null, san: null, fen: INIT_FEN }];
 
     if (!tokens || tokens.length === 0) return states;
@@ -56,9 +65,7 @@
       const allLegal = global.getAllLegalMoves(board, turn, castling, enPassant);
       const move = global.sanToMove(san, board, turn, allLegal);
       if (!move) {
-        console.warn('[parsePgnToStates] 수 파싱 실패 (무시하고 계속):', san);
-        // 파싱 실패 시 해당 수는 건너뛰되, 전체 프로세스가 죽지 않도록 continue 처리 가능하나
-        // 체스 상태가 꼬일 수 있으므로 일단 warn 후 break (기존 로직 유지하되 로깅 강화)
+        console.warn('[parsePgnToStates] 수 파싱 실패 (중단):', san);
         break;
       }
 
@@ -74,7 +81,9 @@
         ? board[move.to[0]][move.to[1]]
         : (move.enPassant ? (turn === 'w' ? 'bP' : 'wP') : null);
 
-      board = global.applyMoveToBoard(board.map(r => [...r]), move, turn);
+      // 보드 업데이트 및 8x8 구조 유지 확인
+      let nextBoard = global.applyMoveToBoard(board.map(r => [...r]), move, turn);
+      board = ensure8x8(nextBoard);
 
       if (board[move.to[0]][move.to[1]] === turn + 'K') {
         if (turn === 'w') { castling.wK = false; castling.wQ = false; }
