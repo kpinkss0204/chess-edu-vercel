@@ -1291,7 +1291,6 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
   } else {
     // found / lichessStyle:
     // positions[plyIdx].lastMove = plyIdx번째 수 (이미 둔 수)
-    // 퍼즐 시작 FEN = 그 수를 두기 직전 = positions[plyIdx-1].fen
     const solPos = positions[plyIdx];
     if (solPos && solPos.lastMove && solPos.lastMove.length >= 4) {
       solutionUci = solPos.lastMove;
@@ -1300,17 +1299,17 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
     } else {
       return;
     }
-    // ── 핵심 수정 ──────────────────────────────────────────────────────
-    // 퍼즐 시작 FEN은 반드시 "solutionUci를 두기 직전" 포지션이어야 한다.
-    // found: positions[plyIdx] = solutionUci를 둔 직후 → prevPos(plyIdx-1)로 교정
-    // lichessStyle(ChessGrammar): plyIdx가 수를 둔 후 인덱스일 수 있음 → 동일하게 교정
-    if (prevPos && prevPos.fen) {
+
+    // ── FEN 교정 ──────────────────────────────────────────────────────
+    // ChessGrammar(lichessStyle): positions[plyIdx].fen = "전술이 가능한 포지션"
+    //   → solutionUci를 여기서 두면 되므로 prevPos로 이동하지 않는다.
+    // found: positions[plyIdx] = solutionUci를 둔 직후
+    //   → prevPos(plyIdx-1)가 올바른 시작 FEN.
+    if (!lichessStyle && prevPos && prevPos.fen) {
       Object.assign(pos, { fen: prevPos.fen, lastMove: prevPos.lastMove, turn: prevPos.turn });
     }
 
-    // ── 최종 합법성 검증 ──────────────────────────────────────────────
-    // 교정 후에도 solutionUci가 pos.fen에서 합법적 수인지 Chess.js로 확인.
-    // 합법적이지 않으면 positions 배열을 ±1 탐색해서 올바른 시작 FEN을 찾는다.
+    // ── 합법성 검증 ───────────────────────────────────────────────────
     if (typeof Chess !== 'undefined' && solutionUci && pos.fen) {
       const uciFrom = solutionUci.slice(0, 2);
       const uciTo   = solutionUci.slice(2, 4);
@@ -1320,18 +1319,16 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
 
       let verified = false;
       try {
-        const testChess = new Chess(pos.fen);
-        verified = !!(testChess.move(mvObj));
+        verified = !!(new Chess(pos.fen).move(mvObj));
       } catch(e) {}
 
       if (!verified) {
-        // prevPos가 맞지 않으면 plyIdx 자체를 ±1 범위에서 재탐색
-        for (let delta = -1; delta <= 1; delta++) {
+        // pos.fen이 틀렸으면 plyIdx 자체와 ±1 범위를 모두 탐색
+        for (let delta = -1; delta <= 2; delta++) {
           const candidate = positions[plyIdx + delta];
           if (!candidate || !candidate.fen) continue;
           try {
-            const ch2 = new Chess(candidate.fen);
-            if (ch2.move(mvObj)) {
+            if (new Chess(candidate.fen).move(mvObj)) {
               Object.assign(pos, { fen: candidate.fen, lastMove: candidate.lastMove, turn: candidate.turn });
               console.log('[puzzleFix] FEN 재교정 성공 delta=' + delta, solutionUci, candidate.fen);
               verified = true;
@@ -1341,7 +1338,7 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
         }
         if (!verified) {
           console.warn('[puzzleFix] 합법 FEN 못 찾음, 퍼즐 스킵:', solutionUci);
-          return; // 퍼즐로 만들 수 없는 경우 스킵
+          return;
         }
       }
     }
