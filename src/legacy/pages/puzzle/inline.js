@@ -1662,37 +1662,57 @@ function parsePgnToPositions(pgn) {
   try {
     if (typeof parsePgnToStates === 'function') {
       const states = parsePgnToStates(pgn);
-      return states.map(st => {
+      if (!states || !Array.isArray(states)) {
+        console.warn('[puzzle] parsePgnToStates returned invalid data:', states);
+        return [];
+      }
+      return states.map((st, idx) => {
         let lastMove = null;
-        if (st.move) {
-          const files = 'abcdefgh';
-          const from = st.move.fromAlg || (st.move.from ? (files[st.move.from[1]] + (8 - st.move.from[0])) : null);
-          const to = st.move.toAlg || (st.move.to ? (files[st.move.to[1]] + (8 - st.move.to[0])) : null);
-          const promo = (st.move.promoPiece || '').toLowerCase();
-          if (from && to) lastMove = from + to + promo;
+        if (st && st.move) {
+          try {
+            const files = 'abcdefgh';
+            const from = st.move.fromAlg || (st.move.from ? (files[st.move.from[1]] + (8 - st.move.from[0])) : null);
+            const to = st.move.toAlg || (st.move.to ? (files[st.move.to[1]] + (8 - st.move.to[0])) : null);
+            const promo = (st.move.promoPiece || '').toLowerCase();
+            if (from && to) lastMove = from + to + promo;
+          } catch (e2) {
+            console.warn('[puzzle] move coordinate conversion error at index', idx, e2);
+          }
         }
         return {
-          fen: st.fen,
+          fen: (st && st.fen) ? st.fen : '',
           lastMove: lastMove,
-          turn: st.turn
+          turn: (st && st.turn) ? st.turn : 'w'
         };
       });
     }
     // fallback
+    if (typeof Chess === 'undefined') {
+      console.error('[puzzle] Chess constructor is missing!');
+      return [];
+    }
     const chess = new Chess();
     const moves = pgn.trim().split(/\s+/).filter(t => !/^\d+\./.test(t) && t !== '' && !t.startsWith('{') && !['1-0','0-1','1/2-1/2','*'].includes(t));
     const positions = [{ fen: chess.fen(), lastMove: null, turn: 'w' }];
     for (const san of moves) {
-      const r = chess.move(san, { sloppy: true });
-      if (!r) break;
-      positions.push({
-        fen: chess.fen(),
-        lastMove: r.from + r.to + (r.promotion || ''),
-        turn: chess.turn(),
-      });
+      try {
+        const r = chess.move(san, { sloppy: true });
+        if (!r) break;
+        positions.push({
+          fen: chess.fen(),
+          lastMove: r.from + r.to + (r.promotion || ''),
+          turn: chess.turn(),
+        });
+      } catch (e3) {
+        console.warn('[puzzle] fallback move error:', san, e3);
+        break;
+      }
     }
     return positions;
-  } catch(e) { return []; }
+  } catch(e) { 
+    console.error('[puzzle] parsePgnToPositions FATAL ERROR:', e);
+    return []; 
+  }
 }
 
 // ── 기보 기반 퍼즐 개수 뱃지 업데이트 ──────────────────────────

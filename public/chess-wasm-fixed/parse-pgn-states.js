@@ -50,6 +50,8 @@
     let hm = 0, fm = 1;
     const states = [{ board: board.map(r => [...r]), turn, castling: { ...castling }, enPassant, move: null, san: null, fen: INIT_FEN }];
 
+    if (!tokens || tokens.length === 0) return states;
+
     for (const san of tokens) {
       const allLegal = global.getAllLegalMoves(board, turn, castling, enPassant);
       const move = global.sanToMove(san, board, turn, allLegal);
