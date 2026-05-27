@@ -1284,9 +1284,40 @@ function pushPuzzleFromTacticEvent(puzzles, doc, ev, positions, myColor, whiteNa
       }
     }
     if (!solutionUci || solutionUci.length < 4) return;
-    // missed: 퍼즐 시작 FEN = 전술 수 직전 포지션
-    if (prevPos && prevPos.fen) {
-      Object.assign(pos, { fen: prevPos.fen, lastMove: prevPos.lastMove, turn: prevPos.turn });
+
+    // ── missed: 합법성 검증으로 올바른 FEN 탐색 ──────────────────────
+    // plyIdx가 "수를 둔 직후" 인덱스이므로 positions[plyIdx]가 올바른 시작 FEN.
+    // prevPos로 교정하지 않고, 합법성 검증으로 확정한다.
+    if (typeof Chess !== 'undefined' && solutionUci && pos.fen) {
+      const uciFrom = solutionUci.slice(0, 2);
+      const uciTo   = solutionUci.slice(2, 4);
+      const uciProm = solutionUci.length > 4 ? solutionUci[4] : undefined;
+      const mvObj   = { from: uciFrom, to: uciTo };
+      if (uciProm) mvObj.promotion = uciProm;
+
+      let verified = false;
+      try { verified = !!(new Chess(pos.fen).move(mvObj)); } catch(e) {}
+
+      if (!verified) {
+        // plyIdx 자체 포함 ±2 범위 탐색
+        for (let delta = -2; delta <= 2; delta++) {
+          if (delta === 0) continue; // 이미 실패한 plyIdx 스킵
+          const candidate = positions[plyIdx + delta];
+          if (!candidate || !candidate.fen) continue;
+          try {
+            if (new Chess(candidate.fen).move(mvObj)) {
+              Object.assign(pos, { fen: candidate.fen, lastMove: candidate.lastMove, turn: candidate.turn });
+              console.log('[puzzleFix/missed] FEN 교정 성공 delta=' + delta, solutionUci, candidate.fen);
+              verified = true;
+              break;
+            }
+          } catch(e2) {}
+        }
+        if (!verified) {
+          console.warn('[puzzleFix/missed] 합법 FEN 못 찾음, 퍼즐 스킵:', solutionUci);
+          return;
+        }
+      }
     }
   } else {
     // found / lichessStyle:
