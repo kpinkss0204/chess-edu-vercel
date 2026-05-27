@@ -1909,9 +1909,12 @@ const GAME_PUZZLE_THEME_DEFS = [
   { type: 'oppBlunder_found', icon: '💥', name: '블런더 포착',     desc: '상대방의 실수를 놓치지 않고 응징했던 순간들을 다시 확인하세요.', color: '#8855cc' },
 
   // 2. 찾은 전술 (복습용)
+  { type: 'checkmate_found',  icon: '👑', name: '체크메이트 (성공)', desc: '실전에서 정확한 수읽기로 승리를 결정지었던 순간입니다.', color: '#c04040' },
   { type: 'fork_found',       icon: '🍴', name: '포크 (성공)',      desc: '실전에서 성공시켰던 포크 장면을 다시 감상하며 복습합니다.', color: '#e08030' },
   { type: 'absPin_found',     icon: '📌', name: '절대 핀 (성공)',   desc: '실전에서 정확하게 사용했던 절대 핀 성공 사례입니다.', color: '#5090d0' },
   { type: 'skewer_found',     icon: '🏹', name: '스큐어 (성공)',   desc: '상대방의 기물을 멋지게 꿰뚫었던 스큐어 성공 장면입니다.', color: '#2aada6' },
+  { type: 'decoy_found',      icon: '🧲', name: '유인 전술 (성공)', desc: '상대 기물을 유인하여 이득을 보았던 전술적 승리입니다.', color: '#8855cc' },
+  { type: 'discovered_found', icon: '⚡', name: '디스커버 (성공)',  desc: '숨겨진 공격로를 열어 상대의 허를 찔렀던 장면입니다.', color: '#cc3333' },
   
   // 3. 기타
   { type: 'oppFork',          icon: '⚔️', name: '상대 포크 복습',   desc: '상대가 나에게 건 포크 장면을 복기하며 방어력을 높이세요.', color: '#c06060' },
@@ -1956,13 +1959,17 @@ function renderGamePuzzleThemeGrid(puzzles) {
     </div>`;
   }
 
-  // 정의되지 않은 타입도 표시
+  // 정의되지 않은 타입도 표시 (getTacticMeta 활용하여 로컬라이징)
   for (const [t, group] of Object.entries(byType)) {
     if (GAME_PUZZLE_THEME_DEFS.find(d => d.type === t)) continue;
-    const meta = TACTIC_META[t] || { icon:'♟', name:t };
+    const meta = getTacticMeta(t);
+    const isMissed = t.includes('_missed');
+    const suffix = isMissed ? ' (놓침)' : ' (성공)';
+    const name = meta.name + suffix;
+
     html += `<div class="theme-card" style="--card-accent:#888" onclick="startGamePuzzleByType('${t}')">
       <div class="theme-card-icon">${meta.icon}</div>
-      <div class="theme-card-name">${meta.name}</div>
+      <div class="theme-card-name">${name}</div>
       <div class="theme-card-desc">실제 대국에서 추출된 ${meta.name} 전술 포지션</div>
       <div class="theme-card-meta">
         <span class="theme-card-count">${group.length}개</span>
