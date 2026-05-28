@@ -1044,7 +1044,87 @@ function tryTriggerTacticsForCurrentMove(fenOptional) {
   });
 }
 
+/**
+ * updateMoveAnnotations
+ * evalCache를 참조해 game.history 각 수의 annotation(blunder/mistake/inaccuracy)을
+ * 계산하고, move-list DOM의 배지를 즉시 갱신합니다.
+ *
+ * - game.history[i].annotation 갱신 (lichessCpAdviceJudgment 기준)
+ * - evalCache에 양쪽 FEN이 모두 없으면 해당 수는 건너뜀
+ * - DOM: .move-cell .move-annotation 배지 삽입/갱신
+ */
+function updateMoveAnnotations() {
+  if (typeof game === 'undefined' || !game || !game.history || game.history.length === 0) return;
+
+  const SYMBOLS = { blunder: '??', mistake: '?', inaccuracy: '?!' };
+  const CLASSES  = { blunder: 'ann-blunder', mistake: 'ann-mistake', inaccuracy: 'ann-inaccuracy' };
+
+  let anyChanged = false;
+
+  for (let i = 0; i < game.history.length; i++) {
+    const h = game.history[i];
+    if (!h || !h.fenBefore || !h.fenAfter) continue;
+
+    const cacheB = evalCache[normFen(h.fenBefore)];
+    const cacheA = evalCache[normFen(h.fenAfter)];
+    if (!cacheB || !cacheA) continue;
+
+    // lichess 기준 판정
+    const judgment = (typeof lichessCpAdviceJudgment === 'function')
+      ? lichessCpAdviceJudgment(cacheB.cp, cacheA.cp, h.turn)
+      : null;
+
+    if (h.annotation !== judgment) {
+      h.annotation = judgment;
+      anyChanged = true;
+    }
+  }
+
+  // DOM 배지 갱신: move-list 내 .move-cell 순서와 game.history 순서 동기화
+  const moveListEl = document.getElementById('move-list');
+  if (!moveListEl) return;
+
+  const cells = moveListEl.querySelectorAll('.move-cell');
+  // move-list는 pair 단위로 렌더됨: pair당 white(i*2), black(i*2+1)
+  // cells 인덱스 = history 인덱스 (renderMoveList 구조 기준)
+  cells.forEach((cell, idx) => {
+    const h = game.history[idx];
+    if (!h) return;
+
+    // 기존 배지 제거
+    const old = cell.querySelector('.move-annotation');
+    if (old) old.remove();
+
+    if (h.annotation && SYMBOLS[h.annotation]) {
+      const badge = document.createElement('span');
+      badge.className = `move-annotation ${CLASSES[h.annotation]}`;
+      badge.textContent = SYMBOLS[h.annotation];
+      badge.title = h.annotation === 'blunder' ? '블런더' : h.annotation === 'mistake' ? '실수' : '부정확';
+      cell.appendChild(badge);
+    }
+  });
+
+  // 모바일 수평 기보도 동기화
+  const horizEl = document.getElementById('move-list-horizontal');
+  if (horizEl) {
+    const hCells = horizEl.querySelectorAll('.move-cell');
+    hCells.forEach((cell, idx) => {
+      const h = game.history[idx];
+      if (!h) return;
+      const old = cell.querySelector('.move-annotation');
+      if (old) old.remove();
+      if (h.annotation && SYMBOLS[h.annotation]) {
+        const badge = document.createElement('span');
+        badge.className = `move-annotation ${CLASSES[h.annotation]}`;
+        badge.textContent = SYMBOLS[h.annotation];
+        cell.appendChild(badge);
+      }
+    });
+  }
+}
+
 const _root = typeof window !== 'undefined' ? window : globalThis;
+_root.updateMoveAnnotations = updateMoveAnnotations;
 _root.tryTriggerTacticsForCurrentMove = tryTriggerTacticsForCurrentMove;
 _root.notifyGamePositionChanged = notifyGamePositionChanged;
 _root.updateTacticsStatusPanel = updateTacticsStatusPanel;

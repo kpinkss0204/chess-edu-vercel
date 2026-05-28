@@ -1,6 +1,11 @@
 // ===== GAME CLASS =====
 function moveCellHTML(state) {
-  return `<span>${state.san}</span>`;
+  const ANN_SYMBOL = { blunder: '??', mistake: '?', inaccuracy: '?!' };
+  const ANN_CLASS  = { blunder: 'ann-blunder', mistake: 'ann-mistake', inaccuracy: 'ann-inaccuracy' };
+  const ann = state && state.annotation && ANN_SYMBOL[state.annotation]
+    ? `<span class="move-annotation ${ANN_CLASS[state.annotation]}" title="${state.annotation}">${ANN_SYMBOL[state.annotation]}</span>`
+    : '';
+  return `<span>${state.san}${ann}</span>`;
 }
 class ChessGame {
   constructor() {
