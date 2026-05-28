@@ -480,7 +480,7 @@ function renderTopMoves(msg) {
     const restMoves = pv.moves.slice(1).join(' ');
 
     html += `
-      <div class="top-move-row ${isRank1 ? 'rank-1' : ''}" onclick="game._applyEngineLine(game.historyIndex, ${key}, 0)">
+      <div class="top-move-row ${isRank1 ? 'rank-1' : ''}" onclick="game.previewEngineLine(window.pvData[${key}] && window.pvData[${key}].moves, ${key})">
         <div class="top-move-score-col ${isRank1 ? 'rank-1' : ''}">
           <div class="top-move-score ${pv.cpFromWhite >= 0 ? 'positive' : 'negative'}">${pv.eval}</div>
           <div class="top-move-depth-badge">d${pv.depth}</div>
