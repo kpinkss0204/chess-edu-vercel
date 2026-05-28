@@ -7,6 +7,14 @@ function moveCellHTML(state) {
     : '';
   return `<span>${state.san}${ann}</span>`;
 }
+
+/**
+ * 엔진라인·변화수용: SAN 문자열과 turn('w'|'b')을 받아 move-cell HTML을 반환.
+ * moveCellHTML과 달리 state 객체가 아닌 분리 인자를 받으며, annotation은 없음.
+ */
+function _sanToMoveCellHTML(san, turn) {
+  return `<span>${san}</span>`;
+}
 class ChessGame {
   constructor() {
     this.reset();
