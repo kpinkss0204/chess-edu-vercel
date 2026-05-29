@@ -131,15 +131,16 @@ function buildChessContext() {
     }
   }
 
-  // 게임 전체 PGN
+  // 현재 시점까지의 기보 (전체 history가 아닌 현재 인덱스까지만)
   let pgnMoves = '';
-  game.history.forEach((s) => {
+  for (let i = 0; i <= game.historyIndex; i++) {
+    const s = game.history[i];
     if (s.turn === 'w') pgnMoves += `${s.fullMove}. `;
     pgnMoves += s.san + ' ';
-  });
+  }
 
-  // 게임 단계 판단
-  const moveCount = game.history.length;
+  // 게임 단계 판단 (현재 보고 있는 수 기준)
+  const moveCount = game.historyIndex + 1;
   const phase = moveCount <= 10 ? '오프닝' : moveCount <= 30 ? '미들게임' : '엔드게임';
 
   // 평가 방향
@@ -209,7 +210,7 @@ function buildChessContext() {
   // 포지션 구조 인사이트 추출 (FEN 기반 정제 분석)
   const positionInsights = extractPositionInsights(fen);
 
-  const recentMoves = game.history.slice(-8).map(h => ({
+  const recentMoves = game.history.slice(Math.max(0, game.historyIndex - 7), game.historyIndex + 1).map(h => ({
     san: h.san,
     turn: h.turn,
     annotation: h.annotation || null,
@@ -280,20 +281,21 @@ function debugCoachBrief() {
   let extra = {};
   if (game && game.history && game.history.length) {
     let pgnMoves = '';
-    game.history.forEach((s) => {
+    for (let i = 0; i <= game.historyIndex; i++) {
+      const s = game.history[i];
       if (s.turn === 'w') pgnMoves += `${s.fullMove}. `;
       pgnMoves += s.san + ' ';
-    });
+    }
     const h = game.historyIndex >= 0 ? game.history[game.historyIndex] : null;
     extra = {
       pgnMoves: pgnMoves.trim(),
-      recentMoves: game.history.slice(-8).map(x => ({
+      recentMoves: game.history.slice(Math.max(0, game.historyIndex - 7), game.historyIndex + 1).map(x => ({
         san: x.san, turn: x.turn, annotation: x.annotation || null,
       })),
       lastMoveSan: h ? h.san : null,
       lastMoveAnnotation: h ? h.annotation : null,
-      phase: game.history.length <= 10 ? '오프닝' : game.history.length <= 30 ? '미들게임' : '엔드게임',
-      moveCount: game.history.length,
+      phase: (game.historyIndex + 1) <= 10 ? '오프닝' : (game.historyIndex + 1) <= 30 ? '미들게임' : '엔드게임',
+      moveCount: game.historyIndex + 1,
     };
   }
 
