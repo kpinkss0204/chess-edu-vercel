@@ -1472,6 +1472,15 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
     window.analyzeCurrentGameWithSF = analyzeCurrentGameWithSF;
     window.runSfAnalysis = analyzeCurrentGameWithSF; // Alias for body.html button compatibility
 
+    // 최선수 찾기 패널 접기/펼치기
+    window.toggleThreatCollapse = function() {
+      const body = document.getElementById('threat-body');
+      const btn = document.getElementById('threat-collapse-btn');
+      if (!body || !btn) return;
+      const isCollapsed = body.classList.toggle('collapsed');
+      btn.textContent = isCollapsed ? '▼' : '▲';
+    };
+
     document.addEventListener('DOMContentLoaded', function () {
       const colorSel = document.getElementById('sf-color-select');
       if (colorSel) {

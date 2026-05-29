@@ -2082,6 +2082,11 @@
     }
 
     /* 이유 목록 */
+    #best-explain-content {
+      max-height: 350px;
+      overflow-y: auto;
+    }
+
     .best-reason-list {
       padding: 4px 14px 14px;
       display: flex;
@@ -2145,7 +2150,7 @@
     }
 
     #threat-body {
-      max-height: 180px;
+      max-height: 250px;
       overflow-y: auto;
       transition: max-height 0.25s ease;
     }
