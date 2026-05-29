@@ -560,7 +560,7 @@
         --board-size: min(96vw, 500px);
       }
 
-      body {
+      html, body {
         overflow-y: auto !important;
         height: auto !important;
         background-attachment: scroll !important;
@@ -602,21 +602,9 @@
         height: var(--board-size) !important;
       }
 
-      /* AI 코치 패널: 모바일에서 기보 아래에 상시 노출 */
+      /* AI 코치 패널: 모바일에서는 사이드 패널(드로어)의 탭에서만 노출하도록 메인 흐름에서 숨김 */
       #coach-panel {
-        display: flex !important;
-        position: relative !important;
-        width: 100% !important;
-        height: auto !important;
-        min-height: auto !important;
-        border: none !important;
-        border-top: 1px solid var(--border) !important;
-        border-radius: 0 !important;
-        box-shadow: none !important;
-        margin: 0 !important;
-        overflow: visible !important;
-        background: var(--bg-secondary) !important;
-        order: 2;
+        display: none !important;
       }
 
       #coach-body {
