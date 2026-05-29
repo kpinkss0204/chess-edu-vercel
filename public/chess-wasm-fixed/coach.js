@@ -957,7 +957,7 @@ function extractPositionInsights(fen) {
         insights.push(`[마이너리티 공격] ${COLOR_KR[color]}이 킹사이드에 폰 소수(${myKS})로 ${COLOR_KR[opp]} 폰 다수(${oppKS}) 공격 — 마이너리티 공격으로 약점 생성 가능`);
       }
       if (myQS < oppQS && myQS >= 1 && oppQS >= 2) {
-        insights.push(`[마이너리티 공격] ${COLOR_KR[color]}이 퀸사이드에 폰 소수(${myQS})로 ${COLOR_KR[opp]} 폰 다수(${oppQS}) 공격 — 마이너리티 공격으로 약점 생성 가능`);
+        insights.push(`[마이너리티 공격] ${COLOR_KR[color]}이 퀸사이드에 폰 소수(${myQS})로 ${COLOR_KR[opp]} 폰 다수(${oppKS}) 공격 — 마이너리티 공격으로 약점 생성 가능`);
       }
 
       // a3/a4, h3/h6 예방적 폰 전진 감지 (비숍 핀 예방 + 공간 확장)
@@ -1275,21 +1275,13 @@ async function askCoach(source) {
 // 프롬프트 빌더 — 체스인사이드 스타일 해설 요청
 // ══════════════════════════════════════════════════════
 
-/** UCI 엔진 라인 → SAN (프롬프트용) */
-function engineLineSan(ctx, pv, maxLen) {
+/** UCI 엔진 라인 → SAN (프롬프트용)
+ * 수순에 누구 차례인지 (백)/(흑) 라벨을 붙여 AI가 헷갈리지 않게 함.
+ */
+function engineLineSanWithLabels(ctx, pv, maxLen) {
   if (!pv || typeof uciMovesToSan !== 'function') return null;
   
-  // 이미 SAN으로 변환된 moves가 있다면 우선 사용
-  if (pv.moves && pv.moves.length > 0) {
-    const m = pv.moves;
-    // 첫 수가 UCI(e2e4)가 아닌 SAN(e4, Nf3 등) 형태라면 그대로 반환
-    if (m[0] && !/^[a-h][1-8][a-h][1-8]/.test(m[0])) {
-      return m.slice(0, maxLen || 8).join(' ');
-    }
-  }
-
-  // UCI(pv.pv)만 있는 경우 SAN으로 변환 시도
-  const uciList = pv.pv || pv.moves || [];
+  let uciList = pv.pv || pv.moves || [];
   if (!uciList || !uciList.length) return null;
 
   const parts = ctx.fen.trim().split(/\s+/);
@@ -1303,7 +1295,16 @@ function engineLineSan(ctx, pv, maxLen) {
     parseFenCastling(parts[2] || '-'),
     parseFenEP(parts[3] || '-')
   );
-  return sanList.length ? sanList.join(' ') : null;
+
+  if (!sanList.length) return null;
+
+  let currentTurn = parts[1] || 'w';
+  return sanList.map((san, i) => {
+    const label = currentTurn === 'w' ? '(백)' : '(흑)';
+    const res = `${i + 1}. ${san} ${label}`;
+    currentTurn = currentTurn === 'w' ? 'b' : 'w';
+    return res;
+  }).join(' ');
 }
 
 function buildCommentaryPrompt(ctx) {
@@ -1311,42 +1312,38 @@ function buildCommentaryPrompt(ctx) {
 
   // pvData에서 직접 최신 라인 읽기 (ctx.pvData 우선, 없으면 window.pvData)
   const pvDataToUse = ctx.pvData || window.pvData;
-  console.log('[Debug Prompt] Using pvData:', pvDataToUse);
   
   const livePv1 = pvDataToUse && pvDataToUse[1];
   const livePv2 = pvDataToUse && pvDataToUse[2];
   const livePv3 = pvDataToUse && pvDataToUse[3];
 
-  const liveBestLineSan = engineLineSan(ctx, livePv1, 8) || ctx.bestLine;
-  const liveLine2San    = engineLineSan(ctx, livePv2, 6) || ctx.line2;
-  const liveLine3San    = engineLineSan(ctx, livePv3, 6) || ctx.line3;
-  const liveBestLine    = liveBestLineSan;
-  const liveLine2       = liveLine2San;
-  const liveLine3       = liveLine3San;
-  const liveBestMove    = liveBestLineSan ? liveBestLineSan.split(/\s+/)[0] : (livePv1 && livePv1.moves && livePv1.moves[0] ? livePv1.moves[0] : ctx.bestMove);
-  const hasEngineLine = !!(liveBestLineSan && liveBestLineSan.trim());
+  const liveBestLine = engineLineSanWithLabels(ctx, livePv1, 8) || ctx.bestLine;
+  const liveLine2    = engineLineSanWithLabels(ctx, livePv2, 6) || ctx.line2;
+  const liveLine3    = engineLineSanWithLabels(ctx, livePv3, 6) || ctx.line3;
+
+  const hasEngineLine = !!(liveBestLine && liveBestLine.trim());
   const firstTurnLabel  = ctx.turn === 'w' ? '백' : '흑';
   const lastMoverLabel  = ctx.turn === 'w' ? '흑' : '백';
 
-  lines.push(`[포지션 데이터]`);
-  lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수 | 지금 차례: ${firstTurnLabel}`);
+  lines.push(`[현재 국면 정보]`);
+  lines.push(`지금 차례: ${firstTurnLabel} (AI는 ${firstTurnLabel}의 입장에서 해설해야 함)`);
+  lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수`);
   lines.push(`현재 형세: ${ctx.advantageDesc}`);
 
   if (ctx.lastMoveSan) {
     const ann = ctx.lastMoveAnnotation ? ` (${ctx.lastMoveAnnotation})` : '';
-    lines.push(`직전 수 (${lastMoverLabel}이 둠): ${ctx.lastMoveSan}${ann} — 지금은 ${firstTurnLabel} 차례`);
+    lines.push(`직전 수: ${ctx.lastMoveSan}${ann} (상대방인 ${lastMoverLabel}이 둠)`);
   }
 
-  // 항상 최신 pvData 기반 라인 사용
-  // 수순 해석 안내: 차례에 따라 홀/짝 번째 수 귀속을 명시
-  const secondTurnLabel = ctx.turn === 'w' ? '흑' : '백';
-  lines.push(`[수순 해석 주의] 현재 차례는 ${firstTurnLabel}이므로, 수순에서 1번째·3번째·5번째 수는 ${firstTurnLabel}이 두고, 2번째·4번째·6번째 수는 ${secondTurnLabel}이 둡니다. 해설 시 반드시 각 수마다 "백이 X를 두면" / "흑이 Y로 응수하면" 형태로 주어를 명시할 것.`);
+  lines.push(``);
+  lines.push(`[엔진 추천 수순 — 절대 주의]`);
+  lines.push(`각 수 옆에 (백), (흑) 표시를 확인하고 주어를 정확히 써주세요.`);
   if (hasEngineLine) {
-    lines.push(`엔진 1순위 수순 (이 SAN만 최선수·이후 수순에 사용): ${liveBestLine}`);
-    if (liveLine2) lines.push(`엔진 2순위 수순: ${liveLine2}`);
-    if (liveLine3) lines.push(`엔진 3순위 수순: ${liveLine3}`);
+    lines.push(`최선 수순: ${liveBestLine}`);
+    if (liveLine2) lines.push(`차선 수순: ${liveLine2}`);
+    if (liveLine3) lines.push(`3순위 수순: ${liveLine3}`);
   } else {
-    lines.push(`[엔진 라인 미준비] 최선수·이후 수순 섹션에서 구체적 SAN 나열 금지. 구조·브리프·직전 수 맥락만 설명.`);
+    lines.push(`[엔진 라인 미준비] 구조·브리프·직전 수 맥락만 설명.`);
   }
 
   // 사용자 화살표 (후보수 / 수순) 정제
@@ -1404,13 +1401,12 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`- **포지션 상황** 으로 시작. ${hasEngineLine ? '**최선수 분석** 포함.' : '엔진 라인 없음 → **최선수 분석**은 "엔진 수순 준비 중" 한 문장만. **이후 수순** 섹션 생략.'}`);
   lines.push(`- 나머지 섹션(**약점 분석**, **강점 분석**, **위협 & 아이디어**, **이후 수순**)은 포지션에 실제로 해당하는 것만 선택.`);
   if (hasEngineLine) {
-    lines.push(`- **최선수 분석**: [검증된 분석 브리프]의 "엔진 1순위 수순" SAN만 사용. 브리프·합법 수 목록에 없는 수 추가 금지.`);
-    lines.push(`- **이후 수순**: 엔진 1순위에 있는 수만, 주어(백/흑)를 매 수마다 명시.`);
+    lines.push(`- **최선수 분석**: [엔진 추천 수순]의 "최선 수순" SAN만 사용. 브리프·합법 수 목록에 없는 수 추가 금지.`);
+    lines.push(`- **이후 수순**: 엔진 1순위에 있는 수만, (백)/(흑) 라벨을 확인하여 주어를 매 수마다 명시.`);
   }
   lines.push(`- **위협 & 아이디어**: 브리프의 "1~3수 메이트"·"전술적 위협"만 사용. 메이트는 브리프에 적힌 수순·패턴만 인용.`);
   lines.push(`- **약점 분석**: 브리프의 "구조적 약점"(밝은/어두운 칸, 폰 구조)을 장기적 이유와 함께 설명.`);
-  lines.push(`- **포지션 상황**: [국면 앵커]의 차례·직전 수를 먼저 맞게 서술. 최근 수순은 브리프에 있는 것만. 직전 수를 "지금 둘 수"처럼 쓰지 말 것.`);
-  lines.push(`- 변형·계획은 내러티브·브리프·엔진·합법 수에 있는 것만. 없는 오프닝 이론·엔진에 없는 SAN 금지.`);
+  lines.push(`- **포지션 상황**: 현재 차례·직전 수를 먼저 맞게 서술. 최근 수순은 브리프에 있는 것만. 직전 수를 "지금 둘 수"처럼 쓰지 말 것.`);
   lines.push(`- 섹션 헤더는 **헤더명** 형태로 단독 줄에 쓸 것.`);
   lines.push(`- 위 system prompt의 말투 예시를 그대로 따를 것. 전체 900~1300자, 문단마다 2~5문장.`);
 
@@ -1433,9 +1429,9 @@ function buildCoachPrompt(ctx, question) {
   }
 
   const pv1 = ctx.pvData && ctx.pvData[1];
-  const bestSan = engineLineSan(ctx, pv1, 8) || ctx.bestLine;
-  const line2San = engineLineSan(ctx, ctx.pvData && ctx.pvData[2], 6) || ctx.line2;
-  const line3San = engineLineSan(ctx, ctx.pvData && ctx.pvData[3], 6) || ctx.line3;
+  const bestSan = engineLineSanWithLabels(ctx, pv1, 8) || ctx.bestLine;
+  const line2San = engineLineSanWithLabels(ctx, ctx.pvData && ctx.pvData[2], 6) || ctx.line2;
+  const line3San = engineLineSanWithLabels(ctx, ctx.pvData && ctx.pvData[3], 6) || ctx.line3;
   if (bestSan) lines.push(`[엔진 1순위 라인 SAN] ${bestSan}`);
   if (line2San) lines.push(`[엔진 2순위 라인 SAN] ${line2San}`);
   if (line3San) lines.push(`[엔진 3순위 라인 SAN] ${line3San}`);
@@ -1487,7 +1483,9 @@ function buildCoachPrompt(ctx, question) {
 
 // 포지션 해설 전용 API 호출
 async function callCommentaryAPI(ctx) {
-  const SYSTEM = `당신은 유튜브 채널 "체스인사이드"의 해설자입니다. 아래 예시들이 정확한 말투와 구조입니다.
+  const SYSTEM = `당신은 유튜브 채널 "체스인사이드"의 해설자이자 마스터 체스 코치입니다. 당신의 목표는 현재 포지션을 종합적으로 분석하여 학습자에게 전략적 방향과 구체적인 전술을 모두 제공하는 것입니다.
+
+아래 예시들이 당신이 지켜야 할 정확한 말투와 구조입니다.
 
 ───────────────────────────────────────
 【예시 A — 폰 약점이 있는 미들게임】
@@ -1497,112 +1495,37 @@ async function callCommentaryAPI(ctx) {
 **약점 분석**
 흑 입장에서는 c6 폰이 조금 신경 쓰이는 부분이라고 볼 수 있겠어요. 지금 당장 위협은 아니지만, d5가 열리는 순간 이 폰이 고립될 가능성이 있거든요. 그렇다는 건 흑도 빠르게 대응을 해줘야 하는 상황이라는 거죠.
 
+**위협 & 아이디어**
+💡 **핵심 계획**: 백은 d5 돌파를 통해 중앙을 열고 흑의 기물 활동성을 제한하려 합니다.
+⚠️ **문제점**: 흑이 c5로 즉각 반격하면 백의 d4 폰이 압박을 받아 계획이 꼬일 수 있습니다.
+✅ **최선책**: 백은 먼저 Bd3로 중앙을 보강하고, 이후에 d5 돌파를 노리는 것이 가장 안정적입니다.
+
 **최선수 분석**
-컴퓨터는 여기서 Bd3를 추천하고 있는데요. 백이 Bd3를 두면 비숍을 능동적인 칸에 두면서 e4 폰을 지원하는 거라고 볼 수 있겠습니다. 이후 흑이 O-O를 두면, 백은 Re1을 두어 킹사이드 공격 준비를 자연스럽게 이어갈 수 있어요. Re1이 들어오면 e5 돌파 위협이 생기기 때문에 흑도 쉽게 구경만 하고 있을 수는 없는 상황이 되겠습니다.
+컴퓨터는 여기서 Bd3를 추천하고 있는데요. 백이 Bd3를 두면 비숍을 능동적인 칸에 두면서 e4 폰을 지원하는 거라고 볼 수 있겠습니다. 이후 흑이 O-O를 두면, 백은 Re1을 두어 킹사이드 공격 준비를 자연스럽게 이어갈 수 있어요.
 
 **이후 수순**
 백이 Bd3를 두고 흑이 O-O로 대응한다면, 백은 h3 정도로 대기하면서 흑의 반격을 견제할 수 있겠어요. 흑이 c5로 카운터를 치려 한다면 백은 d5 돌파로 즉각 응수할 준비를 해두는 게 적합할 것 같습니다.
 
 ───────────────────────────────────────
-【예시 B — 희생이 최선인 포지션】
-**포지션 상황**
-백이 Rxf7을 둔 상황입니다. 얼핏 보면 기물을 그냥 내주는 것처럼 보이는데, 세상에 공짜는 없거든요. 여기서 룩 희생에는 꽤 깊은 계산이 깔려 있습니다.
 
-**위협 & 아이디어**
-백이 Rxf7을 두면 흑은 Kxf7을 강요받게 되고요. 이후 백은 Ng5+로 킹을 체크하면서 퀸 포크를 노리는 수순이 따라옵니다. 흑 킹이 e8로 피한다면 백은 Qxd8+로 퀸까지 잡히는 모습이 되거든요. 폰 하나 준 게 아니라 결국 기물 우위를 가져가는 구조라고 볼 수 있겠습니다.
-
-**최선수 분석**
-엔진 최선 수순은 백이 Rxf7을 두면 흑은 Kxf7으로 잡고, 백은 다시 Ng5+를 둡니다. 흑이 e8로 피하면 백은 Qxd8+를 두어 퀸까지 잡게 되고요. 흑 킹이 퀸을 잡지 않고 f8이나 g8로 피하더라도 백은 퀸 교환 이후 공격을 계속 이어갈 수 있습니다.
-
-**이후 수순**
-교환 이후에는 백이 남은 기물로 노출된 흑 킹을 계속 추적하는 플레이가 자연스럽게 이어집니다. 흑 킹이 안전한 칸을 찾기 어렵다는 게 지금 포지션의 핵심이라고 볼 수 있겠죠.
-
-───────────────────────────────────────
-【예시 C — 균형 잡힌 포지션】
-**포지션 상황**
-서로 캐슬링을 마쳤고 기물 전개도 어느 정도 완성된 모습입니다. 지금은 양쪽 다 뚜렷한 약점이 없고, 특별히 긴장이 발생하는 칸도 없어요. 조용한 미들게임이 시작되는 시점이라고 볼 수 있겠어요.
-
-**강점 분석**
-백은 나이트가 d4라는 중앙 좋은 칸을 잡고 있다는 게 긍정적입니다. 이 나이트는 쉽게 쫓겨나지 않거든요. 백이 c2나 f5로 향하면서 상대에게 지속적인 부담을 줄 수 있는 상황이겠습니다.
-
-**최선수 분석**
-컴퓨터 추천수는 f4인데요. 백이 f4를 두면 킹사이드 공간을 열면서 나이트와 연계해 공격을 준비하는 아이디어입니다. 이후 흑이 f5로 막는다면 백은 e4로 카운터치면서 중앙 싸움을 가져오는 수순이 이어질 수 있겠어요.
-
-**이후 수순**
-지금 당장 결정적인 전술이 있는 국면은 아니고, 양쪽 다 자원을 모으면서 적절한 타이밍을 재는 상황이라고 보면 되겠습니다. 백이 먼저 확실한 전략 방향을 정하는 게 중요하겠어요.
-
-───────────────────────────────────────
-【예시 D — 오프닝 맥락이 있는 이탈리안 (목표 말투)】
-**포지션 상황**
-경기는 e4 e5 이후 나이트 전개로 이탈리안 게임에 들어갔고요, 흑이 …Bc5·…d6까지 이어지면서 무난한 기우코 피아니시모 형태가 됐습니다. 백은 아직 d4를 서두르기보다 나이트 전개를 마무리한 뒤 중앙을 푸는 쪽을 노리고 있어요.
-
-**최선수 분석**
-컴퓨터는 여기서 백이 O-O를 추천하는데요, 백이 O-O를 두면 킹을 안전히 피한 뒤 Re1·d4 확장으로 이어가기 쉬워집니다. 흑이 …h6로 Bg5를 막으면, 백은 d3·c3 준비를 이어가며 d4 돌파를 노릴 수 있겠어요.
-
-**이후 수순**
-백이 O-O, 흑이 …h6, 백이 Re1을 두면 e4·d4 폰 센터를 바탕으로 킹사이드에서 압박을 키우는 그림이 자연스럽습니다. 흑이 …d5로 카운터를 치려 한다면 백은 exd5 이후 활동성을 이어가면 됩니다.
-
-───────────────────────────────────────
-
-【당신이 이미 알고 있는 체스 지식 — 해설에 자연스럽게 활용할 것】
-
-■ 기물 동적 가치 (위치 기반)
-- 폰이 7랭크에 위치하면 승진 직전 위협으로 가치 최고조. 상대는 즉각 저지해야 함.
-- 나이트는 중앙에 가까울수록, 그리고 상대 진영 깊숙이(5~7랭크) 전진할수록 공격력이 높아짐. 변두리 나이트(a/h파일)는 가치가 낮음.
-- 비숍은 대각선이 열려있을수록, 그리고 아군 폰이 비숍과 다른 색 칸에 배치될수록(good bishop) 가치가 높아짐. 아군 폰이 비숍과 같은 색 칸에 많으면 배드 비숍.
-- 룩은 열린 파일(open file)이나 반열린 파일(semi-open file)에 위치할수록, 7랭크에 침투할수록 가치가 극대화됨.
-
-■ 전술 패턴
-- 포크(Fork): 한 기물이 상대 기물 2개 이상을 동시에 공격. 나이트 포크가 가장 흔함.
-- 핀(Pin): 고가치 기물 앞 기물이 움직일 수 없는 상태. 절대 핀(킹 앞)과 상대 핀(퀸 앞)으로 구분.
-- 디스커버드 어택(Discovered Attack / 발견 공격): 앞에 있는 기물이 움직이면서 뒤 슬라이딩 기물이 상대 기물을 직격.
-- 추크추방(Zwischenzug / 중간 수): 상대가 반드시 응수해야 할 중간 위협을 끼워 넣어 흐름을 끊는 수.
-- 배터리(Battery): 같은 파일/랭크/대각선에 룩+룩, 퀸+룩, 퀸+비숍 배치로 압력 극대화.
-- 아웃포스트(Outpost): 상대 폰이 공격할 수 없는 안전한 중앙 칸에 기물 배치.
-- 기물 과부하(Overloading): 한 기물이 두 곳을 동시에 수비해야 하는 상황, 어느 한쪽을 포기해야 함.
-
-■ 폰 구조
-- 고립 폰(Isolated Pawn): 인접 파일에 아군 폰이 없어 지원받지 못하는 약점 폰.
-- 이중 폰(Doubled Pawn): 같은 파일에 폰 2개 중첩. 구조적 약점.
-- 뒤처진 폰(Backward Pawn): 전진하면 상대 폰 공격을 받고 인접 폰 지원이 없는 폰.
-- 통과 폰(Passed Pawn): 상대 폰이 막지 못하는 폰. 엔드게임에서 가치 매우 높음.
-- 폰 사슬(Pawn Chain): 대각선으로 연결된 폰 구조. 공간 통제력이 높으나 기저 폰이 약점.
-- 폰 구조로 영역 우세를 가진 쪽은 기물 교환을 자제하는 것이 유리함(공간이 줄어들면 폰 구조 이점도 희석됨).
-
-■ 마이너리티 공격(Minority Attack)
-상대보다 폰 수가 적은 쪽(소수)이 그 폰들을 밀어 상대의 폰 다수 쪽을 공격하여 약점(고립 폰, 이중 폰 등)을 만드는 전략.
-예: 백이 퀸사이드에 폰 2개, 흑이 3개인 경우 백이 b4-b5로 밀어 흑의 퀸사이드 폰 구조를 무너뜨리는 것.
-
-■ 킹사이드/퀸사이드 전장 판단
-- 기물과 폰이 킹사이드(e~h파일)에 집중돼 있으면 킹사이드 공격을 준비하는 것이 자연스러움.
-- 기물과 폰이 퀸사이드(a~d파일)에 집중돼 있으면 퀸사이드 공격이 주 전장.
-- 상대 킹이 킹사이드에 캐슬링했고 아군 기물이 킹사이드에 집중돼 있으면 직접 킹 공격 가능.
-
-■ 예방적 폰 전진 (a3/a4, h3/h6)
-- 오프닝 초반: 상대 비숍이 Bg5, Bb5 등 핀을 거는 것을 방지하는 예방 목적.
-- 미들/엔드게임: 킹사이드(h3/h6) 또는 퀸사이드(a3/a4) 공간 확장 발판으로 측면 공격이나 영역 확장에 활용 가능.
-
-【절대 규칙 — 검증된 분석 브리프 우선】
-0. 사용자 메시지의 [검증된 분석 브리프]에 있는 사실·수순·위협만 사용할 것. 브리프에 없는 체크메이트·포크·기물을 지어내지 말 것. 특히 "보드 기물 배치" 정보를 절대적으로 신뢰하고, 이미 아군 기물이 있는 칸으로 이동하는 등의 "물리적 불가능"을 서술하는 할루시네이션을 엄격히 금지함.
-1. 위 예시의 말투를 그대로 따를 것: "~고요", "~거든요", "~라고 볼 수 있겠습니다", "~는 거죠", "~인 모습이었고요", "~겠어요", "~라고 볼 수 있겠네요"
-2. 섹션 헤더는 반드시 **포지션 상황**, **약점 분석**, **강점 분석**, **위협 & 아이디어**, **최선수 분석**, **이후 수순** 중에서만 쓸 것
-3. **포지션 상황** 과 **최선수 분석** 은 반드시 포함
-4. 나머지 섹션은 실제 포지션에 맞는 것만 선택 (억지로 다 쓰지 말 것)
-5. **최선수 분석** 에서는 반드시 엔진 1순위 라인의 실제 수 표기를 써서 인과관계를 설명할 것 ("A 이후 B가 오면 C가 되기 때문에"). 수순 중 포획(capture)이 있다면 반드시 "보드 기물 배치"를 확인하여 무엇을 잡는지 명시할 것.
-6. 포지션 인사이트에서 [전술 패턴], [폰 구조], [기물 가치], [전장 판단], [마이너리티 공격], [예방 전진] 등이 보이면 해당 내용을 해설에 자연스럽게 녹여서 쓸 것
-7. "이 수", "해당 수", "기물의 발전을 돕는다", "상대를 약화시킨다", "승리의 기회를 높입니다" 금지
-8. cp/점수/승률 수치 금지
-9. 전체 900~1300자. 각 섹션 3~5문장. 한 문단이 끊기지 않고 이어지게 쓸 것 ("~고요", "~거든요", "~라고 볼 수 있겠어요").
-10. 【오프닝·스토리텔링】 [국면 내러티브]에 오프닝 이름·수순이 있으면 **포지션 상황** 첫 문단에서 "경기는 … 이후 … 오프닝으로 들어갔고"처럼 맥락을 잡을 것. 직전 수·최근 수순을 자연스럽게 연결.
-11. 한국어로만 출력. 체스 수 표기(e4, Nf3 등)는 영문 그대로.
-12. 【수 설명 주어 규칙 — 절대 위반 금지】 모든 수에 대해 **누가(백/흑)** 두는지 주어를 반드시 명시할 것. 엔진 수순을 설명할 때 "백이 A를 두면, 흑은 B로 응수하고, 백은 C를 두어..."와 같이 **모든 수에 대해 주어를 써야 한다**. 주어 생략 및 양쪽 수를 반대편이 두는 것처럼 서술하는 것은 엄격히 금지. 특히 엔진 수순의 1번째 수는 현재 차례인 쪽이 두는 수임을 명심할 것. 또한, 이미 기물이 있는 칸(보드 기물 배치 참고)으로 이동하는 것은 포획이 아닌 이상 불가능함을 인지하고 할루시네이션을 방지할 것.
-13. 【이후 수순 섹션 규칙】 수순에 등장하는 각 수에 대해 "누가(백/흑) 무엇을(수 표기) 두면, 왜(구체적 결과)"를 반드시 써야 한다. 수를 나열만 하거나 결과 없이 "X로 막는다", "Y를 노린다"처럼 막연하게 쓰는 것은 금지. 구체적으로 어떤 칸/기물/위협이 발생하는지 서술할 것.
-14. 【킹 위협 서술 규칙】 특정 수가 킹을 위협한다고 쓰려면, 구체적으로 어떤 칸으로 침투하는지 또는 어떤 체크/메이트 위협이 생기는지 반드시 함께 써야 한다. "킹을 노린다"는 단독 표현은 금지.
-15. 【엔진 라인 없음】 사용자 메시지에 "엔진 라인 미준비" 또는 브리프에 "엔진 1순위 수순"이 없으면, **최선수 분석**에서 SAN을 나열하지 말고 한 문장으로만 언급. **이후 수순** 섹션은 쓰지 말 것.
-16. 【차례·직전 수】 "직전 수"는 방금 둔 수이고, "지금 차례"인 쪽의 수만 미래형으로 설명. 직전 수를 현재 차례 수처럼 서술하는 것은 금지.
-17. 【위협 패널】 [위협 분석 데이터]는 엔진·브리프와 충돌하면 무시. 브리프에 없는 포크·메이트·기물 이름을 지어내지 말 것.`;
+【작성 세부 지침 — 공수 교대 절대 주의】
+1. **역할 고정**: 당신은 지금 차례인 플레이어(Mover)의 관점에서 분석해야 합니다.
+2. **주어 명시**: 모든 수순 해설에서 "백이 ~하면, 흑이 ~하고"와 같이 주어를 매번 명시하세요. 엔진 수순 뒤의 (백), (흑) 표시를 절대적으로 신뢰하세요.
+3. **위협 & 아이디어 정의**:
+   - **핵심 계획**: 반드시 지금 차례인 플레이어의 첫 번째 수와 그 의도만 쓰세요.
+   - **문제점**: 반드시 상대방이 할 수 있는 최선의 방어(엔진 2번째 수)만 쓰세요.
+4. **말투**: 체스인사이드 유튜브 스타일 (~고요, ~거든요, ~겠습니다, ~는 거죠).
+5. **금기 사항**: cp/점수 수치 사용 금지, 할루시네이션(불가능한 수) 주의, 주어 생략 금지.`;
 
   const prompt = buildCommentaryPrompt(ctx);
+
+  // 디버깅 로그 추가
+  console.group('%c[AI Coach] Commentary API Request', 'color: #4CAF50; font-weight: bold;');
+  console.log('System Prompt:', SYSTEM);
+  console.log('User Prompt:', prompt);
+  console.log('Refined Context:', ctx);
+  console.groupEnd();
+
   return callGroqAPIWithSystemTemp(SYSTEM, prompt, 2000, 0.28);
 }
 
@@ -1723,7 +1646,7 @@ function sanitizeAnswer(text, ctx) {
 
   // 엔진 수순이 정말로 없는지 확인 (이미 텍스트에 포함되어 있다면 강제 대체 자제)
   const pv1 = (ctx && ctx.pvData && ctx.pvData[1]) || (window.pvData && window.pvData[1]);
-  const engineSan = ctx ? (engineLineSan(ctx, pv1, 8) || '') : '';
+  const engineSan = ctx ? (engineLineSanWithLabels(ctx, pv1, 8) || '') : '';
   
   // 만약 AI가 이미 본문에 SAN 수순(Nf3, e4 등)을 어느 정도 언급했다면, 
   // 엔진 데이터가 순간적으로 없더라도 강제 폴백 문구 삽입을 지양함.
@@ -1938,56 +1861,42 @@ async function callThreatAPI(ctx) {
   const mover     = ctx.turn === 'w' ? '백(White)' : '흑(Black)';
   const opponent  = ctx.turn === 'w' ? '흑(Black)' : '백(White)';
 
-  // 체크메이트/즉승 여부 감지: 엔진 1순위 수에 # 포함 여부
-  const isMate    = ctx.bestMove && ctx.bestMove.includes('#');
-  // 엔진 1순위 수에 + 포함 (체크) 여부
-  const isCheck   = ctx.bestMove && (ctx.bestMove.includes('+') || isMate);
-
   const THREAT_SYSTEM = `You are a Korean chess analyst. Output ONLY in Korean (한국어).
 Chess move notation stays in algebraic form (Nf3, e4, dxc4, O-O).
 
-CRITICAL: You will be given the actual engine lines, FEN, and a map of occupied squares.
-GROUND TRUTH RULES:
-1. Use ONLY provided engine moves. Never invent moves.
-2. PHYSICAL IMPOSSIBILITY: Never suggest a move to a square already occupied by an ally (unless it's a capture of an enemy). Check the "보드 기물 배치" data carefully.
-3. CAPTURE VERIFICATION: If an engine move is a capture (e.g., Qxd3), look up what was on d3 in the "보드 기물 배치" section and name it correctly (e.g., "d3의 폰을 잡으며...").
-4. Never assume a piece is targeted if it's not on the destination square of an engine move or in its immediate path.
-
-COLOR CONSISTENCY RULE:
-- NEVER swap Black and White.
+【COLOR CONSISTENCY RULE — CRITICAL】
 - The "차례 (Mover)" provided is the side whose turn it is.
 - The 1st move in the engine line is ALWAYS played by the current mover.
-
-TACTICAL SCANNING:
-Scan the provided engine lines for tactical themes and use the exact terms:
-- 포크 (Fork), 핀 (Pin), 스큐어 (Skewer)
-- 디스커버드 어택 (Discovered Attack), 더블 체크 (Double Check)
-- 희생 (Sacrifice)
-If a move creates a fork or a pin, you MUST state it explicitly.
+- The 2nd move is played by the opponent.
+- NEVER mix up who is playing which move.
 
 Analyze the position using the provided data and write three sections:
-**핵심 계획:** — What does \${mover} want to do? State the concrete threat using the ACTUAL moves from the engine line.
-**문제점:** — What can \${opponent} do to counter? Use engine lines 2 or 3.
-**최선책:** — What is \${mover}'s best response? Use the engine 1st line.
+**핵심 계획:** — What does the current mover (\${mover}) want to do? State the concrete threat using the ACTUAL 1st move from the engine line.
+**문제점:** — What can the opponent (\${opponent}) do to counter? Use the 2nd move from the engine line as the main problem for the mover.
+**최선책:** — What is the current mover's (\${mover}) best response or final goal in this line?
 
 Rules:
-- Keep each section 1~2 sentences. Total under 400 characters.`;
+- Keep each section 1~2 sentences. Total under 400 characters.
+- Use only provided SAN moves with labels.`;
+
+  const pv1 = ctx.pvData && ctx.pvData[1];
+  const labeledLine = engineLineSanWithLabels(ctx, pv1, 6);
 
   const userMsg = [
-    `[현재 포지션 분석 — 아래 데이터만 사용하고 수를 절대 만들어내지 마세요]`,
+    `[현재 포지션 데이터]`,
     `차례: ${mover}`,
-    ctx.bestLine  ? `엔진 1순위 라인 (최선): ${ctx.bestLine}` : '',
-    ctx.line2     ? `엔진 2순위 라인: ${ctx.line2}` : '',
-    ctx.line3     ? `엔진 3순위 라인: ${ctx.line3}` : '',
-    isMate        ? `⚠️ 즉각 체크메이트 가능: ${ctx.bestMove}` : '',
-    isCheck && !isMate ? `엔진 최선수(체크): ${ctx.bestMove}` : '',
+    `엔진 추천 수순 (주어 확인): ${labeledLine}`,
     ctx.lastMoveSan ? `방금 둔 수: ${ctx.lastMoveSan}` : '',
-    ctx.pgnMoves  ? `기보: ${ctx.pgnMoves}` : '',
     `FEN: ${ctx.fen}`,
     ``,
-    `위 엔진 라인의 실제 수만 사용해서 핵심 계획/문제점/최선책을 분석하세요.`,
-    `엔진 라인에 없는 수(예시에서 본 수, 상상한 수)를 절대 쓰지 마세요.`,
+    `위 엔진 라벨을 절대적으로 신뢰하여 핵심 계획/문제점/최선책을 분석하세요.`,
   ].filter(Boolean).join('\n');
+
+  // 디버깅 로그 추가
+  console.group('%c[AI Coach] Threat API Request', 'color: #2196F3; font-weight: bold;');
+  console.log('System Prompt:', THREAT_SYSTEM);
+  console.log('User Prompt:', userMsg);
+  console.groupEnd();
 
   const response = await fetch('/api/groq', {
     method: 'POST',
@@ -1995,7 +1904,7 @@ Rules:
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       max_tokens: 500,
-      temperature: 0.3,
+      temperature: 0.25,
       messages: [
         { role: 'system', content: THREAT_SYSTEM },
         { role: 'user',   content: userMsg },
@@ -2106,8 +2015,10 @@ async function runBestMoveExplain(focusIdx) {
   bestExplainLoading  = true;
   lastBestExplainFen  = fenKey;
   bestExplainFocusIdx = focusIdx ?? 0;
-  const sanLine = engineLineSan(ctx, pv, 6);
-  bestExplainMoves    = sanLine ? sanLine.split(/\s+/).filter(Boolean) : pv.moves.slice(0, 6);
+  
+  // 라벨링된 수순에서 SAN만 추출
+  const labeledLine = engineLineSanWithLabels(ctx, pv, 6);
+  bestExplainMoves = labeledLine ? labeledLine.split(/\s+/).filter(s => !s.includes('.') && !s.includes('(')) : pv.moves.slice(0, 6);
 
   const panel = document.getElementById('best-explain-panel');
   panel.style.display = 'block';
@@ -2166,54 +2077,35 @@ function renderBestSeqBar(moves, activeIdx, ctx) {
 async function callBestExplainAPI(ctx, moves, focusIdx) {
   const EXPLAIN_SYSTEM = `당신은 "체스인사이드" 스타일 한국어 체스 해설자입니다.
 
-【목표】엔진 최선수 한 수가 **왜** 좋은지, 포지션 맥락(오프닝·전개·계획)과 연결해 구체적으로 설명합니다.
+【목표】엔진 최선수 한 수가 **왜** 좋은지, 포지션 맥락과 연결해 구체적으로 설명합니다.
 
-【절대 규칙 — 색상 반전 주의】
-- **절대 백과 흑을 바꿔서 설명하지 말 것.** 제공된 "현재 차례"와 수순의 번호를 엄격히 따르세요.
-- 엔진 수순의 1번째 수는 항상 현재 차례인 쪽이 두는 수입니다.
-- 모든 수에 "백이 …" / "흑이 …" 주어를 명시하여 누가 두는지 명확히 하세요.
-- [검증된 분석 브리프]·[국면 내러티브]·제공된 엔진 SAN 수순만 사용. 없는 수·기물·오프닝 통계 창작 금지.
-- 말투: "~고요", "~거든요", "~라고 볼 수 있겠어요", "~인 모습이었고요"
-- cp/승률 수치 금지
-
-【출력 형식】
-**[수 표기]이/가 좋은 이유**
-(1문단) 오프닝·직전 수 맥락 1~2문장
-(2문단) 해당 수의 전술·전략 이유 3~4문장 — 포크·핀·d4 확장·캐슬 등 브리프에 있는 것만
-(3문단, 선택) 이후 2~3수 엔진 라인을 "백이 … 흑은 …" 형태로 짧게
-
-전체 450~750자. 불릿(•) 대신 문단형 해설.`;
+【절대 규칙 — 공수 교대 주의】
+- 당신이 받은 엔진 수순에는 (백), (흑) 라벨이 붙어 있습니다. 이를 절대적으로 신뢰하세요.
+- 해설 시 반드시 "백이 ~하면", "흑이 ~해서"와 같이 주어를 명시하세요.
+- 절대로 백의 수를 흑의 계획으로, 혹은 그 반대로 설명하지 마세요.
+- 말투: "~고요", "~거든요", "~라고 볼 수 있겠어요"
+- cp/승률 수치 금지`;
 
   const pv1 = ctx.pvData && ctx.pvData[1];
-  const seqSan = engineLineSan(ctx, pv1, 6) || moves.slice(0, 6).join(' ');
-  const seqParts = seqSan.split(/\s+/).filter(Boolean);
-  const focusMove = seqParts[focusIdx] || moves[focusIdx] || moves[0];
+  const labeledLine = engineLineSanWithLabels(ctx, pv1, 6);
+  const focusMove = moves[focusIdx] || moves[0];
 
   const firstTurnKr  = ctx.turn === 'w' ? '백' : '흑';
-  const secondTurnKr = ctx.turn === 'w' ? '흑' : '백';
   const userMsg = [
-    `현재 차례: ${firstTurnKr}. 엔진 수순에서 홀수 번째 수=${firstTurnKr}, 짝수 번째 수=${secondTurnKr}.`,
-    `엔진 최선 수순(SAN): ${seqSan}`,
+    `지금 차례: ${firstTurnKr}`,
+    `라벨링된 엔진 수순: ${labeledLine}`,
     `설명 대상: ${focusIdx + 1}번째 수 "${focusMove}"`,
-    ctx.lastMoveSan ? `직전 수: ${ctx.lastMoveSan}${ctx.lastMoveAnnotation ? ' (' + ctx.lastMoveAnnotation + ')' : ''}` : '',
-    ctx.pgnMoves ? `전체 기보: ${ctx.pgnMoves}` : '',
-    ctx.phase ? `단계: ${ctx.phase}` : '',
-  ];
+    ctx.lastMoveSan ? `직전 수: ${ctx.lastMoveSan}` : '',
+    `FEN: ${ctx.fen}`,
+    ``,
+    `위 라벨을 참고하여 "${focusMove}"가 좋은 이유를 해설하세요. 주어를 반드시 포함하세요.`,
+  ].join('\n');
 
-  if (ctx.positionBrief && typeof formatPositionBriefForPrompt === 'function') {
-    userMsg.push('');
-    userMsg.push(formatPositionBriefForPrompt(ctx.positionBrief, ctx));
-  }
-
-  if (ctx.threatData) {
-    userMsg.push('');
-    userMsg.push('[위협 분석]');
-    if (ctx.threatData.idea) userMsg.push(`핵심 계획: ${ctx.threatData.idea}`);
-    if (ctx.threatData.prob) userMsg.push(`문제점: ${ctx.threatData.prob}`);
-    if (ctx.threatData.sol) userMsg.push(`최선책: ${ctx.threatData.sol}`);
-  }
-
-  userMsg.push(`FEN: ${ctx.fen}`);
+  // 디버깅 로그 추가
+  console.group('%c[AI Coach] Best Explain API Request', 'color: #FF9800; font-weight: bold;');
+  console.log('System Prompt:', EXPLAIN_SYSTEM);
+  console.log('User Prompt:', userMsg);
+  console.groupEnd();
 
   const response = await fetch('/api/groq', {
     method: 'POST',
@@ -2224,7 +2116,7 @@ async function callBestExplainAPI(ctx, moves, focusIdx) {
       temperature: 0.28,
       messages: [
         { role: 'system', content: EXPLAIN_SYSTEM },
-        { role: 'user',   content: userMsg.filter(Boolean).join('\n') },
+        { role: 'user',   content: userMsg },
       ],
     }),
   });
