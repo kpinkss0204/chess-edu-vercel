@@ -1081,25 +1081,25 @@ function extractPositionInsights(fen) {
 
 /** 방치 시 위협(Null Move Threat) 계산 */
 async function getNullMoveThreat(fen, moveUci) {
-  if (!moveUci || typeof global.uciToMove !== 'function' || typeof global.applyMoveToBoard !== 'function') return null;
+  if (!moveUci || typeof window.uciToMove !== 'function' || typeof window.applyMoveToBoard !== 'function') return null;
   try {
     const parts = fen.split(' ');
-    const board = global.parseFenBoard(parts[0]);
+    const board = window.parseFenBoard(parts[0]);
     const turn  = parts[1];
-    const cast  = global.parseFenCastling(parts[2]);
-    const ep    = global.parseFenEP(parts[3]);
+    const cast  = window.parseFenCastling(parts[2]);
+    const ep    = window.parseFenEP(parts[3]);
     
-    const move = global.uciToMove(moveUci, board, turn, cast, ep);
+    const move = window.uciToMove(moveUci, board, turn, cast, ep);
     if (!move) return null;
     
-    const boardAfter = global.applyMoveToBoard(board.map(r=>[...r]), move, turn);
+    const boardAfter = window.applyMoveToBoard(board.map(r=>[...r]), move, turn);
     // 차례를 다시 mover로 고정 (Null Move)
-    const nullFen = global.boardToFen(boardAfter, turn, cast, null, 0, 1);
+    const nullFen = window.boardToFen(boardAfter, turn, cast, null, 0, 1);
     
     return new Promise(resolve => {
       // engine.js의 기능을 빌려 짧게 분석
-      if (typeof global.executeEnginePlayMove !== 'function') return resolve(null);
-      global.executeEnginePlayMove(nullFen, (bestUci) => {
+      if (typeof window.executeEnginePlayMove !== 'function') return resolve(null);
+      window.executeEnginePlayMove(nullFen, (bestUci) => {
         resolve(bestUci);
       }, 800); // 0.8초 분석
     });
