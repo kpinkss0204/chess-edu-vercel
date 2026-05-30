@@ -1427,19 +1427,23 @@ function buildCommentaryPrompt(ctx) {
       const nt = ctx.positionBrief.nullMoveThreat;
       lines.push(``);
       lines.push(`[방치 시 위협 분석 (Null Move Threat)]`);
-      lines.push(`만약 ${firstTurnLabel}이 최선수(${ctx.positionBrief.engineLine[0]?.san})를 두었는데 상대가 방치한다면:`);
-      lines.push(`  • 위협 수: ${nt.san}`);
-      lines.push(`  • 전술적 효과: ${nt.impact.tactics.join(', ') || '공세 지속'}`);
+      lines.push(`만약 ${firstTurnLabel}이 최선수(${ctx.positionBrief.engineLine[0]?.san})를 두었는데 상대방(${lastMoverLabel})이 응수하지 않고 차례를 넘긴다면(Null Move):`);
+      lines.push(`  • ${firstTurnLabel}의 추가 위협 수: ${nt.san}`);
+      lines.push(`  • 전술적 효과: ${nt.impact.tactics.join(', ') || '공세 강화'}`);
+      if (nt.impact.isCapture) lines.push(`  • 포획 대상: ${nt.impact.capturedPiece}(${nt.san.slice(-2)})`);
+      if (nt.impact.isCheck) lines.push(`  • 위협: 상대 킹에 대한 직접적인 체크`);
       lines.push(`  • 공격 대상: ${nt.impact.newAttackers.map(a => `${a.piece}(${a.sq})`).join(', ') || '없음'}`);
-      lines.push(`  • 전략적 의미: 이 위협 때문에 상대는 반드시 응수해야 합니다.`);
+      lines.push(`  • 전략적 의미: 이 수순이 ${firstTurnLabel}의 실질적인 공격 의도입니다. 상대는 이를 막기 위해 반드시 대응해야 합니다.`);
     }
     
     // 추가: 최선수의 파급력 (활동성 등)
     if (ctx.positionBrief.m1Impact) {
       const imp = ctx.positionBrief.m1Impact;
       lines.push(``);
-      lines.push(`[최선수 파급력 분석]`);
-      lines.push(`  • 활동성 변화: 이동 가능 칸 ${imp.mobility > 0 ? '+' : ''}${imp.mobility}`);
+      lines.push(`[최선수의 즉각적 파급력]`);
+      lines.push(`  • 기물 활동성 변화: 이동 가능 칸 ${imp.mobility > 0 ? '+' : ''}${imp.mobility}`);
+      if (imp.isCapture) lines.push(`  • 즉각적 이득: ${imp.capturedPiece} 포획`);
+      if (imp.isCheck) lines.push(`  • 상태: 상대 킹 체크`);
       lines.push(`  • 중앙 통제력 변화: ${imp.controlDelta > 0 ? '+' : ''}${imp.controlDelta}`);
       if (typeof detectQuietMoveImpact === 'function') {
         detectQuietMoveImpact(imp).forEach(note => lines.push(`  • ${note}`));

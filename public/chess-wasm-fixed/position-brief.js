@@ -717,16 +717,33 @@ if (tags.includes('mate')) {
       prophylaxis: [],  // 상대 계획 차단 여부
       newAttackers: [], // 새롭게 공격받는 기물
       controlDelta: 0,  // 중앙 통제력 변화
+      isCapture: false, // 기물 획득 여부
+      capturedPiece: null,
+      isCheck: false    // 체크 여부
     };
 
     try {
+      // 0. 기본 특성 (체크, 캡처)
+      const [tr, tc] = move.to;
+      const targetBefore = stateBefore.board[tr][tc];
+      if (targetBefore && targetBefore[0] === opp) {
+        impact.isCapture = true;
+        impact.capturedPiece = PIECE_KR[targetBefore[1]];
+        impact.tactics.push('capture');
+      }
+
+      const oppKingSq = findKingSq(stateAfter.board, opp);
+      if (oppKingSq && isAttacked(stateAfter.board, oppKingSq[0], oppKingSq[1], mover)) {
+        impact.isCheck = true;
+        impact.tactics.push('check');
+      }
+
       // 1. 활동성(Mobility) 변화량 (아군 기물 전체)
       const movesBefore = global.getAllLegalMoves(stateBefore.board, mover, stateBefore.castling, stateBefore.enPassant).length;
       const movesAfter  = global.getAllLegalMoves(stateAfter.board, mover, stateAfter.castling, stateAfter.enPassant).length;
       impact.mobility = movesAfter - movesBefore;
 
       // 2. 신규 공격 위협 (이동한 기물 중심)
-      const [tr, tc] = move.to;
       const piece = stateAfter.board[tr][tc];
       if (piece) {
         const pMoves = global.pseudoMoves(stateAfter.board, tr, tc, stateAfter.castling, stateAfter.enPassant);
@@ -760,6 +777,16 @@ if (tags.includes('mate')) {
     } catch(e) { console.warn('[PositionBrief] analyzeMoveImpact error:', e); }
 
     return impact;
+  }
+
+  function findKingSq(board, color) {
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const c = board[r][f];
+        if (c && c[0] === color && c[1] === 'K') return [r, f];
+      }
+    }
+    return null;
   }
 
   /** "조용한 수"에 대한 전략적 가치 추출 */
