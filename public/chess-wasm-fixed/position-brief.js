@@ -703,6 +703,81 @@ if (tags.includes('mate')) {
   }
 
   /**
+   * 두 상태(이전, 이후)를 비교하여 수의 파급력을 분석합니다.
+   * @param {object} stateBefore 이전 국면
+   * @param {object} move 이동 객체
+   * @param {object} stateAfter 이후 국면
+   */
+  function analyzeMoveImpact(stateBefore, move, stateAfter) {
+    const mover = stateBefore.turn;
+    const opp   = mover === 'w' ? 'b' : 'w';
+    const impact = {
+      tactics: [],      // 포크, 핀, 체크 등
+      mobility: 0,      // 이동 가능 칸 변화
+      prophylaxis: [],  // 상대 계획 차단 여부
+      newAttackers: [], // 새롭게 공격받는 기물
+      controlDelta: 0,  // 중앙 통제력 변화
+    };
+
+    try {
+      // 1. 활동성(Mobility) 변화량 (아군 기물 전체)
+      const movesBefore = global.getAllLegalMoves(stateBefore.board, mover, stateBefore.castling, stateBefore.enPassant).length;
+      const movesAfter  = global.getAllLegalMoves(stateAfter.board, mover, stateAfter.castling, stateAfter.enPassant).length;
+      impact.mobility = movesAfter - movesBefore;
+
+      // 2. 신규 공격 위협 (이동한 기물 중심)
+      const [tr, tc] = move.to;
+      const piece = stateAfter.board[tr][tc];
+      if (piece) {
+        const pMoves = global.pseudoMoves(stateAfter.board, tr, tc, stateAfter.castling, stateAfter.enPassant);
+        for (const pm of pMoves) {
+          const [ar, ac] = pm.to;
+          const target = stateAfter.board[ar][ac];
+          if (target && target[0] === opp) {
+            impact.newAttackers.push({
+              sq: idxToSq(ar, ac),
+              piece: PIECE_KR[target[1]],
+              val: PIECE_VAL[target[1]]
+            });
+          }
+        }
+      }
+
+      // 3. 포크 감지 (고가치 기물 2개 이상 공격)
+      const highValAtks = impact.newAttackers.filter(a => a.val >= 3 || a.piece === '킹');
+      if (highValAtks.length >= 2) impact.tactics.push('fork');
+
+      // 4. 중앙 통제력 변화 (d4, d5, e4, e5)
+      const center = [[3,3],[3,4],[4,3],[4,4]];
+      let ctrlBefore = 0, ctrlAfter = 0;
+      center.forEach(([r, f]) => {
+        const atksB = getAttackersOnSquare(stateBefore.board, r, f);
+        const atksA = getAttackersOnSquare(stateAfter.board, r, f);
+        if (atksB[mover].length > 0) ctrlBefore++;
+        if (atksA[mover].length > 0) ctrlAfter++;
+      });
+      impact.controlDelta = ctrlAfter - ctrlBefore;
+    } catch(e) { console.warn('[PositionBrief] analyzeMoveImpact error:', e); }
+
+    return impact;
+  }
+
+  /** "조용한 수"에 대한 전략적 가치 추출 */
+  function detectQuietMoveImpact(impact) {
+    const notes = [];
+    if (impact.mobility > 5) notes.push(`기물 활동성 크게 강화 (이동 가능 칸 +${impact.mobility})`);
+    else if (impact.mobility > 0) notes.push(`기물 기동성 개선`);
+
+    if (impact.controlDelta > 0) notes.push(`중앙 영역 통제력 강화`);
+    
+    if (impact.newAttackers.length > 0) {
+      const top = impact.newAttackers.sort((a,b)=>b.val - a.val)[0];
+      notes.push(`${top.sq}의 ${top.piece}를 압박하여 상대의 응수를 강제함`);
+    }
+    return notes;
+  }
+
+  /**
    * @param {object} opts
    * @param {string} opts.fen
    * @param {string} opts.turn
@@ -715,6 +790,7 @@ if (tags.includes('mate')) {
    * @param {string} [opts.lastMoveAnnotation]
    * @param {string} [opts.phase]
    * @param {number} [opts.moveCount]
+   * @param {string} [opts.nullMoveThreatUci] // 추가: 방치 시 위협 수
    */
   function buildPositionBrief(opts) {
     const fen = opts.fen;
@@ -722,7 +798,7 @@ if (tags.includes('mate')) {
     const brief = {
       fen,
       turn: state ? state.turn : (fen.split(' ')[1] || 'w'),
-      pieceMap: {}, // 칸별 기물 정보 추가
+      pieceMap: {}, 
       mateIn1: [],
       mateIn2: [],
       mateIn3: [],
@@ -741,6 +817,7 @@ if (tags.includes('mate')) {
       narrative: null,
       anchor: null,
       legalMoves: [],
+      nullMoveThreat: null, // 추가
     };
 
     if (state) {
@@ -781,7 +858,50 @@ if (tags.includes('mate')) {
 
     if (opts.pv1Uci && opts.pv1Uci.length) {
       brief.engineLine = annotateEngineLine(fen, opts.pv1Uci, 8);
+      
+      // 최선수의 파급력 분석 (Brief 데이터 보강)
+      try {
+        const m1Uci = opts.pv1Uci[0];
+        const m1 = global.uciToMove(m1Uci, state.board, state.turn, state.castling, state.enPassant);
+        if (m1) {
+          const { state: s1 } = applyMoveToState(cloneState(state), m1);
+          const impact = analyzeMoveImpact(state, m1, s1);
+          brief.m1Impact = impact;
+        }
+      } catch(e) {}
     }
+    
+    // 방치 시 위협 분석 (Null Move Threat)
+    if (opts.nullMoveThreatUci && typeof global.uciToMove === 'function') {
+      try {
+        // M1을 둔 후의 상태
+        const m1Uci = opts.pv1Uci[0];
+        const m1 = global.uciToMove(m1Uci, state.board, state.turn, state.castling, state.enPassant);
+        if (m1) {
+          const { state: s1 } = applyMoveToState(cloneState(state), m1);
+          // s1에서 차례를 다시 mover로 고정 (Null Move)
+          const nullState = cloneState(s1);
+          nullState.turn = state.turn; 
+          
+          const mtUci = opts.nullMoveThreatUci;
+          const mt = global.uciToMove(mtUci, nullState.board, nullState.turn, nullState.castling, nullState.enPassant);
+          if (mt) {
+            const allLegal = global.getAllLegalMoves(nullState.board, nullState.turn, nullState.castling, nullState.enPassant);
+            const san = global.moveToSAN(nullState.board, mt, nullState.turn, allLegal);
+            const { state: s_after_threat } = applyMoveToState(nullState, mt);
+            const mtImpact = analyzeMoveImpact(nullState, mt, s_after_threat);
+            
+            brief.nullMoveThreat = {
+              uci: mtUci,
+              san: san,
+              impact: mtImpact,
+              note: `${COLOR_KR[nullState.turn]}이 ${san}를 두어 ${mtImpact.tactics.join(', ')} 위협`
+            };
+          }
+        }
+      } catch(e) { console.warn('[PositionBrief] Null Move 분석 실패:', e); }
+    }
+
     if (opts.pv2Uci && opts.pv2Uci.length) {
       brief.engineLine2 = annotateEngineLine(fen, opts.pv2Uci, 5);
     }

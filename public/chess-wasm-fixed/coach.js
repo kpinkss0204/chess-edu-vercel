@@ -1079,6 +1079,36 @@ function extractPositionInsights(fen) {
 // 핵심: 포지션 해설 자동 실행
 // ══════════════════════════════════════════════════════
 
+/** 방치 시 위협(Null Move Threat) 계산 */
+async function getNullMoveThreat(fen, moveUci) {
+  if (!moveUci || typeof global.uciToMove !== 'function' || typeof global.applyMoveToBoard !== 'function') return null;
+  try {
+    const parts = fen.split(' ');
+    const board = global.parseFenBoard(parts[0]);
+    const turn  = parts[1];
+    const cast  = global.parseFenCastling(parts[2]);
+    const ep    = global.parseFenEP(parts[3]);
+    
+    const move = global.uciToMove(moveUci, board, turn, cast, ep);
+    if (!move) return null;
+    
+    const boardAfter = global.applyMoveToBoard(board.map(r=>[...r]), move, turn);
+    // 차례를 다시 mover로 고정 (Null Move)
+    const nullFen = global.boardToFen(boardAfter, turn, cast, null, 0, 1);
+    
+    return new Promise(resolve => {
+      // engine.js의 기능을 빌려 짧게 분석
+      if (typeof global.executeEnginePlayMove !== 'function') return resolve(null);
+      global.executeEnginePlayMove(nullFen, (bestUci) => {
+        resolve(bestUci);
+      }, 800); // 0.8초 분석
+    });
+  } catch(e) {
+    console.warn('[Coach] Null Move Threat 계산 실패:', e);
+    return null;
+  }
+}
+
 // 스톡피시 라인이 충분한지 검사 (최소 1수 이상 있으면 시작)
 function hasEnoughLines(ctx) {
   // FEN 동기화 확인: 엔진 결과(pvDataFen)가 현재 포지션(ctx.fen)과 일치해야 함
@@ -1146,6 +1176,31 @@ async function runPositionCommentary() {
     // 최신 컨텍스트 다시 빌드 (라인이 갱신됐을 수 있음)
     let freshCtx = buildChessContext();
 
+    // ── 신규: 방치 시 위협 분석 (Null Move Threat) ──
+    const pv1 = (freshCtx.pvData && freshCtx.pvData[1]) || (window.pvData && window.pvData[1]);
+    const m1Uci = pv1 && pv1.pv ? pv1.pv[0] : (pv1 && pv1.moves ? pv1.moves[0] : null);
+    
+    if (m1Uci) {
+      updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 최선수 위협 분석 중...` });
+      const threatUci = await getNullMoveThreat(freshCtx.fen, m1Uci);
+      if (threatUci) {
+        // 브리프 재빌드 시 위협 데이터 포함
+        freshCtx.nullMoveThreatUci = threatUci;
+        if (typeof buildPositionBrief === 'function') {
+           const pv1Uci = pv1 && (pv1.pv || pv1.moves) ? (pv1.pv || pv1.moves) : [];
+           const pv2 = (freshCtx.pvData && freshCtx.pvData[2]) || (window.pvData && window.pvData[2]);
+           const pv2Uci = pv2 && (pv2.pv || pv2.moves) ? (pv2.pv || pv2.moves) : [];
+           
+           freshCtx.positionBrief = buildPositionBrief({
+             ...freshCtx,
+             pv1Uci,
+             pv2Uci,
+             nullMoveThreatUci: threatUci
+           });
+        }
+      }
+    }
+
     // 위협 패널이 아직 로딩 중이면 완료까지 대기 (최대 4초)
     if (threatLoading) {
       updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 완료 대기 중...` });
@@ -1157,20 +1212,7 @@ async function runPositionCommentary() {
       freshCtx = buildChessContext();
     }
 
-    // 위협 패널이 비어있으면 백그라운드에서 먼저 위협 분석 실행 후 결과 기다림
-    if (!freshCtx.threatData && !threatLoading) {
-      updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 위협 분석 중...` });
-      await runThreatAnalysis();
-      const tStart2 = Date.now();
-      while (threatLoading && Date.now() - tStart2 < 4000) {
-        await new Promise(r => setTimeout(r, 300));
-      }
-      freshCtx = buildChessContext();
-    }
-
     updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> AI 해설 생성 중...` });
-
-    freshCtx = buildChessContext();
 
     const answer = await callCommentaryAPI(freshCtx);
     const cleaned = sanitizeAnswer(answer, freshCtx);
@@ -1379,6 +1421,30 @@ function buildCommentaryPrompt(ctx) {
     if (ctx.positionBrief.mateIn1 && ctx.positionBrief.mateIn1.length > 0) {
       lines.push(`■ 로직 계산 메이트 (최우선): ${ctx.positionBrief.mateIn1.join(', ')} 수로 1수만에 체크메이트 가능.`);
     }
+    
+    // 추가: 방치 시 위협 (Null Move Threat) 상세
+    if (ctx.positionBrief.nullMoveThreat) {
+      const nt = ctx.positionBrief.nullMoveThreat;
+      lines.push(``);
+      lines.push(`[방치 시 위협 분석 (Null Move Threat)]`);
+      lines.push(`만약 ${firstTurnLabel}이 최선수(${ctx.positionBrief.engineLine[0]?.san})를 두었는데 상대가 방치한다면:`);
+      lines.push(`  • 위협 수: ${nt.san}`);
+      lines.push(`  • 전술적 효과: ${nt.impact.tactics.join(', ') || '공세 지속'}`);
+      lines.push(`  • 공격 대상: ${nt.impact.newAttackers.map(a => `${a.piece}(${a.sq})`).join(', ') || '없음'}`);
+      lines.push(`  • 전략적 의미: 이 위협 때문에 상대는 반드시 응수해야 합니다.`);
+    }
+    
+    // 추가: 최선수의 파급력 (활동성 등)
+    if (ctx.positionBrief.m1Impact) {
+      const imp = ctx.positionBrief.m1Impact;
+      lines.push(``);
+      lines.push(`[최선수 파급력 분석]`);
+      lines.push(`  • 활동성 변화: 이동 가능 칸 ${imp.mobility > 0 ? '+' : ''}${imp.mobility}`);
+      lines.push(`  • 중앙 통제력 변화: ${imp.controlDelta > 0 ? '+' : ''}${imp.controlDelta}`);
+      if (typeof detectQuietMoveImpact === 'function') {
+        detectQuietMoveImpact(imp).forEach(note => lines.push(`  • ${note}`));
+      }
+    }
   } else if (ctx.positionInsights && ctx.positionInsights.length > 0) {
     lines.push(``);
     lines.push(`[포지션 구조 분석 — 코드 계산 사실]`);
@@ -1402,7 +1468,7 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`- 나머지 섹션(**약점 분석**, **강점 분석**, **위협 & 아이디어**, **이후 수순**)은 포지션에 실제로 해당하는 것만 선택.`);
   if (hasEngineLine) {
     lines.push(`- **최선수 분석**: [엔진 추천 수순]의 "최선 수순" SAN만 사용. 브리프·합법 수 목록에 없는 수 추가 금지.`);
-    lines.push(`- **이후 수순**: 엔진 1순위에 있는 수만, (백)/(흑) 라벨을 확인하여 주어를 매 수마다 명시.`);
+    lines.push(`- **이후 수순**: [방치 시 위협 분석]을 근거로 최선수의 진짜 목적을 설명하세요. 단순히 수순 나열이 아니라 "만약 상대가 방치하면 ~와 같은 위협이 있기 때문에 ~로 응수해야 한다"는 논리적 흐름(Threat-based)을 따르세요.`);
   }
   lines.push(`- **위협 & 아이디어**: 브리프의 "1~3수 메이트"·"전술적 위협"만 사용. 메이트는 브리프에 적힌 수순·패턴만 인용.`);
   lines.push(`- **약점 분석**: 브리프의 "구조적 약점"(밝은/어두운 칸, 폰 구조)을 장기적 이유와 함께 설명.`);
@@ -1485,37 +1551,27 @@ function buildCoachPrompt(ctx, question) {
 async function callCommentaryAPI(ctx) {
   const SYSTEM = `당신은 유튜브 채널 "체스인사이드"의 해설자이자 마스터 체스 코치입니다. 당신의 목표는 현재 포지션을 종합적으로 분석하여 학습자에게 전략적 방향과 구체적인 전술을 모두 제공하는 것입니다.
 
-아래 예시들이 당신이 지켜야 할 정확한 말투와 구조입니다.
+아래 예시들이 당신이 지켜야 할 정확한 말투와 구조입니다. 특히 **이후 수순** 섹션의 논리적 흐름을 주목하세요.
 
 ───────────────────────────────────────
-【예시 A — 폰 약점이 있는 미들게임】
+【예시 A — 위협 기반의 이후 수순 설명】
 **포지션 상황**
-방금 흑이 Nf6로 나이트를 전개했고요. 지금 백은 중앙에 e4-d4 폰 센터를 쥐고 있습니다. 이거는 나중에 d5 돌파를 위협할 수 있는 구조인데, 그러려면 일단 기물 전개가 좀 더 이루어져야 하겠죠.
-
-**약점 분석**
-흑 입장에서는 c6 폰이 조금 신경 쓰이는 부분이라고 볼 수 있겠어요. 지금 당장 위협은 아니지만, d5가 열리는 순간 이 폰이 고립될 가능성이 있거든요. 그렇다는 건 흑도 빠르게 대응을 해줘야 하는 상황이라는 거죠.
-
-**위협 & 아이디어**
-💡 **핵심 계획**: 백은 d5 돌파를 통해 중앙을 열고 흑의 기물 활동성을 제한하려 합니다.
-⚠️ **문제점**: 흑이 c5로 즉각 반격하면 백의 d4 폰이 압박을 받아 계획이 꼬일 수 있습니다.
-✅ **최선책**: 백은 먼저 Bd3로 중앙을 보강하고, 이후에 d5 돌파를 노리는 것이 가장 안정적입니다.
-
-**최선수 분석**
-컴퓨터는 여기서 Bd3를 추천하고 있는데요. 백이 Bd3를 두면 비숍을 능동적인 칸에 두면서 e4 폰을 지원하는 거라고 볼 수 있겠습니다. 이후 흑이 O-O를 두면, 백은 Re1을 두어 킹사이드 공격 준비를 자연스럽게 이어갈 수 있어요.
+지금 백이 d4를 두면서 중앙 싸움을 걸어왔고요. 흑은 Nf6로 대응하며 기물 전개를 이어가고 있습니다.
 
 **이후 수순**
-백이 Bd3를 두고 흑이 O-O로 대응한다면, 백은 h3 정도로 대기하면서 흑의 반격을 견제할 수 있겠어요. 흑이 c5로 카운터를 치려 한다면 백은 d5 돌파로 즉각 응수할 준비를 해두는 게 적합할 것 같습니다.
+백이 여기서 **Nb5**로 나이트를 전진시키는 것이 매우 날카로운데요. 만약 흑이 이를 방치한다면, 백은 다음 수에 **Nxc7+**를 두어 킹을 체크함과 동시에 룩을 잡아내는 **치명적인 포크**를 성공시킬 위협을 가지고 있습니다. 따라서 흑은 **Na6**나 **d6**와 같은 수로 c7 지점을 반드시 수비해야 하고, 이 과정에서 백은 주도권을 잡고 경기를 풀어나갈 수 있게 됩니다.
 
+【예시 B — 조용한 수(예방)의 설명】
+**이후 수순**
+백이 둔 **a3**는 언뜻 보기엔 평범한 수처럼 보이지만, 사실 흑의 **Nb4** 침투를 미리 차단하는 아주 중요한 **예방적 수**입니다. 만약 백이 이 수를 두지 않았다면 흑의 나이트가 중앙으로 뛰어들며 백의 퀸과 비숍을 괴롭혔을 텐데, **a3**를 통해 그 가능성을 원천 봉쇄하고 룩의 활동성까지 확보하는 일석이조의 효과를 노리고 있습니다.
 ───────────────────────────────────────
 
 【작성 세부 지침 — 공수 교대 절대 주의】
-1. **역할 고정**: 당신은 지금 차례인 플레이어(Mover)의 관점에서 분석해야 합니다.
-2. **주어 명시**: 모든 수순 해설에서 "백이 ~하면, 흑이 ~하고"와 같이 주어를 매번 명시하세요. 엔진 수순 뒤의 (백), (흑) 표시를 절대적으로 신뢰하세요.
-3. **위협 & 아이디어 정의**:
-   - **핵심 계획**: 반드시 지금 차례인 플레이어의 첫 번째 수와 그 의도만 쓰세요.
-   - **문제점**: 반드시 상대방이 할 수 있는 최선의 방어(엔진 2번째 수)만 쓰세요.
+1. **위협 중심 해설**: **이후 수순** 섹션은 단순히 수순을 나열하지 마세요. "만약 상대가 방치한다면 벌어질 위협(Null-move Threat)"을 먼저 언급하고, 이를 막기 위한 "상대의 응수"를 설명하는 논리적 구조를 따르세요.
+2. **역할 고정**: 당신은 지금 차례인 플레이어(Mover)의 관점에서 분석해야 합니다.
+3. **주어 명시**: 모든 수순 해설에서 "백이 ~하면, 흑이 ~하고"와 같이 주어를 매번 명시하세요.
 4. **말투**: 체스인사이드 유튜브 스타일 (~고요, ~거든요, ~겠습니다, ~는 거죠).
-5. **금기 사항**: cp/점수 수치 사용 금지, 할루시네이션(불가능한 수) 주의, 주어 생략 금지.`;
+5. **금기 사항**: cp/점수 수치 사용 금지, 할루시네이션(불가능한 수) 주의, 모호한 단어("반격", "카운터") 남발 금지.`;
 
   const prompt = buildCommentaryPrompt(ctx);
 
