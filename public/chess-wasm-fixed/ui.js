@@ -145,25 +145,49 @@ function copyPGN() {
 async function savePGN() {
   if (!window._fbDb)        { showToast('Firebase 연결 필요'); return; }
   if (!window._currentUser) { showToast('로그인이 필요합니다'); return; }
-  exportPGN();
-  const pgn = document.getElementById('pgn-input').value.trim();
-  if (!pgn) { showToast('저장할 게임이 없습니다'); return; }
+
   const white   = document.getElementById('info-white')?.textContent   || '-';
   const black   = document.getElementById('info-black')?.textContent   || '-';
   const date    = document.getElementById('info-date')?.textContent    || '-';
   const result  = document.getElementById('info-result')?.textContent  || '*';
   const opening = document.getElementById('info-opening')?.textContent || '-';
+  const whiteRatingRaw = document.getElementById('rating-white')?.textContent || '?';
+  const blackRatingRaw = document.getElementById('rating-black')?.textContent || '?';
+  const timeControlRaw = document.getElementById('info-time')?.textContent || '-';
+
+  // 현재 pgn-input에 원본 PGN 헤더가 남아있으면 그대로 사용,
+  // 없으면(수 목록만 있으면) 헤더를 재조합해서 저장
+  const rawInput = document.getElementById('pgn-input').value.trim();
+  let pgn;
+  if (rawInput && /\[White\s+"/.test(rawInput)) {
+    // 헤더가 포함된 원본 PGN 그대로 사용
+    pgn = rawInput;
+  } else {
+    // 헤더가 없는 경우 — DOM 정보로 헤더를 재구성 후 수 목록 붙이기
+    exportPGN();
+    const moves = document.getElementById('pgn-input').value.trim();
+    const wName = white.replace(/\s*\(\d+\)\s*$/, '').trim() || '?';
+    const bName = black.replace(/\s*\(\d+\)\s*$/, '').trim() || '?';
+    const wElo  = whiteRatingRaw !== '?' ? `\n[WhiteElo "${whiteRatingRaw}"]` : '';
+    const bElo  = blackRatingRaw !== '?' ? `\n[BlackElo "${blackRatingRaw}"]` : '';
+    const tc    = timeControlRaw !== '-' ? `\n[TimeControl "${timeControlRaw}"]` : '';
+    const op    = opening !== '-' ? `\n[Opening "${opening}"]` : '';
+    pgn = `[White "${wName}"]\n[Black "${bName}"]\n[Date "${date}"][Result "${result}"]${wElo}${bElo}${tc}${op}\n\n${moves}`;
+  }
+
+  if (!pgn) { showToast('저장할 게임이 없습니다'); return; }
 
   // 내 색상: 선택된 값 또는 기본값 'w'
   const myColorSel = document.getElementById('my-color-select');
   const myColor = myColorSel ? myColorSel.value : 'w';
 
+  const whiteRating = whiteRatingRaw;
+  const blackRating = blackRatingRaw;
+  const timeControl = timeControlRaw;
+
   const btn = document.getElementById('btn-save-pgn');
   if (btn) { btn.disabled=true; btn.textContent='저장 중...'; }
   try {
-    const whiteRating = document.getElementById('rating-white')?.textContent || '?';
-    const blackRating = document.getElementById('rating-black')?.textContent || '?';
-    const timeControl = document.getElementById('info-time')?.textContent || '-';
 
     const baseData = {
       uid: window._currentUser.uid,
@@ -681,9 +705,36 @@ async function loadGameRecord(docId) {
       AnalysisCache.clearGameAnalysisCache(typeof game !== 'undefined' ? game : null);
     }
 
-    // 2) PGN 로드 (내부에서 switchTab('analysis') + goToEnd 호출됨)
+    // 2) PGN 로드 (내부에서 parsePGN 호출 → 헤더 파싱)
     document.getElementById('pgn-input').value = doc.pgn;
     loadPGN();
+
+    // 3-a) PGN 헤더에 정보가 없는 경우 Firestore 메타데이터로 보완
+    const fillIfEmpty = (id, val) => {
+      if (!val || val === '-' || val === '*' || val === '?') return;
+      const el = document.getElementById(id);
+      if (el && (!el.textContent || el.textContent === '-' || el.textContent === '*')) {
+        el.textContent = val;
+      }
+    };
+    fillIfEmpty('info-white',   doc.whiteName   || doc.white   || '');
+    fillIfEmpty('info-black',   doc.blackName   || doc.black   || '');
+    fillIfEmpty('info-date',    doc.date || '');
+    fillIfEmpty('info-result',  doc.result      || '');
+    fillIfEmpty('info-opening', doc.opening     || '');
+    fillIfEmpty('rating-white', doc.whiteRating || '');
+    fillIfEmpty('rating-black', doc.blackRating || '');
+    // 이름+레이팅 조합 표시 보완
+    ['white','black'].forEach(color => {
+      const nameEl  = document.getElementById(`info-${color}`);
+      const ratingEl = document.getElementById(`rating-${color}`);
+      if (!nameEl || !ratingEl) return;
+      const name   = nameEl.textContent.trim();
+      const rating = ratingEl.textContent.trim();
+      if (name && name !== '-' && rating && rating !== '?' && !name.includes('(')) {
+        nameEl.textContent = `${name} (${rating})`;
+      }
+    });
 
     // 3) 내 색상 적용
     const sel = document.getElementById('my-color-select');

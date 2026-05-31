@@ -1,929 +1,558 @@
-// ══════════════════════════════════════════
-// 체스 엔진 (독립형)
-// ══════════════════════════════════════════
-const PIECE_IMG_BASE = 'https://lichess1.org/assets/piece/cburnett/';
-function pieceImg(p) { return PIECE_IMG_BASE + p + '.svg'; }
-// 기물 이미지 미리 로드 — 첫 수 깜빡임 방지
-(function preloadPieces() {
-  ['wP','wN','wB','wR','wQ','wK','bP','bN','bB','bR','bQ','bK'].forEach(p => {
-    const img = new Image(); img.src = pieceImg(p);
-  });
-})();
+(function(){
+  // ══════════════════════════════════════════
+  // 체스 엔진 (chess.js 통합형)
+  // ══════════════════════════════════════════
+  const PIECE_IMG_BASE = 'https://lichess1.org/assets/piece/cburnett/';
+  function pieceImg(p) { 
+    if (!p) return '';
+    const color = p[0]; 
+    const type = p[1].toUpperCase();
+    return PIECE_IMG_BASE + color + type + '.svg'; 
+  }
 
-const FILES = ['a','b','c','d','e','f','g','h'];
+  let _game = new Chess();
+  let _myColor = 'w';
+  let _gameId = null;
+  let _gameRef = null;
+  let _wTime = 600;
+  let _bTime = 600;
+  let _timerInt = null;
+  let _gameActive = false;
+  let _firstMoveDone = false;
+  let _firstMoveTimer = null;
+  let _disconnectRef = null;
+  let _heartbeatInt = null;
+  let _oppHeartbeatInt = null;
+  let _oppLastSeen = null;
+  let _selected = null;
+  let _pendingPromo = null;
+  let _oppUid = null;
 
-function moveToSAN(board, move, color, allMoves) {
-  const [fr,fc]=move.from,[tr,tc]=move.to,p=board[fr][fc],type=p[1];
-  const captured=board[tr][tc]||(move.enPassant?'ep':null);
-  let san='';
-  if(move.castle==='K')return'O-O';
-  if(move.castle==='Q')return'O-O-O';
-  if(type!=='P'){
-    san+=type;
-    const ambig=allMoves.filter(m=>m!==move&&board[m.from[0]][m.from[1]]===p&&m.to[0]===tr&&m.to[1]===tc);
-    if(ambig.length){const sf=ambig.some(m=>m.from[1]===fc),sr=ambig.some(m=>m.from[0]===fr);if(!sf)san+=FILES[fc];else if(!sr)san+=(8-fr);else san+=FILES[fc]+(8-fr);}
-  } else if(captured){san+=FILES[fc];}
-  if(captured)san+='x';
-  san+=FILES[tc]+(8-tr);
-  if(move.promo&&move.promoPiece)san+='='+move.promoPiece;
-  const nb=applyMoveToBoard(board.map(r=>[...r]),move,color);
-  const enemy=enemyColor(color);
-  const enemyLegal=getAllLegal(nb,enemy,{wK:false,wQ:false,bK:false,bQ:false},null);
-  if(isInCheck(nb,enemy))san+=enemyLegal.length===0?'#':'+';
-  return san;
-}
+  function enemyColor(c) { return c === 'w' ? 'b' : 'w'; }
+  function rcToAlgebraic(r, c) { return 'abcdefgh'[c] + (8 - r); }
+  function algebraicToRC(alg) {
+    const c = alg.charCodeAt(0) - 97;
+    const r = 8 - parseInt(alg[1]);
+    return [r, c];
+  }
 
-const INIT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  // ══════════════════════════════════════════
+  // 보드 렌더링
+  // ══════════════════════════════════════════
+  function renderBoard() {
+    const el = document.getElementById('play-board');
+    if (!el) return;
+    
+    const board = _game.board();
+    const turn = _game.turn();
+    const history = _game.history({ verbose: true });
+    const lastMove = history.length > 0 ? history[history.length - 1] : null;
+    const selectedSquare = _selected ? rcToAlgebraic(_selected[0], _selected[1]) : null;
+    const legalMoves = _selected ? _game.moves({ square: selectedSquare, verbose: true }) : [];
 
-let _board = [], _turn = 'w', _castling = {wK:true,wQ:true,bK:true,bQ:true};
-let _enPassant = null, _selected = null, _legalMoves = [], _lastMove = null;
-let _myColor = 'w', _gameId = null, _gameRef = null;
-let _sanMoves = [];
-let _wTime = 600, _bTime = 600, _timerInt = null;
-let _gameActive = false;
-let _firstMoveDone = false;          // 첫 수 여부 추적
-let _firstMoveTimer = null;          // 첫 수 10초 타이머
-let _disconnectRef = null;           // onDisconnect 참조
-let _heartbeatInt = null;            // 내 heartbeat 전송 인터벌
-let _oppHeartbeatInt = null;         // 상대 heartbeat 감시 인터벌
-let _oppLastSeen = null;             // 상대 마지막 heartbeat 시각
-
-function parseFen(fen) {
-  const parts = fen.split(' ');
-  const rows = parts[0].split('/');
-  const board = [];
-  for (const row of rows) {
-    const r = [];
-    for (const ch of row) {
-      if ('12345678'.includes(ch)) for (let i=0;i<+ch;i++) r.push(null);
-      else {
-        const color = ch === ch.toUpperCase() ? 'w' : 'b';
-        const type  = ch.toUpperCase();
-        r.push(color + type);
+    if (el.children.length !== 64) {
+      el.innerHTML = '';
+      const flipped = _myColor === 'b';
+      for (let ri = 0; ri < 8; ri++) {
+        for (let ci = 0; ci < 8; ci++) {
+          const r = flipped ? 7 - ri : ri;
+          const c = flipped ? 7 - ci : ci;
+          const isLight = (r + c) % 2 === 0;
+          const sq = document.createElement('div');
+          sq.dataset.r = r; sq.dataset.c = c;
+          sq.className = 'sq ' + (isLight ? 'light' : 'dark');
+          
+          if (ci === 0) { const lbl = document.createElement('span'); lbl.className='rank-label'; lbl.textContent=8-r; sq.appendChild(lbl); }
+          if (ri === 7) { const lbl = document.createElement('span'); lbl.className='file-label'; lbl.textContent='abcdefgh'[c]; sq.appendChild(lbl); }
+          
+          const img = document.createElement('img');
+          img.className = 'piece-img';
+          img.draggable = false;
+          img.style.display = 'none';
+          sq.appendChild(img);
+          
+          sq.onclick = () => onSquareClick(Number(sq.dataset.r), Number(sq.dataset.c));
+          el.appendChild(sq);
+        }
       }
     }
-    board.push(r);
-  }
-  _turn = parts[1] || 'w';
-  const cast = parts[2] || '-';
-  _castling = { wK: cast.includes('K'), wQ: cast.includes('Q'), bK: cast.includes('k'), bQ: cast.includes('q') };
-  _enPassant = parts[3] !== '-' ? algebraicToRC(parts[3]) : null;
-  return board;
-}
 
-function algebraicToRC(alg) {
-  if (!alg || alg === '-') return null;
-  const c = alg.charCodeAt(0) - 97;
-  const r = 8 - parseInt(alg[1]);
-  return [r, c];
-}
-
-function enemyColor(c) { return c === 'w' ? 'b' : 'w'; }
-function isInBounds(r,c) { return r>=0&&r<8&&c>=0&&c<8; }
-
-function pseudoMoves(board, r, c, castling, enPassant) {
-  const p = board[r][c]; if (!p) return [];
-  const color=p[0], type=p[1], moves=[], enemy=enemyColor(color), dir=color==='w'?-1:1;
-  const push=(tr,tc,extra={})=>{ if(isInBounds(tr,tc)){const t=board[tr][tc];if(!t||t[0]===enemy)moves.push({from:[r,c],to:[tr,tc],...extra});} };
-  const slide=(drs,dcs)=>{ for(let i=0;i<drs.length;i++){let nr=r+drs[i],nc=c+dcs[i];while(isInBounds(nr,nc)){const t=board[nr][nc];if(t){if(t[0]===enemy)moves.push({from:[r,c],to:[nr,nc]});break;}moves.push({from:[r,c],to:[nr,nc]});nr+=drs[i];nc+=dcs[i];}} };
-  if(type==='P'){
-    if(!board[r+dir]?.[c])moves.push({from:[r,c],to:[r+dir,c],...((r+dir===0||r+dir===7)?{promo:true}:{})});
-    if((color==='w'&&r===6||color==='b'&&r===1)&&!board[r+dir][c]&&!board[r+2*dir][c])moves.push({from:[r,c],to:[r+2*dir,c],doublePush:true});
-    [-1,1].forEach(dc=>{
-      if(isInBounds(r+dir,c+dc)){
-        if(board[r+dir][c+dc]&&board[r+dir][c+dc][0]===enemy)moves.push({from:[r,c],to:[r+dir,c+dc],...((r+dir===0||r+dir===7)?{promo:true}:{})});
-        if(enPassant&&enPassant[0]===r+dir&&enPassant[1]===c+dc)moves.push({from:[r,c],to:[r+dir,c+dc],enPassant:true});
-      }
-    });
-  } else if(type==='N'){[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc])=>push(r+dr,c+dc));}
-  else if(type==='B'){slide([-1,-1,1,1],[-1,1,-1,1]);}
-  else if(type==='R'){slide([-1,0,1,0],[0,-1,0,1]);}
-  else if(type==='Q'){slide([-1,-1,-1,0,0,1,1,1],[-1,0,1,-1,1,-1,0,1]);}
-  else if(type==='K'){[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc])=>push(r+dr,c+dc));
-    if(color==='w'){if(castling.wK&&!board[7][5]&&!board[7][6]&&board[7][7]==='wR')moves.push({from:[7,4],to:[7,6],castle:'K'});if(castling.wQ&&!board[7][3]&&!board[7][2]&&!board[7][1]&&board[7][0]==='wR')moves.push({from:[7,4],to:[7,2],castle:'Q'});}
-    if(color==='b'){if(castling.bK&&!board[0][5]&&!board[0][6]&&board[0][7]==='bR')moves.push({from:[0,4],to:[0,6],castle:'K'});if(castling.bQ&&!board[0][3]&&!board[0][2]&&!board[0][1]&&board[0][0]==='bR')moves.push({from:[0,4],to:[0,2],castle:'Q'});}
-  }
-  return moves;
-}
-
-function applyMoveToBoard(board, move, color) {
-  const b = board.map(r=>[...r]);
-  const[fr,fc]=move.from,[tr,tc]=move.to,p=b[fr][fc];
-  b[tr][tc]=move.promoPiece?color+move.promoPiece:p; b[fr][fc]=null;
-  if(move.enPassant){const cr=color==='w'?tr+1:tr-1;b[cr][tc]=null;}
-  if(move.castle==='K'){b[fr][7]=null;b[fr][5]=`${color}R`;}
-  else if(move.castle==='Q'){b[fr][0]=null;b[fr][3]=`${color}R`;}
-  return b;
-}
-
-function isInCheck(board, color) {
-  let kr=-1,kc=-1;
-  for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]===color+'K'){kr=r;kc=c;}
-  if(kr<0)return false;
-  const enemy=enemyColor(color);
-  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
-    if(board[r][c]&&board[r][c][0]===enemy){
-      const ms=pseudoMoves(board,r,c,{wK:false,wQ:false,bK:false,bQ:false},null);
-      if(ms.some(m=>m.to[0]===kr&&m.to[1]===kc))return true;
-    }
-  }
-  return false;
-}
-
-function getLegalMoves(board, r, c, castling, enPassant) {
-  const p=board[r][c]; if(!p)return[];
-  const color=p[0], pseudo=pseudoMoves(board,r,c,castling,enPassant), legal=[];
-  for(const move of pseudo){
-    const nb=applyMoveToBoard(board,move,color);
-    if(!isInCheck(nb,color)){
-      if(move.castle){
-        const midC=move.castle==='K'?5:3;
-        const nb2=applyMoveToBoard(board,{from:move.from,to:[move.from[0],midC]},color);
-        if(isInCheck(board,color)||isInCheck(nb2,color))continue;
-      }
-      legal.push(move);
-    }
-  }
-  return legal;
-}
-
-function getAllLegal(board, color, castling, enPassant) {
-  const moves=[];
-  for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]&&board[r][c][0]===color)moves.push(...getLegalMoves(board,r,c,castling,enPassant));
-  return moves;
-}
-
-// ══════════════════════════════════════════
-// 보드 렌더링
-// ══════════════════════════════════════════
-function renderBoard() {
-  const el = document.getElementById('play-board');
-  if (!el) return;
-  
-  // 강제 초기화 및 64칸 보장
-  if (el.children.length !== 64) {
-    el.innerHTML = '';
     const flipped = _myColor === 'b';
     for (let ri = 0; ri < 8; ri++) {
       for (let ci = 0; ci < 8; ci++) {
         const r = flipped ? 7 - ri : ri;
         const c = flipped ? 7 - ci : ci;
-        const isLight = (r + c) % 2 === 0;
-        const sq = document.createElement('div');
-        sq.dataset.r = r; sq.dataset.c = c;
-        sq.className = 'sq ' + (isLight ? 'light' : 'dark');
-        
-        if (ci === 0) { const lbl = document.createElement('span'); lbl.className='rank-label'; lbl.textContent=8-r; sq.appendChild(lbl); }
-        if (ri === 7) { const lbl = document.createElement('span'); lbl.className='file-label'; lbl.textContent='abcdefgh'[c]; sq.appendChild(lbl); }
-        
-        const img = document.createElement('img');
-        img.className = 'piece-img';
-        img.draggable = false;
-        img.style.display = 'none';
-        sq.appendChild(img);
-        
-        sq.onclick = () => onSquareClick(Number(sq.dataset.r), Number(sq.dataset.c));
-        el.appendChild(sq);
-      }
-    }
-  }
+        const idx = ri * 8 + ci;
+        const pieceObj = board[r][c];
+        const sq = el.children[idx];
+        const alg = rcToAlgebraic(r, c);
 
-  // 데이터 업데이트
-  const flipped = _myColor === 'b';
-  for (let ri = 0; ri < 8; ri++) {
-    for (let ci = 0; ci < 8; ci++) {
-      const r = flipped ? 7 - ri : ri;
-      const c = flipped ? 7 - ci : ci;
-      const idx = ri * 8 + ci;
-      const piece = _board[r][c];
-      const sq = el.children[idx];
+        const classes = ['sq', (r+c)%2===0 ? 'light' : 'dark'];
+        if (lastMove) {
+          if (lastMove.from === alg) classes.push('last-from');
+          if (lastMove.to === alg)   classes.push('last-to');
+        }
+        if (selectedSquare === alg) classes.push('selected');
+        if (legalMoves.some(m => m.to === alg)) {
+          classes.push('possible');
+          if (pieceObj) classes.push('has-piece');
+        }
+        if (pieceObj && pieceObj.type === 'k' && pieceObj.color === turn && _game.in_check()) {
+          classes.push('in-check');
+        }
+        sq.className = classes.join(' ');
 
-      const classes = ['sq', (r+c)%2===0 ? 'light' : 'dark'];
-      if (_lastMove) {
-        if (_lastMove.from[0]===r && _lastMove.from[1]===c) classes.push('last-from');
-        if (_lastMove.to[0]===r   && _lastMove.to[1]===c)   classes.push('last-to');
-      }
-      if (_selected && _selected[0]===r && _selected[1]===c) classes.push('selected');
-      if (_legalMoves.some(m => m.to[0]===r && m.to[1]===c)) {
-        classes.push('possible');
-        if (piece) classes.push('has-piece');
-      }
-      if (piece === _turn + 'K' && isInCheck(_board, _turn)) classes.push('in-check');
-      sq.className = classes.join(' ');
-
-      const img = sq.querySelector('.piece-img');
-      if (img) {
-        if (piece) {
-          const src = pieceImg(piece);
-          if (img.getAttribute('src') !== src) img.src = src;
-          img.style.display = 'block';
-        } else {
-          img.style.display = 'none';
-          img.removeAttribute('src');
+        const img = sq.querySelector('.piece-img');
+        if (img) {
+          if (pieceObj) {
+            const src = pieceImg(pieceObj.color + pieceObj.type);
+            if (img.getAttribute('src') !== src) img.src = src;
+            img.style.display = 'block';
+          } else {
+            img.style.display = 'none';
+            img.removeAttribute('src');
+          }
         }
       }
     }
   }
-}
 
-// ══════════════════════════════════════════
-// 클릭 처리
-// ══════════════════════════════════════════
-let _pendingPromo = null;
+  // ══════════════════════════════════════════
+  // 클릭 처리
+  // ══════════════════════════════════════════
+  function onSquareClick(r, c) {
+    if (!_gameActive || _game.turn() !== _myColor) return;
 
-function onSquareClick(r, c) {
-  if (!_gameActive) return;
-  if (_turn !== _myColor) return; // 내 차례 아님
+    const alg = rcToAlgebraic(r, c);
+    const piece = _game.get(alg);
 
-  const piece = _board[r][c];
+    if (_selected) {
+      const fromAlg = rcToAlgebraic(_selected[0], _selected[1]);
+      const moves = _game.moves({ square: fromAlg, verbose: true });
+      const move = moves.find(m => m.to === alg);
 
-  if (_selected) {
-    const move = _legalMoves.find(m => m.to[0]===r && m.to[1]===c);
-    if (move) {
-      if (move.promo) {
-        _pendingPromo = move;
-        showPromoModal(r, c);
+      if (move) {
+        if (move.flags.includes('p')) {
+          _pendingPromo = move;
+          showPromoModal(r, c);
+          return;
+        }
+        doMove({ from: fromAlg, to: alg });
         return;
       }
-      doMove(move, null);
-      return;
-    }
-  }
 
-  // 내 기물 선택
-  if (piece && piece[0] === _myColor) {
-    _selected = [r, c];
-    _legalMoves = getLegalMoves(_board, r, c, _castling, _enPassant);
-  } else {
-    _selected = null; _legalMoves = [];
-  }
-  renderBoard();
-}
-
-function showPromoModal(r, c) {
-  const modal = document.getElementById('promo-modal');
-  const pieces = _myColor === 'w' ? ['wQ','wR','wB','wN'] : ['bQ','bR','bB','bN'];
-  modal.innerHTML = '';
-  pieces.forEach((p) => {
-    const div = document.createElement('div');
-    div.className = 'promo-piece';
-    const img = document.createElement('img');
-    img.src = pieceImg(p);
-    img.style.cssText = 'width:44px;height:44px;object-fit:contain;pointer-events:none;';
-    if (p.startsWith('b')) img.style.filter = 'drop-shadow(0 0 1px rgba(180,180,180,0.9))';
-    div.appendChild(img);
-    div.onclick = () => {
-      modal.style.display = 'none';
-      if (_pendingPromo) { _pendingPromo.promoPiece = p[1]; doMove(_pendingPromo, p[1]); _pendingPromo = null; }
-    };
-    modal.appendChild(div);
-  });
-
-  // 위치 계산
-  const boardEl = document.getElementById('play-board-wrap');
-  const rect = boardEl.getBoundingClientRect();
-  const sqSize = rect.width / 8;
-  const flipped = _myColor === 'b';
-  const ci = flipped ? 7 - c : c;
-  const ri = flipped ? 7 - r : r;
-  modal.style.display = 'flex';
-  modal.style.left = Math.min(ci * sqSize, rect.width - 224) + 'px';
-  modal.style.top  = (ri <= 3 ? (ri+1)*sqSize : ri*sqSize - 60) + 'px';
-}
-
-// ══════════════════════════════════════════
-// 수 실행
-// ══════════════════════════════════════════
-function doMove(move, promoPiece) {
-  const boardBefore = _board.map(r=>[...r]);
-  _board = applyMoveToBoard(_board, move, _turn);
-  if (promoPiece) move.promoPiece = promoPiece;
-
-  // ── 첫 수 처리 ──
-  if (!_firstMoveDone) {
-    _firstMoveDone = true;
-    clearTimeout(_firstMoveTimer); // 10초 무승부 타이머 취소
-    // 이제부터 나가면 패배로 등록
-    setupDisconnectLoss();
-  }
-
-  // 캐슬링 업데이트
-  if (_board[move.to[0]][move.to[1]] === _turn+'K') {
-    if (_turn==='w'){_castling.wK=false;_castling.wQ=false;}
-    else{_castling.bK=false;_castling.bQ=false;}
-  }
-  if(move.from[0]===7&&move.from[1]===7)_castling.wK=false;
-  if(move.from[0]===7&&move.from[1]===0)_castling.wQ=false;
-  if(move.from[0]===0&&move.from[1]===7)_castling.bK=false;
-  if(move.from[0]===0&&move.from[1]===0)_castling.bQ=false;
-
-  _enPassant = move.doublePush ? [move.to[0]-(_turn==='w'?-1:1), move.to[1]] : null;
-  _lastMove = move;
-  _selected = null; _legalMoves = [];
-
-  const prevTurn = _turn;
-  _turn = enemyColor(_turn);
-
-  // 수를 두면 화살표 초기화 (새 수 인덱스 기준으로 리셋)
-  _userArrows = [];
-
-  // 사운드
-  playMoveSound(move, boardBefore, prevTurn);
-
-  // SAN 기록
-  const _allM=getAllLegal(boardBefore,prevTurn,_castling,_enPassant);
-  _sanMoves.push(moveToSAN(boardBefore,move,prevTurn,_allM));
-
-  // Firebase에 수 전송
-  sendMove(move);
-  updateTimerOnMove();
-
-  renderBoard();
-  checkGameEnd();
-}
-
-function checkGameEnd() {
-  const allMoves = getAllLegal(_board, _turn, _castling, _enPassant);
-  const inCheck  = isInCheck(_board, _turn);
-
-  if (allMoves.length === 0) {
-    const status = inCheck ? 'checkmate' : 'stalemate';
-    if (_gameRef) _gameRef.update({ status });
-  }
-}
-
-// ══════════════════════════════════════════
-// 사운드
-// ══════════════════════════════════════════
-const _sounds = {};
-const _soundFiles2 = {
-  move:'sound/chess_move.mp3', capture:'sound/chess_capture.mp3',
-  castle:'sound/chess_castle.mp3', check:'sound/chess_check.mp3',
-  checkmate:'sound/chess_checkmate.mp3', stalemate:'sound/chess_stalemate.mp3',
-  start:'sound/chess_start.mp3', over:'sound/chess_over.mp3',
-};
-for (const [k,v] of Object.entries(_soundFiles2)) {
-  const a = new Audio(v); a.preload='auto'; _sounds[k]=a;
-}
-function playSound(type) {
-  const a = _sounds[type]; if (!a) return;
-  a.cloneNode().play().catch(()=>{});
-}
-function playMoveSound(move, boardBefore, turn) {
-  const boardAfter = applyMoveToBoard(boardBefore.map(r=>[...r]), move, turn);
-  const enemy = enemyColor(turn);
-  const inCheck = isInCheck(boardAfter, enemy);
-  const noMoves = getAllLegal(boardAfter, enemy, _castling, _enPassant).length === 0;
-  if      (inCheck && noMoves) playSound('checkmate');
-  else if (!inCheck && noMoves) playSound('stalemate');
-  else if (inCheck)             playSound('check');
-  else if (move.castle)         playSound('castle');
-  else if (boardBefore[move.to[0]][move.to[1]] || move.enPassant) playSound('capture');
-  else                          playSound('move');
-}
-
-// ══════════════════════════════════════════
-// 타이머
-// ══════════════════════════════════════════
-function fmtTime(s) {
-  s = Math.max(0, s);
-  return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;
-}
-let _lastTickTime = null;
-
-function startTimer() {
-  clearInterval(_timerInt);
-  _lastTickTime = Date.now();
-  _timerInt = setInterval(() => {
-    if (!_gameActive) return;
-    const now = Date.now();
-    const delta = (now - _lastTickTime) / 1000;
-    _lastTickTime = now;
-
-    if (_turn === 'w') _wTime = Math.max(0, _wTime - delta);
-    else               _bTime = Math.max(0, _bTime - delta);
-
-    updateTimerDisplay();
-
-    if (_wTime <= 0 || _bTime <= 0) {
-      const loserColor = _wTime <= 0 ? 'w' : 'b';
-      // timeout_w / timeout_b 로 저장 → 양쪽 클라이언트가 올바르게 판정 가능
-      const status = loserColor === 'w' ? 'timeout_w' : 'timeout_b';
-      if (_gameRef) _gameRef.update({ status });
-    }
-  }, 100);
-}
-
-function updateTimerDisplay() {
-  const myTime  = _myColor === 'w' ? _wTime : _bTime;
-  const oppTime = _myColor === 'w' ? _bTime : _wTime;
-  const myEl  = document.getElementById('my-timer');
-  const oppEl = document.getElementById('opp-timer');
-  if (myEl) {
-    myEl.textContent = fmtTime(myTime);
-    myEl.className = 'p-timer' + (_turn===_myColor?' active':'') + (myTime<30?' low':'');
-  }
-  if (oppEl) {
-    oppEl.textContent = fmtTime(oppTime);
-    oppEl.className = 'p-timer' + (_turn!==_myColor?' active':'') + (oppTime<30?' low':'');
-  }
-}
-
-function updateTimerOnMove() {
-  if (_gameRef) _gameRef.update({ whiteTime: _wTime, blackTime: _bTime, lastMoveAt: Date.now() });
-}
-
-// ══════════════════════════════════════════
-// Firebase 매칭 & 대국
-// ══════════════════════════════════════════
-const GAME_TIME = 600;
-let _queueRef = null, _searchInt = null, _matchmakingInProgress = false, _queueListener = null;
-
-async function startMatchmaking() {
-  if (_matchmakingInProgress || !_user || _gameActive) return;
-  _matchmakingInProgress = true;
-
-  try {
-    console.log('[Matchmaking] START - UID:', _user.uid);
-    showScreen('searching');
-    let elapsed = 0;
-    clearInterval(_searchInt);
-    _searchInt = setInterval(() => {
-      elapsed++;
-      const el = document.getElementById('search-elapsed');
-      if (el) el.textContent = elapsed + '초 경과';
-    }, 1000);
-
-    const myName = _user.displayName || _user.email.split('@')[0];
-    const queue = _rtDb.ref('matchmaking_queue');
-    
-    // 1. 기존 내 항목 청소 (UID 기준)
-    const oldSnap = await queue.once('value');
-    const cleanupUpdates = {};
-    oldSnap.forEach(child => { if (child.val().uid === _user.uid) cleanupUpdates[child.key] = null; });
-    await queue.update(cleanupUpdates);
-
-    // 2. 내 노드 생성
-    const myRef = queue.push();
-    _queueRef = myRef;
-    await myRef.set({ uid: _user.uid, displayName: myName, joinedAt: Date.now() });
-    myRef.onDisconnect().remove(); 
-    console.log('[Matchmaking] Created my entry:', myRef.key);
-
-    // 3. 결정론적 매칭 리스너 시작
-    _queueListener = queue.on('child_added', async (snap) => {
-      const entryKey = snap.key;
-      const d = snap.val();
-      if (!d || entryKey === myRef.key || d.uid === _user.uid || d.gameId) return;
-
-      if (_user.uid < d.uid) {
-        console.log('[Matchmaking] I am Actor for:', d.displayName);
-        const result = await _rtDb.ref(`matchmaking_queue/${entryKey}`).transaction((curr) => {
-          if (curr && !curr.gameId) return { ...curr, gameId: 'PENDING', matchedWith: _user.uid };
-          return; 
-        });
-
-        if (result.committed) {
-          console.log('[Matchmaking] Match SUCCESS! Creating game room...');
-          const gameId = queue.push().key;
-          const myColor = Math.random() < 0.5 ? 'w' : 'b';
-          const oppColor = myColor === 'w' ? 'b' : 'w';
-
-          const gameData = {
-            white: myColor==='w'?_user.uid:d.uid, black: myColor==='b'?_user.uid:d.uid,
-            whiteName: myColor==='w'?myName:d.displayName, blackName: myColor==='b'?myName:d.displayName,
-            status: 'playing', whiteTime: GAME_TIME, blackTime: GAME_TIME,
-            lastMoveAt: Date.now(), createdAt: Date.now(),
-          };
-
-          await _rtDb.ref('games/' + gameId).set(gameData);
-          await _rtDb.ref(`matchmaking_queue/${entryKey}`).update({ gameId: gameId, color: oppColor });
-          
-          stopMatchmakingListeners();
-          myRef.remove();
-          _queueRef = null;
-          joinGame(gameId, myColor, gameData);
-        }
+      if (piece && piece.color === _myColor) {
+        _selected = [r, c];
       } else {
-        console.log('[Matchmaking] I am Target for:', d.displayName, '- Waiting for them.');
+        _selected = null;
       }
-    });
-
-    myRef.on('value', async snap => {
-      const d = snap.val();
-      if (!d || !d.gameId || d.gameId === 'PENDING') return;
-      console.log('[Matchmaking] I was matched! GameId:', d.gameId);
-      
-      stopMatchmakingListeners();
-      const waitRef = _queueRef;
-      _queueRef = null;
-      
-      const gs = await _rtDb.ref('games/' + d.gameId).once('value');
-      if (gs.val()) {
-        waitRef.remove();
-        joinGame(d.gameId, d.color, gs.val());
-      } else {
-        console.error('[Matchmaking] Game data missing');
-        showScreen('lobby');
-      }
-    });
-
-  } catch (e) {
-    console.error('[Matchmaking] Error:', e);
-    showScreen('lobby');
-  } finally {
-    _matchmakingInProgress = false;
-  }
-}
-
-function stopMatchmakingListeners() {
-  if (_queueListener) {
-    _rtDb.ref('matchmaking_queue').off('child_added', _queueListener);
-    _queueListener = null;
-  }
-  if (_queueRef) {
-    _queueRef.off();
-    _queueRef.onDisconnect().cancel();
-  }
-}
-
-function cancelMatchmaking() {
-  clearInterval(_searchInt);
-  clearTimeout(_firstMoveTimer);
-  cancelDisconnectLoss();
-  stopHeartbeat(_gameId, _myColor);
-  stopMatchmakingListeners();
-  if (_queueRef) { _queueRef.remove(); _queueRef = null; }
-  showScreen('lobby');
-  _matchmakingInProgress = false;
-}
-
-function joinGame(gameId, myColor, gameData) {
-  clearInterval(_searchInt);
-  _myColor = myColor; _gameId = gameId;
-  _board = parseFen(INIT_FEN);
-  _turn = 'w'; _castling = {wK:true,wQ:true,bK:true,bQ:true};
-  _enPassant = null; _selected = null; _legalMoves = [];
-  _lastMove = null; _wTime = GAME_TIME; _bTime = GAME_TIME;
-  _gameActive = true;
-  _lastTickTime = Date.now();
-  _sanMoves = [];
-  _gameArrows = {};
-
-  const myName  = myColor==='w' ? gameData.whiteName : gameData.blackName;
-  const oppName = myColor==='w' ? gameData.blackName  : gameData.whiteName;
-
-  document.getElementById('my-name-el').textContent    = myName  || '나';
-  document.getElementById('opp-name-el').textContent   = oppName || '상대방';
-  document.getElementById('my-color-el').textContent   = myColor==='w' ? '⬜ 백' : '⬛ 흑';
-  document.getElementById('opp-color-el').textContent  = myColor==='w' ? '⬛ 흑' : '⬜ 백';
-  document.getElementById('my-avatar-el').textContent  = (myName  ||'나')[0].toUpperCase();
-  document.getElementById('opp-avatar-el').textContent = (oppName||'?')[0].toUpperCase();
-
-  showScreen('playing');
-  renderBoard();
-  startTimer();
-  playSound('start');
-
-  // ── 첫 수 10초 타임아웃 (양측 모두) ──
-  _firstMoveDone = false;
-  _firstMoveTimer = setTimeout(() => {
-    if (_gameActive && !_firstMoveDone) {
-      // 10초 내 아무도 두지 않으면 무승부
-      if (_gameRef) _gameRef.update({ status: 'draw_no_move' });
-    }
-  }, 10000);
-
-  // 수 수신
-  _gameRef = _rtDb.ref('games/'+gameId);
-
-  // ── Heartbeat 시작 ──
-  startHeartbeat(gameId, myColor);
-
-  // ── 접속 끊김 감지: 첫 수 후 나가면 패배 ──
-  _disconnectRef = null; 
-  _gameRef.child('moves').on('child_added', snap => {
-    const d = snap.val();
-    if (!d || d.uid === _user.uid) return;
-    applyRemoteMove(d);
-  });
-  _gameRef.child('status').on('value', snap => {
-    const s = snap.val();
-    if (s && s !== 'playing') endGame(s);
-  });
-  // 무승부 제안 감지
-  _gameRef.child('drawOffer').on('value', snap => {
-    const offer = snap.val();
-    const bar   = document.getElementById('draw-offer-bar');
-    const btn   = document.getElementById('btn-draw');
-    if (offer && offer !== _myColor) {
-      if (bar) bar.classList.add('show');
     } else {
-      if (bar) bar.classList.remove('show');
-      if (!offer && btn) { btn.disabled = false; btn.textContent = '½ 무승부 제안'; }
+      if (piece && piece.color === _myColor) {
+        _selected = [r, c];
+      }
     }
-  });
-  _gameRef.child('whiteTime').on('value', snap => { if (snap.val() !== null && _turn !== 'w') _wTime = snap.val(); });
-  _gameRef.child('blackTime').on('value', snap => { if (snap.val() !== null && _turn !== 'b') _bTime = snap.val(); });
-}
-
-function applyRemoteMove(d) {
-  const allMoves = getAllLegal(_board, _turn, _castling, _enPassant);
-  const move = allMoves.find(m =>
-    m.from[0]===d.from[0] && m.from[1]===d.from[1] &&
-    m.to[0]===d.to[0]     && m.to[1]===d.to[1]
-  );
-  if (!move) return;
-  if (d.promo) move.promoPiece = d.promo;
-  doMove(move, d.promo || null);
-}
-
-function sendMove(move) {
-  if (!_gameRef || !_user) return;
-  _gameRef.child('moves').push({
-    uid: _user.uid, from: move.from, to: move.to,
-    promo: move.promoPiece || null, at: Date.now(),
-  });
-}
-
-let _drawOfferTimeout = null;
-
-function offerDraw() {
-  if (!_gameRef || !_gameActive) return;
-  const btn = document.getElementById('btn-draw');
-  if (btn) { btn.disabled = true; btn.textContent = '½ 제안 중...'; }
-  _gameRef.update({ drawOffer: _myColor, drawOfferAt: Date.now() });
-  _drawOfferTimeout = setTimeout(() => {
-    if (_gameRef) _gameRef.update({ drawOffer: null });
-    if (btn) { btn.disabled = false; btn.textContent = '½ 무승부 제안'; }
-  }, 30000);
-}
-
-function acceptDraw() {
-  hidDrawOfferBar();
-  if (_gameRef) _gameRef.update({ status: 'draw', drawOffer: null });
-}
-
-function declineDraw() {
-  hidDrawOfferBar();
-  if (_gameRef) _gameRef.update({ drawOffer: null });
-}
-
-function hidDrawOfferBar() {
-  const bar = document.getElementById('draw-offer-bar');
-  if (bar) bar.classList.remove('show');
-}
-
-function resignGame() {
-  if (!_gameRef || !_gameActive) return;
-  cancelDisconnectLoss(); 
-  const status = _myColor === 'w' ? 'resign_w' : 'resign_b';
-  _gameRef.update({ status });
-}
-
-function setupDisconnectLoss() {
-  if (!_gameRef || !_user) return;
-  const status = _myColor === 'w' ? 'resign_w' : 'resign_b';
-  _disconnectRef = _gameRef;
-  _disconnectRef.onDisconnect().update({ status });
-}
-function cancelDisconnectLoss() {
-  if (_disconnectRef) {
-    _disconnectRef.onDisconnect().cancel();
-    _disconnectRef = null;
+    renderBoard();
   }
-}
 
-function startHeartbeat(gameId, myColor) {
-  const oppColor = myColor === 'w' ? 'b' : 'w';
-  const myHbRef  = _rtDb.ref(`games/${gameId}/heartbeat/${myColor}`);
-  const oppHbRef = _rtDb.ref(`games/${gameId}/heartbeat/${oppColor}`);
+  function showPromoModal(r, c) {
+    const modal = document.getElementById('promo-modal');
+    if (!modal) return;
+    const pieces = _myColor === 'w' ? ['wQ','wR','wB','wN'] : ['bQ','bR','bB','bN'];
+    modal.innerHTML = '';
+    pieces.forEach((p) => {
+      const div = document.createElement('div');
+      div.className = 'promo-piece';
+      const img = document.createElement('img');
+      img.src = pieceImg(p);
+      img.style.cssText = 'width:44px;height:44px;object-fit:contain;pointer-events:none;';
+      if (p.startsWith('b')) img.style.filter = 'drop-shadow(0 0 1px rgba(180,180,180,0.9))';
+      div.appendChild(img);
+      div.onclick = () => {
+        modal.style.display = 'none';
+        if (_pendingPromo) {
+          doMove({ from: _pendingPromo.from, to: _pendingPromo.to, promotion: p[1].toLowerCase() });
+          _pendingPromo = null;
+        }
+      };
+      modal.appendChild(div);
+    });
 
-  clearInterval(_heartbeatInt);
-  _heartbeatInt = setInterval(() => {
-    if (!_gameActive) return;
-    myHbRef.set(Date.now());
-  }, 3000);
-  myHbRef.set(Date.now());
+    const boardEl = document.getElementById('play-board-wrap');
+    const rect = boardEl.getBoundingClientRect();
+    const sqSize = rect.width / 8;
+    const flipped = _myColor === 'b';
+    const ci = flipped ? 7 - c : c;
+    const ri = flipped ? 7 - r : r;
+    modal.style.display = 'flex';
+    modal.style.left = Math.min(ci * sqSize, rect.width - 224) + 'px';
+    modal.style.top  = (ri <= 3 ? (ri+1)*sqSize : ri*sqSize - 60) + 'px';
+  }
 
-  _oppLastSeen = Date.now();
-  oppHbRef.on('value', snap => {
-    if (snap.val()) _oppLastSeen = snap.val();
-  });
+  // ══════════════════════════════════════════
+  // 수 실행
+  // ══════════════════════════════════════════
+  function doMove(moveObj, isRemote) {
+    const resultMove = _game.move(moveObj);
+    if (!resultMove) return;
 
-  clearInterval(_oppHeartbeatInt);
-  _oppHeartbeatInt = setInterval(() => {
-    if (!_gameActive || !_firstMoveDone) return; 
-    const elapsed = Date.now() - _oppLastSeen;
-    if (elapsed > 10000) {
-      const status = oppColor === 'w' ? 'resign_w' : 'resign_b';
+    if (!_firstMoveDone) {
+      _firstMoveDone = true;
+      if (_firstMoveTimer) clearTimeout(_firstMoveTimer);
+      setupDisconnectLoss();
+    }
+
+    _selected = null;
+    const isCapture = resultMove.flags.includes('c') || resultMove.flags.includes('e');
+    const isCastle = resultMove.flags.includes('k') || resultMove.flags.includes('q');
+    playMoveSoundEffect(isCapture, isCastle);
+
+    if (!isRemote) sendMove(resultMove);
+    updateTimerOnMove();
+
+    renderBoard();
+    checkGameEnd();
+  }
+
+  function playMoveSoundEffect(isCapture, isCastle) {
+    if (_game.in_checkmate()) playSound('checkmate');
+    else if (_game.in_draw()) playSound('stalemate');
+    else if (_game.in_check()) playSound('check');
+    else if (isCastle) playSound('castle');
+    else if (isCapture) playSound('capture');
+    else playSound('move');
+  }
+
+  function checkGameEnd() {
+    if (_game.game_over()) {
+      let status = 'draw';
+      if (_game.in_checkmate()) status = 'checkmate';
+      else if (_game.in_stalemate()) status = 'stalemate';
+      else if (_game.in_draw()) status = 'draw';
       if (_gameRef) _gameRef.update({ status });
     }
-  }, 3000);
-}
-
-function stopHeartbeat(gameId, myColor) {
-  clearInterval(_heartbeatInt);
-  clearInterval(_oppHeartbeatInt);
-  _heartbeatInt = null;
-  _oppHeartbeatInt = null;
-  if (gameId && myColor) {
-    _rtDb.ref(`games/${gameId}/heartbeat/${myColor}`).remove();
-  }
-}
-
-function endGame(status) {
-  if (!_gameActive) return;
-  _gameActive = false;
-  clearInterval(_timerInt);
-  clearTimeout(_firstMoveTimer);
-  cancelDisconnectLoss();
-  stopHeartbeat(_gameId, _myColor); 
-  if (_gameRef) _gameRef.off();
-  playSound('over');
-  saveRecord(status);
-
-  let emoji='🏁', title='대국 종료', reason='';
-  if (status==='checkmate') {
-    const winner = enemyColor(_turn);
-    if (winner===_myColor) { emoji='🏆'; title='승리!'; reason='체크메이트'; }
-    else { emoji='😔'; title='패배'; reason='체크메이트'; }
-  } else if (status==='resign_w') {
-    if (_myColor==='b') { emoji='🏆'; title='승리!'; reason='상대방 기권'; }
-    else { emoji='😔'; title='패배'; reason='기권'; }
-  } else if (status==='resign_b') {
-    if (_myColor==='w') { emoji='🏆'; title='승리!'; reason='상대방 기권'; }
-    else { emoji='😔'; title='패배'; reason='기권'; }
-  } else if (status==='timeout_w') {
-    if (_myColor==='b') { emoji='🏆'; title='승리!'; reason='상대방 시간 초과'; }
-    else { emoji='😔'; title='패배'; reason='시간 초과'; }
-  } else if (status==='timeout_b') {
-    if (_myColor==='w') { emoji='🏆'; title='승리!'; reason='상대방 시간 초과'; }
-    else { emoji='😔'; title='패배'; reason='시간 초과'; }
-  } else if (status==='stalemate') {
-    emoji='🤝'; title='무승부'; reason='스테일메이트';
-  } else if (status==='draw' || status==='draw_no_move') {
-    emoji='🤝'; title='무승부'; reason= status==='draw_no_move' ? '첫 수 미입력' : '합의 무승부';
   }
 
-  document.getElementById('result-emoji').textContent = emoji;
-  document.getElementById('result-title').textContent = title;
-  document.getElementById('result-reason').textContent = reason;
-  showScreen('result');
-}
+  // ══════════════════════════════════════════
+  // 사운드 및 타이머
+  // ══════════════════════════════════════════
+  const _sounds = {};
+  const _soundFiles = {
+    move:'sound/chess_move.mp3', capture:'sound/chess_capture.mp3',
+    castle:'sound/chess_castle.mp3', check:'sound/chess_check.mp3',
+    checkmate:'sound/chess_checkmate.mp3', stalemate:'sound/chess_stalemate.mp3',
+    start:'sound/chess_start.mp3', over:'sound/chess_over.mp3',
+  };
+  for (const [k,v] of Object.entries(_soundFiles)) {
+    const a = new Audio(v); a.preload='auto'; _sounds[k]=a;
+  }
+  function playSound(type) {
+    const a = _sounds[type]; if (!a) return;
+    a.cloneNode().play().catch(()=>{});
+  }
 
-async function saveRecord(result) {
-  if (_gameId) { try { await _rtDb.ref('games/' + _gameId).remove(); } catch(e){} }
-  try {
-    const qSnap = await _rtDb.ref('matchmaking_queue').orderByChild('uid').equalTo(_user.uid).once('value');
-    qSnap.forEach(child => { child.ref.remove(); });
-  } catch(e){}
-  if (!_fbDb || !_user) return;
-  try {
-    let pgn = '';
-    _sanMoves.forEach((san, i) => {
-      if (i % 2 === 0) pgn += (Math.floor(i/2)+1) + '. ';
-      pgn += san + ' ';
-    });
-    pgn = pgn.trim();
+  function fmtTime(s) {
+    s = Math.max(0, s);
+    return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+  }
+  let _lastTickTime = null;
 
-    let resultStr = '*';
-    if (result === 'checkmate') resultStr = _turn === 'w' ? '0-1' : '1-0';
-    else if (result === 'resign_w') resultStr = '0-1';
-    else if (result === 'resign_b') resultStr = '1-0';
-    else if (result === 'timeout_w') resultStr = '0-1';
-    else if (result === 'timeout_b') resultStr = '1-0';
-    else if (result === 'stalemate' || result === 'draw' || result === 'draw_no_move') resultStr = '1/2-1/2';
+  function startTimer() {
+    if (_timerInt) clearInterval(_timerInt);
+    _lastTickTime = Date.now();
+    _timerInt = setInterval(() => {
+      if (!_gameActive) return;
+      const now = Date.now();
+      const delta = (now - _lastTickTime) / 1000;
+      _lastTickTime = now;
+      if (_game.turn() === 'w') _wTime = Math.max(0, _wTime - delta);
+      else                      _bTime = Math.max(0, _bTime - delta);
+      updateTimerDisplay();
+      if (_wTime <= 0 || _bTime <= 0) {
+        const status = _wTime <= 0 ? 'timeout_w' : 'timeout_b';
+        if (_gameRef) _gameRef.update({ status });
+      }
+    }, 100);
+  }
 
-    const myName   = _user.displayName || _user.email.split('@')[0];
-    const oppName  = document.getElementById('opp-name-el')?.textContent || '상대방';
-    const whiteName = _myColor === 'w' ? myName : oppName;
-    const blackName = _myColor === 'b' ? myName : oppName;
-    const today = new Date().toISOString().slice(0,10);
-    const fullPgn = `[White "${whiteName}"]\n[Black "${blackName}"]\n[Result "${resultStr}"]\n[Date "${today}"]\n\n${pgn} ${resultStr}`;
-
-    if (_gameId) {
-      try {
-        const existing = await _fbDb.collection('game_records').where('gameId','==',_gameId).where('uid','==',_user.uid).limit(1).get();
-        if (!existing.empty) return;
-      } catch(e) {}
+  function updateTimerDisplay() {
+    const myTime  = _myColor === 'w' ? _wTime : _bTime;
+    const oppTime = _myColor === 'w' ? _bTime : _wTime;
+    const myEl  = document.getElementById('my-timer');
+    const oppEl = document.getElementById('opp-timer');
+    const turn = _game.turn();
+    if (myEl) {
+      myEl.textContent = fmtTime(myTime);
+      myEl.className = 'p-timer' + (turn===_myColor?' active':'') + (myTime<30?' low':'');
     }
+    if (oppEl) {
+      oppEl.textContent = fmtTime(oppTime);
+      oppEl.className = 'p-timer' + (turn!==_myColor?' active':'') + (oppTime<30?' low':'');
+    }
+  }
 
-    await _fbDb.collection('game_records').add({
-      uid: _user.uid, playerName: myName, gameId: _gameId || '',
-      myColor: _myColor, whiteName, blackName,
-      result: resultStr, resultRaw: result,
-      moveCount: _sanMoves.length, pgn: fullPgn,
-      arrows: _gameArrows,
-      playedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  function updateTimerOnMove() {
+    if (_gameRef) _gameRef.update({ whiteTime: _wTime, blackTime: _bTime, lastMoveAt: Date.now() });
+  }
+
+  // ══════════════════════════════════════════
+  // Firebase 매칭
+  // ══════════════════════════════════════════
+  const GAME_TIME = 600;
+  let _queueRef = null, _searchInt = null, _matchmakingInProgress = false, _queueListener = null;
+
+  async function startMatchmaking() {
+    if (_matchmakingInProgress || !window._user || _gameActive) return;
+    _matchmakingInProgress = true;
+    try {
+      showScreen('searching');
+      let elapsed = 0; if (_searchInt) clearInterval(_searchInt);
+      _searchInt = setInterval(() => { elapsed++; const el = document.getElementById('search-elapsed'); if (el) el.textContent = elapsed + '초 경과'; }, 1000);
+      const myName = window._user.displayName || window._user.email.split('@')[0];
+      const queue = window._rtDb.ref('matchmaking_queue');
+      const oldSnap = await queue.once('value');
+      const cleanupUpdates = {};
+      oldSnap.forEach(child => { if (child.val().uid === window._user.uid) cleanupUpdates[child.key] = null; });
+      await queue.update(cleanupUpdates);
+      const myRef = queue.push(); _queueRef = myRef;
+      await myRef.set({ uid: window._user.uid, displayName: myName, joinedAt: Date.now() });
+      myRef.onDisconnect().remove(); 
+      _queueListener = queue.on('child_added', async (snap) => {
+        const entryKey = snap.key; const d = snap.val();
+        if (!d || entryKey === myRef.key || d.uid === window._user.uid || d.gameId) return;
+        if (window._user.uid < d.uid) {
+          const result = await window._rtDb.ref(`matchmaking_queue/${entryKey}`).transaction((curr) => {
+            if (curr && !curr.gameId) return { ...curr, gameId: 'PENDING', matchedWith: window._user.uid };
+            return; 
+          });
+          if (result.committed) {
+            const gameId = queue.push().key;
+            const myColor = Math.random() < 0.5 ? 'w' : 'b';
+            const gameData = {
+              white: myColor==='w'?window._user.uid:d.uid, black: myColor==='b'?window._user.uid:d.uid,
+              whiteName: myColor==='w'?myName:d.displayName, blackName: myColor==='b'?myName:d.displayName,
+              whiteUid: myColor==='w'?window._user.uid:d.uid, blackUid: myColor==='b'?window._user.uid:d.uid,
+              status: 'playing', whiteTime: GAME_TIME, blackTime: GAME_TIME,
+              lastMoveAt: Date.now(), createdAt: Date.now(),
+            };
+            await window._rtDb.ref('games/' + gameId).set(gameData);
+            await window._rtDb.ref(`matchmaking_queue/${entryKey}`).update({ gameId: gameId, color: myColor==='w'?'b':'w' });
+            stopMatchmakingListeners(); myRef.remove(); _queueRef = null;
+            joinGame(gameId, myColor, gameData);
+          }
+        }
+      });
+      myRef.on('value', async snap => {
+        const d = snap.val(); if (!d || !d.gameId || d.gameId === 'PENDING') return;
+        stopMatchmakingListeners(); const waitRef = _queueRef; _queueRef = null;
+        const gs = await window._rtDb.ref('games/' + d.gameId).once('value');
+        if (gs.val()) { waitRef.remove(); joinGame(d.gameId, d.color, gs.val()); }
+      });
+    } catch (e) { console.error(e); showScreen('lobby'); } finally { _matchmakingInProgress = false; }
+  }
+
+  function stopMatchmakingListeners() {
+    if (_queueListener) { window._rtDb.ref('matchmaking_queue').off('child_added', _queueListener); _queueListener = null; }
+    if (_queueRef) { _queueRef.off(); _queueRef.onDisconnect().cancel(); }
+  }
+
+  function cancelMatchmaking() {
+    if (_searchInt) clearInterval(_searchInt); stopMatchmakingListeners();
+    if (_queueRef) { _queueRef.remove(); _queueRef = null; }
+    showScreen('lobby'); _matchmakingInProgress = false;
+  }
+
+  function joinGame(gameId, myColor, gameData) {
+    _myColor = myColor; _gameId = gameId; _game = new Chess();
+    _wTime = GAME_TIME; _bTime = GAME_TIME; _gameActive = true;
+    _lastTickTime = Date.now();
+    _oppUid = myColor === 'w' ? (gameData.blackUid || null) : (gameData.whiteUid || null);
+    const myName  = myColor==='w' ? gameData.whiteName : gameData.blackName;
+    const oppName = myColor==='w' ? gameData.blackName  : gameData.whiteName;
+    const myNameEl = document.getElementById('my-name-el');
+    const oppNameEl = document.getElementById('opp-name-el');
+    if (myNameEl) myNameEl.textContent = myName;
+    if (oppNameEl) oppNameEl.textContent = oppName;
+    const myColorEl = document.getElementById('my-color-el');
+    const oppColorEl = document.getElementById('opp-color-el');
+    if (myColorEl) myColorEl.textContent = myColor==='w' ? '⬜ 백' : '⬛ 흑';
+    if (oppColorEl) oppColorEl.textContent = myColor==='w' ? '⬛ 흑' : '⬜ 백';
+    const myAvatarEl = document.getElementById('my-avatar-el');
+    const oppAvatarEl = document.getElementById('opp-avatar-el');
+    if (myAvatarEl) myAvatarEl.textContent = myName[0].toUpperCase();
+    if (oppAvatarEl) oppAvatarEl.textContent = oppName[0].toUpperCase();
+    showScreen('playing'); renderBoard(); startTimer(); playSound('start');
+    _firstMoveDone = false;
+    if (_firstMoveTimer) clearTimeout(_firstMoveTimer);
+    _firstMoveTimer = setTimeout(() => { if (_gameActive && !_firstMoveDone) _gameRef.update({ status: 'draw_no_move' }); }, 10000);
+    _gameRef = window._rtDb.ref('games/'+gameId);
+    startHeartbeat(gameId, myColor);
+    _gameRef.child('moves').on('child_added', snap => {
+      const d = snap.val(); if (!d || d.uid === window._user.uid) return;
+      doMove({ from: d.from, to: d.to, promotion: d.promo }, true);
     });
-  } catch(e) { console.warn('기보 저장 실패', e); }
-}
-
-function showScreen(name) {
-  ['lobby','searching','playing','result'].forEach(s => {
-    const el = document.getElementById('screen-'+s);
-    if (el) el.style.display = s===name ? 'flex' : 'none';
-  });
-  if (name === 'playing') document.body.classList.add('playing');
-  else document.body.classList.remove('playing');
-}
-
-function showToast(msg, duration=2500) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), duration);
-}
-
-let _gameArrows = {}; 
-
-// ══════════════════════════════════════════
-// 전역 노출
-// ══════════════════════════════════════════
-window.startMatchmaking = startMatchmaking;
-window.cancelMatchmaking = cancelMatchmaking;
-window.offerDraw = offerDraw;
-window.acceptDraw = acceptDraw;
-window.declineDraw = declineDraw;
-window.resignGame = resignGame;
-window.showScreen = showScreen;
-window.onSquareClick = onSquareClick;
-
-(function(){
-  const ARROW_COLOR='rgba(255,165,0,0.92)';
-  const ARROW_SW=14;
-  const SVG_NS='http://www.w3.org/2000/svg';
-  let _arrowStart=null,_userArrows=[],_rightDragging=false;
-
-  function sqCenter(col,row){
-    const flipped=_myColor==='b';
-    const dc=flipped?7-col:col,dr=flipped?7-row:row;
-    return{px:dc*100+50,py:dr*100+50};
-  }
-
-  function getBoardSq(e){
-    const board=document.getElementById('play-board');if(!board)return null;
-    const rect=board.getBoundingClientRect();
-    const x=Math.max(0,Math.min(rect.width-1,e.clientX-rect.left));
-    const y=Math.max(0,Math.min(rect.height-1,e.clientY-rect.top));
-    const dc=Math.floor(x/rect.width*8),dr=Math.floor(y/rect.height*8);
-    const flipped=_myColor==='b';
-    return{col:flipped?7-dc:dc,row:flipped?7-dr:dr};
-  }
-
-  function makeArrow(fc,fr,tc,tr){
-    const from=sqCenter(fc,fr),to=sqCenter(tc,tr);
-    const dx=to.px-from.px,dy=to.py-from.py;
-    const len=Math.sqrt(dx*dx+dy*dy);if(len<1)return null;
-    const ux=dx/len,uy=dy/len,sw=ARROW_SW;
-    const sx=from.px+ux*sw*1.1,sy=from.py+uy*sw*1.1;
-    const ex=to.px-ux*sw*2.4,ey=to.py-uy*sw*2.4;
-    if(Math.sqrt((ex-sx)**2+(ey-sy)**2)<5)return null;
-    const line=document.createElementNS(SVG_NS,'line');
-    line.setAttribute('x1',sx.toFixed(2));line.setAttribute('y1',sy.toFixed(2));
-    line.setAttribute('x2',ex.toFixed(2));line.setAttribute('y2',ey.toFixed(2));
-    line.setAttribute('stroke',ARROW_COLOR);line.setAttribute('stroke-width',sw);
-    line.setAttribute('stroke-linecap','round');
-    line.setAttribute('marker-end','url(#play-arrow-head)');
-    return line;
-  }
-
-  function redraw(){
-    const g=document.getElementById('play-arrow-layer');if(!g)return;
-    g.innerHTML='';
-    _userArrows.forEach(a=>{const el=makeArrow(a.fc,a.fr,a.tc,a.tr);if(el)g.appendChild(el);});
-  }
-
-  function attach(){
-    const board=document.getElementById('play-board');
-    if(!board){setTimeout(attach,300);return;}
-    board.addEventListener('contextmenu',e=>e.preventDefault());
-    board.addEventListener('mousedown',e=>{
-      if(e.button===2){_rightDragging=true;_arrowStart=getBoardSq(e);}
-      else if(e.button===0){
-        const curIdx=_sanMoves.length;
-        _userArrows=[];_gameArrows[curIdx]=[];
-        redraw();_arrowStart=null;_rightDragging=false;
+    _gameRef.child('status').on('value', snap => {
+      const s = snap.val(); if (s && s !== 'playing') endGame(s);
+    });
+    _gameRef.child('drawOffer').on('value', snap => {
+      const offer = snap.val();
+      const bar = document.getElementById('draw-offer-bar');
+      if (bar) {
+        if (offer && offer !== _myColor) bar.classList.add('show');
+        else bar.classList.remove('show');
       }
     });
-    document.addEventListener('mouseup',e=>{
-      if(e.button!==2)return;
-      if(!_rightDragging||!_arrowStart){_rightDragging=false;_arrowStart=null;return;}
-      _rightDragging=false;
-      const sq=getBoardSq(e);
-      const curIdx=_sanMoves.length;
-      if(!_gameArrows[curIdx])_gameArrows[curIdx]=[];
-      _userArrows=_gameArrows[curIdx];
-      if(sq.col===_arrowStart.col&&sq.row===_arrowStart.row){
-        _userArrows=[];_gameArrows[curIdx]=[];
-      }else{
-        const idx=_userArrows.findIndex(a=>a.fc===_arrowStart.col&&a.fr===_arrowStart.row&&a.tc===sq.col&&a.tr===sq.row);
-        if(idx>=0)_userArrows.splice(idx,1);
-        else _userArrows.push({fc:_arrowStart.col,fr:_arrowStart.row,tc:sq.col,tr:sq.row});
-        _gameArrows[curIdx]=_userArrows.slice();
-      }
-      redraw();_arrowStart=null;
-    });
+    _gameRef.child('whiteTime').on('value', snap => { if (snap.val() !== null && _game.turn() !== 'w') _wTime = snap.val(); });
+    _gameRef.child('blackTime').on('value', snap => { if (snap.val() !== null && _game.turn() !== 'b') _bTime = snap.val(); });
   }
-  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',attach);}else{attach();}
+
+  function sendMove(move) {
+    if (!_gameRef || !window._user) return;
+    _gameRef.child('moves').push({ uid: window._user.uid, from: move.from, to: move.to, promo: move.promotion || null, at: Date.now() });
+  }
+
+  function offerDraw() { if (!_gameRef || !_gameActive) return; _gameRef.update({ drawOffer: _myColor, drawOfferAt: Date.now() }); }
+  function acceptDraw() { if (_gameRef) _gameRef.update({ status: 'draw', drawOffer: null }); }
+  function declineDraw() { if (_gameRef) _gameRef.update({ drawOffer: null }); }
+  function resignGame() { if (!_gameRef || !_gameActive) return; const status = _myColor === 'w' ? 'resign_w' : 'resign_b'; _gameRef.update({ status }); }
+
+  function setupDisconnectLoss() { if (_gameRef) _gameRef.onDisconnect().update({ status: _myColor === 'w' ? 'resign_w' : 'resign_b' }); }
+  function cancelDisconnectLoss() { if (_gameRef) _gameRef.onDisconnect().cancel(); }
+
+  function startHeartbeat(gameId, myColor) {
+    const oppColor = enemyColor(myColor);
+    const myHbRef = window._rtDb.ref(`games/${gameId}/heartbeat/${myColor}`);
+    const oppHbRef = window._rtDb.ref(`games/${gameId}/heartbeat/${oppColor}`);
+    if (_heartbeatInt) clearInterval(_heartbeatInt); 
+    _heartbeatInt = setInterval(() => { if (_gameActive) myHbRef.set(Date.now()); }, 3000);
+    _oppLastSeen = Date.now(); oppHbRef.on('value', snap => { if (snap.val()) _oppLastSeen = snap.val(); });
+    if (_oppHeartbeatInt) clearInterval(_oppHeartbeatInt);
+    _oppHeartbeatInt = setInterval(() => {
+      if (!_gameActive || !_firstMoveDone) return;
+      if (Date.now() - _oppLastSeen > 10000) _gameRef.update({ status: oppColor === 'w' ? 'resign_w' : 'resign_b' });
+    }, 3000);
+  }
+
+  function stopHeartbeat(gameId, myColor) { if (_heartbeatInt) clearInterval(_heartbeatInt); if (_oppHeartbeatInt) clearInterval(_oppHeartbeatInt); if (gameId && myColor) window._rtDb.ref(`games/${gameId}/heartbeat/${myColor}`).remove(); }
+
+  function endGame(status) {
+    if (!_gameActive) return; _gameActive = false;
+    if (_timerInt) clearInterval(_timerInt); if (_firstMoveTimer) clearTimeout(_firstMoveTimer);
+    cancelDisconnectLoss(); stopHeartbeat(_gameId, _myColor);
+    if (_gameRef) _gameRef.off();
+    playSound('over'); saveRecord(status);
+    let emoji='🏁', title='대국 종료', reason='';
+    if (status==='checkmate') {
+      const winner = enemyColor(_game.turn());
+      if (winner===_myColor) { emoji='🏆'; title='승리!'; reason='체크메이트'; }
+      else { emoji='😔'; title='패배'; reason='체크메이트'; }
+    } else if (status.startsWith('resign')) {
+      const loser = status.split('_')[1];
+      if (loser !== _myColor) { emoji='🏆'; title='승리!'; reason='상대방 기권'; }
+      else { emoji='😔'; title='패배'; reason='기권'; }
+    } else if (status.startsWith('timeout')) {
+      const loser = status.split('_')[1];
+      if (loser !== _myColor) { emoji='🏆'; title='승리!'; reason='상대방 시간 초과'; }
+      else { emoji='😔'; title='패배'; reason='시간 초과'; }
+    } else { emoji='🤝'; title='무승부'; reason='게임 종료'; }
+    const emojiEl = document.getElementById('result-emoji');
+    const titleEl = document.getElementById('result-title');
+    const reasonEl = document.getElementById('result-reason');
+    if (emojiEl) emojiEl.textContent = emoji;
+    if (titleEl) titleEl.textContent = title;
+    if (reasonEl) reasonEl.textContent = reason;
+    showScreen('result');
+  }
+
+  async function saveRecord(result) {
+    if (_gameId) { try { await window._rtDb.ref('games/' + _gameId).remove(); } catch(e){} }
+    try {
+      const qSnap = await window._rtDb.ref('matchmaking_queue').orderByChild('uid').equalTo(window._user.uid).once('value');
+      qSnap.forEach(child => { child.ref.remove(); });
+    } catch(e){}
+    if (!window._fbDb || !window._user) return;
+    try {
+      const pgn = _game.pgn();
+      const resultStr = _game.game_over() ? (_game.in_checkmate() ? (enemyColor(_game.turn()) === 'w' ? '1-0' : '0-1') : '1/2-1/2') : '*';
+      const myName = window._user.displayName || window._user.email.split('@')[0];
+      const oppName = document.getElementById('opp-name-el')?.textContent || '상대방';
+      const whiteName = _myColor === 'w' ? myName : oppName;
+      const blackName = _myColor === 'b' ? myName : oppName;
+      const today = new Date().toISOString().slice(0,10).replace(/-/g, '.');
+      const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
+      const commonData = { gameId: _gameId || '', title: `${whiteName} vs ${blackName}`, white: whiteName, black: blackName, whiteName, blackName, date: today, result: resultStr, opening: '-', whiteRating: null, blackRating: null, timeControl: null, moveCount: _game.history().length, pgn, savedAt: timestamp };
+      async function saveForUser(uid, color, pName) {
+        if (!uid) return;
+        const pgnSnap = await window._fbDb.collection('saved_pgns').where('gameId','==',_gameId).where('uid','==',uid).limit(1).get();
+        if (pgnSnap.empty) await window._fbDb.collection('saved_pgns').add({ ...commonData, uid });
+        const recSnap = await window._fbDb.collection('game_records').where('gameId','==',_gameId).where('uid','==',uid).limit(1).get();
+        if (recSnap.empty) await window._fbDb.collection('game_records').add({ ...commonData, uid, playerName: pName, myColor: color, playedAt: timestamp, source: 'play', resultRaw: result });
+      }
+      await saveForUser(window._user.uid, _myColor, myName);
+      if (_oppUid) await saveForUser(_oppUid, enemyColor(_myColor), oppName);
+    } catch(e) { console.warn('기보 저장 실패', e); }
+  }
+
+  function showScreen(name) {
+    ['lobby','searching','playing','result'].forEach(s => {
+      const el = document.getElementById('screen-'+s);
+      if (el) el.style.display = s===name ? 'flex' : 'none';
+    });
+    if (name === 'playing') document.body.classList.add('playing');
+    else document.body.classList.remove('playing');
+  }
+
+  // ══════════════════════════════════════════
+  // 전역 노출 및 초기화
+  // ══════════════════════════════════════════
+  window.startMatchmaking = startMatchmaking;
+  window.cancelMatchmaking = cancelMatchmaking;
+  window.offerDraw = offerDraw;
+  window.acceptDraw = acceptDraw;
+  window.declineDraw = declineDraw;
+  window.resignGame = resignGame;
+  window.showScreen = showScreen;
+  window.onSquareClick = onSquareClick;
+
+  // 화살표 로직 (IIFE)
+  (function(){
+    const ARROW_COLOR='rgba(255,165,0,0.92)';
+    const ARROW_SW=14;
+    const SVG_NS='http://www.w3.org/2000/svg';
+    let _arrowStart=null, _userArrows=[], _rightDragging=false;
+    function sqCenter(col,row){ const flipped=_myColor==='b'; const dc=flipped?7-col:col,dr=flipped?7-row:row; return{px:dc*100+50,py:dr*100+50}; }
+    function getBoardSq(e){
+      const board=document.getElementById('play-board'); if(!board)return null;
+      const rect=board.getBoundingClientRect();
+      const x=Math.max(0,Math.min(rect.width-1,e.clientX-rect.left));
+      const y=Math.max(0,Math.min(rect.height-1,e.clientY-rect.top));
+      const dc=Math.floor(x/rect.width*8),dr=Math.floor(y/rect.height*8);
+      const flipped=_myColor==='b';
+      return{col:flipped?7-dc:dc,row:flipped?7-dr:dr};
+    }
+    function makeArrow(fc,fr,tc,tr){
+      const from=sqCenter(fc,fr),to=sqCenter(tc,tr);
+      const dx=to.px-from.px,dy=to.py-from.py,len=Math.sqrt(dx*dx+dy*dy); if(len<1)return null;
+      const ux=dx/len,uy=dy/len,sw=ARROW_SW,sx=from.px+ux*sw*1.1,sy=from.py+uy*sw*1.1,ex=to.px-ux*sw*2.4,ey=to.py-uy*sw*2.4;
+      const line=document.createElementNS(SVG_NS,'line');
+      line.setAttribute('x1',sx);line.setAttribute('y1',sy);line.setAttribute('x2',ex);line.setAttribute('y2',ey);
+      line.setAttribute('stroke',ARROW_COLOR);line.setAttribute('stroke-width',sw);line.setAttribute('stroke-linecap','round');line.setAttribute('marker-end','url(#play-arrow-head)');
+      return line;
+    }
+    function redraw(){ const g=document.getElementById('play-arrow-layer'); if(!g)return; g.innerHTML=''; _userArrows.forEach(a=>{const el=makeArrow(a.fc,a.fr,a.tc,a.tr);if(el)g.appendChild(el);}); }
+    function attach(){
+      const board=document.getElementById('play-board'); if(!board){setTimeout(attach,300);return;}
+      board.addEventListener('contextmenu',e=>e.preventDefault());
+      board.addEventListener('mousedown',e=>{ if(e.button===2){_rightDragging=true;_arrowStart=getBoardSq(e);} else if(e.button===0){_userArrows=[];redraw();_arrowStart=null;_rightDragging=false;} });
+      document.addEventListener('mouseup',e=>{
+        if(e.button!==2||!_rightDragging||!_arrowStart)return; _rightDragging=false;
+        const sq=getBoardSq(e); if(sq.col===_arrowStart.col&&sq.row===_arrowStart.row){_userArrows=[];}else{
+          const idx=_userArrows.findIndex(a=>a.fc===_arrowStart.col&&a.fr===_arrowStart.row&&a.tc===sq.col&&a.tr===sq.row);
+          if(idx>=0)_userArrows.splice(idx,1); else _userArrows.push({fc:_arrowStart.col,fr:_arrowStart.row,tc:sq.col,tr:sq.row});
+        }
+        redraw();_arrowStart=null;
+      });
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',attach);}else{attach();}
+  })();
+
 })();

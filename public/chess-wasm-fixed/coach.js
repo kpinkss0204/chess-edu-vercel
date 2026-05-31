@@ -1528,6 +1528,7 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`- **위협 & 아이디어**: 브리프의 "1~3수 메이트"·"전술적 위협"만 사용. 메이트는 브리프에 적힌 수순·패턴만 인용.`);
   lines.push(`- **약점 분석**: 브리프의 "구조적 약점"(밝은/어두운 칸, 폰 구조)을 장기적 이유와 함께 설명.`);
   lines.push(`- **포지션 상황**: 현재 차례·직전 수를 먼저 맞게 서술. 최근 수순은 브리프에 있는 것만. 직전 수를 "지금 둘 수"처럼 쓰지 말 것.`);
+  lines.push(`- **포맷팅**: 분석 내용(약점, 강점, 위협 등)은 가독성을 위해 가급적 **불렛 포인트(- )**를 사용하여 나열하세요.`);
   lines.push(`- 섹션 헤더는 **헤더명** 형태로 단독 줄에 쓸 것.`);
   lines.push(`- 위 system prompt의 말투 예시를 그대로 따를 것. 전체 900~1300자, 문단마다 2~5문장.`);
 
@@ -1656,7 +1657,7 @@ async function callGroqAPIWithSystem(systemPrompt, userContent, maxTokens = 800)
 
 async function callGroqAPIWithSystemTemp(systemPrompt, userContent, maxTokens = 800, temperature = 0.3) {
   try {
-    const response = await fetch('/api/groq', {
+    const response = await fetch('https://dkuehvozh8.execute-api.ap-northeast-2.amazonaws.com/dev/api/groq', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1684,7 +1685,7 @@ async function callGroqAPIWithSystemTemp(systemPrompt, userContent, maxTokens = 
 
   // ── Gemini 폴백 호출 ──
   try {
-    const response = await fetch('/api/gemini', {
+    const response = await fetch('https://dkuehvozh8.execute-api.ap-northeast-2.amazonaws.com/dev/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1833,12 +1834,45 @@ function formatCommentary(text) {
   for (const def of SECTION_DEFS) {
     const body = parsed[def.key];
     if (!body) continue;
-    const formatted = body
+
+    // ── 개선된 본문 포맷팅 ────────────────────────────────────────────────
+    let formatted = body
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       // 체스 수 표기 강조
       .replace(/\b(O-O-O|O-O|[NBRQK][a-h]?[1-8]?x?[a-h][1-8][+#=]?|[a-h]x?[a-h][1-8][+#=]?|[a-h][1-8])\b/g,
-               m => m.length >= 2 ? `<span class="chess-move">${m}</span>` : m)
-      .replace(/\n/g, '<br>');
+               m => m.length >= 2 ? `<span class="chess-move">${m}</span>` : m);
+
+    // 불렛 포인트 및 줄바꿈 처리
+    if (formatted.includes('\n- ') || formatted.includes('\n* ') || formatted.startsWith('- ') || formatted.startsWith('* ')) {
+      const lines = formatted.split('\n');
+      let inList = false;
+      let listHtml = '';
+      let finalHtml = '';
+
+      for (let line of lines) {
+        line = line.trim();
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+          if (!inList) {
+            inList = true;
+            listHtml = '<ul class="coach-list">';
+          }
+          listHtml += `<li>${line.substring(2)}</li>`;
+        } else {
+          if (inList) {
+            inList = false;
+            finalHtml += listHtml + '</ul>';
+            listHtml = '';
+          }
+          if (line) finalHtml += `<p>${line}</p>`;
+        }
+      }
+      if (inList) finalHtml += listHtml + '</ul>';
+      formatted = finalHtml;
+    } else {
+      // 일반 줄바꿈은 <br> 대신 <p> 또는 <div>로 감싸서 간격 확보
+      formatted = formatted.split('\n').filter(l => l.trim()).map(l => `<p>${l}</p>`).join('');
+    }
+
     html += `
       <div class="coach-section ${def.cls}">
         <div class="section-header"><span class="section-icon">${def.icon}</span> ${def.key}</div>

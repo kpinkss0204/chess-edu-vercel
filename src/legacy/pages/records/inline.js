@@ -1752,24 +1752,33 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
           temperature: 0.3
         };
 
-        let response = await fetch('/api/groq', {
+        let response = await fetch('https://dkuehvozh8.execute-api.ap-northeast-2.amazonaws.com/dev/api/groq', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...requestBody, model: 'llama-3.3-70b-versatile' })
         });
 
-        if (!response.ok) {
-          console.warn('[AI] Groq 호출 실패, Gemini로 전환합니다. 상태:', response.status);
-          body.innerHTML = '<div class="ai-loading">Groq 한도 초과 — Gemini로 재시도 중...</div>';
-          response = await fetch('/api/gemini', {
+        // 429(Too Many Requests) 발생 시 Gemini로 즉시 전환
+        if (response.status === 429) {
+          console.warn('[AI] Groq 429 발생, Gemini로 전환합니다.');
+          body.innerHTML = '<div class="ai-loading">사용량이 많아 Gemini로 분석 중입니다...</div>';
+          response = await fetch('https://dkuehvozh8.execute-api.ap-northeast-2.amazonaws.com/dev/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...requestBody, model: 'gemini-2.5-flash-lite' })
           });
         }
 
-        if (!response.ok) throw new Error('AI 응답을 가져오지 못했습니다.');
-        let data = await response.json();
+        if (!response.ok) throw new Error('AI 응답을 가져오지 못했습니다 (Status: ' + response.status + ')');
+        
+        const responseText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (e) {
+          console.error('[AI] 응답이 JSON이 아닙니다. 응답 내용:', responseText);
+          throw new Error('AI 응답 포맷 오류');
+        }
         
         // OpenAI 호환 포맷 (data.choices[0].message.content) 또는 직렬화된 포맷 대응
         let text = data.choices?.[0]?.message?.content || data.answer || data.text || '분석 결과를 생성할 수 없습니다.';
