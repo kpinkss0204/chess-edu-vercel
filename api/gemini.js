@@ -10,9 +10,9 @@ export default async function handler(req, res) {
   try {
     const { model, messages, prompt, max_tokens, temperature } = req.body;
     
-    // Gemini API v1beta 사용 (system_instruction 지원)
+    // Gemini API v1 사용 (안정 버전)
     const geminiModel = model || 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models/${geminiModel}:generateContent?key=${apiKey}`;
 
     // System prompt 추출 및 User prompt 구성 (messages 배열이 있는 경우)
     let systemInstruction = '';
