@@ -10,11 +10,11 @@ export default async function handler(req, res) {
   try {
     const { model, messages, prompt, max_tokens, temperature } = req.body;
     
-    // Gemini API v1 사용 (안정 버전)
-    const geminiModel = model || 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1/models/${geminiModel}:generateContent?key=${apiKey}`;
+    // Gemini API v1beta 사용
+    const geminiModel = model || 'gemini-1.5-flash-8b-latest';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
 
-    // System prompt 추출 및 User prompt 구성 (messages 배열이 있는 경우)
+    // System prompt 추출 및 User prompt 구성 (최대 호환성을 위해 하나로 합침)
     let systemInstruction = '';
     let userMessage = '';
 
@@ -29,16 +29,18 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '요청 본문에 messages 또는 prompt가 필요합니다.' });
     }
 
+    // 시스템 지침을 유저 메시지 앞에 추가하여 모든 API 버전에서 호환되도록 구성
+    const combinedPrompt = systemInstruction 
+      ? `System Instructions:\n${systemInstruction}\n\nUser Message:\n${userMessage}`
+      : userMessage;
+
     const payload = {
       contents: [
         {
           role: 'user',
-          parts: [{ text: userMessage }]
+          parts: [{ text: combinedPrompt }]
         }
       ],
-      system_instruction: systemInstruction ? {
-        parts: [{ text: systemInstruction }]
-      } : undefined,
       generationConfig: {
         maxOutputTokens: max_tokens || 1000,
         temperature: temperature || 0.3,
