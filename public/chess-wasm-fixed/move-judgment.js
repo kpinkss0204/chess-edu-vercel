@@ -612,14 +612,15 @@
     collect(raw.materialGainBest);
     collect(raw.tacticsAfterBest);
     collect(raw.missedTactic);
+    collect(raw.opponentResponse); // [추가] 상대방 응징 수집
 
     // Case 1: Best/OK — 마이너스 제거, 플러스만
     if (isGood || isOk) {
       return { playedSection: [], bestSection: allPlus, quietBlunder: false, contradictionNote: null };
     }
 
-    // Case 2: Blunder인데 유효 reasons 없음 → Quiet Blunder
-    const validMinus = allMinus.filter(x => x.sign !== 'minor_minus');
+    // Case 2: Blunder인데 유효 reasons(minus) 없음 → Quiet Blunder
+    const validMinus = allMinus.filter(x => x.sign === 'minus');
     if (isBlunder && validMinus.length === 0) {
       return {
         playedSection: [], bestSection: allPlus,
@@ -741,6 +742,7 @@
       lines.push(`• **포지션 상황** 섹션 첫 문장을 "${moverKr}이 ${playedSan}을(를) 두었는데 이는 ${jLabel}입니다"로 시작하세요.`);
       lines.push(`• 위 코드 계산 근거만 사용하세요. 수치(승률%, cp)는 언급하지 마세요.`);
       lines.push(`• 이 데이터에 없는 이유를 만들어내지 마세요.`);
+      lines.push(`• 블런더/실수의 이유는 반드시 둔 사람에게 불리하고 상대방에게 유리한 결과(예: 상대에게 전술 허용, 기물 손실 등)여야 합니다.`);
     } else if (wpLoss <= WP_GOOD) {
       lines.push(`• **포지션 상황** 섹션에서 ${moverKr}의 ${playedSan}이 좋은 이유를 위 데이터 기반으로 설명하세요.`);
       lines.push(`• 마이너스 요인은 언급하지 마세요 (이미 필터링됨).`);
@@ -791,11 +793,16 @@
         ? parseFloat(((cpBefore - cpAfter) / 100).toFixed(2))
         : parseFloat(((cpAfter - cpBefore) / 100).toFixed(2));
 
-      // Step 3: fenAfterBest 생성
+      // Step 3: fenAfterBest 생성 (나의 최선수)
       const bestUci      = getBestUciFromCache(fenBefore);
       const bestSan      = bestUci ? bestUciToSan(fenBefore, bestUci) : null;
       const fenAfterBest = bestUci ? buildFenAfterBest(fenBefore, bestUci) : null;
       const wasEngineMove = !!(bestSan && playedSan === bestSan);
+
+      // [추가] 상대방의 응수(응징) 분석
+      const oppBestUci = getBestUciFromCache(fenAfter);
+      const oppBestSan = oppBestUci ? bestUciToSan(fenAfter, oppBestUci) : null;
+      const fenAfterOppResponse = oppBestUci ? buildFenAfterBest(fenAfter, oppBestUci) : null;
 
       const stateBefore      = fenToState(fenBefore);
       const stateAfterPlayed = fenToState(fenAfter);
@@ -823,10 +830,33 @@
                             ),
         tacticsAfterBest:   calcTacticsAfterBest(fenAfterBest, bestSan),
         missedTactic:       null,
+        // [추가] 상대방의 전술적 응징 감지
+        opponentResponse:   null,
       };
       raw.missedTactic = calcMissedTactic(
         raw.mateCreated, raw.hangingAfterBest, raw.tacticsAfterBest, bestSan
       );
+
+      // 상대방 응징 로직: 내가 둔 수 때문에 상대가 전술적 이득을 취하는지
+      if (oppBestSan && fenAfterOppResponse) {
+        const oppMover = mover === 'w' ? 'b' : 'w';
+        const oppStateAfterResponse = fenToState(fenAfterOppResponse);
+        if (oppStateAfterResponse) {
+          const oppGain  = calcLostMaterial(stateAfterPlayed.board, oppStateAfterResponse.board, oppMover);
+          const isCheck  = oppBestSan.includes('+');
+          const insights = global.extractPositionInsights ? global.extractPositionInsights(fenAfterOppResponse) : [];
+          const isFork   = insights.some(ins => ins.includes('[포크]') && ins.includes(oppBestSan.replace(/[+#]/g,'')));
+
+          if ((oppGain && oppGain.sign === 'plus' && oppGain.netGain >= 1) || isCheck || isFork) {
+            let desc = `상대의 ${oppBestSan} 응수 허용`;
+            if (isFork) desc += ' (포크 위협)';
+            if (oppGain && oppGain.sign === 'plus') desc += ` — ${oppGain.netGain}점 손실 위험`;
+            else if (isCheck) desc += ' — 체크 위협';
+
+            raw.opponentResponse = { sign: 'minus', text: desc, san: oppBestSan };
+          }
+        }
+      }
 
       // Step 4.5: 정합성 필터
       const filtered = filterReasons(judgment, wpLoss, raw);

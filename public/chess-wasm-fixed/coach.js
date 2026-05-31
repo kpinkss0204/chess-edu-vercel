@@ -1509,6 +1509,10 @@ function buildCommentaryPrompt(ctx) {
   // ★ [수정] moveJudgment가 있을 때 포지션 상황 섹션 지침 강화
   if (ctx.moveJudgment && ctx.moveJudgment.promptBlock) {
     lines.push(`- **포지션 상황** 으로 시작. [방금 둔 수 평가] 블록의 판정과 이유를 반드시 포함하여 직전 수가 왜 좋은지/나쁜지를 먼저 설명하세요. ${hasEngineLine ? '**최선수 분석** 포함.' : '엔진 라인 없음 → **최선수 분석**은 "엔진 수순 준비 중" 한 문장만.'}`);
+    if (ctx.moveJudgment.judgment === 'blunder' || ctx.moveJudgment.judgment === 'mistake') {
+      lines.push(`- 블런더/실수를 설명할 때, [엔진 추천 수순]의 첫 번째 수(상대의 응수)가 전술(포크, 체크, 기물 포획 등)을 포함한다면 반드시 그 사실을 블런더의 핵심 원인으로 언급하세요.`);
+      lines.push(`- 논리 역전 주의: 블런더는 둔 사람(상대방)에게 치명적인 실점이며, 지금 차례인 당신(백/흑)에게는 결정적인 기회여야 합니다.`);
+    }
   } else {
     lines.push(`- **포지션 상황** 으로 시작. ${hasEngineLine ? '**최선수 분석** 포함.' : '엔진 라인 없음 → **최선수 분석**은 "엔진 수순 준비 중" 한 문장만. **이후 수순** 섹션 생략.'}`);
   }
