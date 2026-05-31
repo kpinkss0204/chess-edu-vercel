@@ -1735,18 +1735,29 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
 - 친절하고 격려하는 어조를 유지하며, 마크다운 형식을 사용하여 가독성 있게 작성하세요.
 `;
 
-        const response = await fetch('/api/groq', {
+        const requestBody = {
+          messages: [
+            { role: 'system', content: '당신은 세계적인 체스 코치입니다. 모든 답변은 반드시 한국어로만 작성해야 하며, 한자나 다른 외국어를 절대 혼용하지 마십시오.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3
+        };
+
+        let response = await fetch('/api/groq', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [
-              { role: 'system', content: '당신은 세계적인 체스 코치입니다. 모든 답변은 반드시 한국어로만 작성해야 하며, 한자나 다른 외국어를 절대 혼용하지 마십시오.' },
-              { role: 'user', content: prompt }
-            ],
-            temperature: 0.3
-          })
+          body: JSON.stringify({ ...requestBody, model: 'llama-3.3-70b-versatile' })
         });
+
+        if (!response.ok) {
+          console.warn('[AI] Groq 호출 실패, Gemini로 전환합니다. 상태:', response.status);
+          body.innerHTML = '<div class="ai-loading">Groq 한도 초과 — Gemini로 재시도 중...</div>';
+          response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...requestBody, model: 'gemini-2.5-flash-lite' })
+          });
+        }
 
         if (!response.ok) throw new Error('AI 응답을 가져오지 못했습니다.');
         const data = await response.json();
