@@ -1056,6 +1056,9 @@ function tryTriggerTacticsForCurrentMove(fenOptional) {
 function updateMoveAnnotations() {
   if (typeof game === 'undefined' || !game || !game.history || game.history.length === 0) return;
 
+  // 게임 분석 완료 후 잠금 상태이면 annotation 덮어쓰기 금지
+  if (window.sfAnalysisLocked) return;
+
   const SYMBOLS = { blunder: '??', mistake: '?', inaccuracy: '?!' };
   const CLASSES  = { blunder: 'ann-blunder', mistake: 'ann-mistake', inaccuracy: 'ann-inaccuracy' };
 
