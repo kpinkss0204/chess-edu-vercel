@@ -241,9 +241,33 @@
   async function ensureCpForFen(fen) {
     const cached = getCpFromCache(fen);
     if (cached !== null) return cached;
+
+    // [개선] 메인 엔진을 방해하지 않는 analyzeBackground 사용
+    if (typeof global.analyzeBackground === 'function') {
+      try {
+        const result = await global.analyzeBackground(
+          fen,
+          global.LICHESS_SF_DEPTH    || 18,
+          global.LICHESS_SF_MOVETIME || 900,
+          1
+        );
+        if (result && result.pvs && result.pvs[1] && result.pvs[1].cpFromWhite != null) {
+          if (global.evalCache && typeof global.normFen === 'function') {
+            const key = global.normFen(fen);
+            if (!global.evalCache[key]) global.evalCache[key] = { pvs: {} };
+            global.evalCache[key].pvs[1] = result.pvs[1];
+          }
+          return result.pvs[1].cpFromWhite;
+        }
+      } catch (e) {
+        console.warn('[MoveJudgment] analyzeBackground 실패:', e);
+      }
+    }
+
     if (typeof global.createStockfishWorker !== 'function' ||
         typeof global.analyzeWithWorker !== 'function') return null;
     try {
+      // 폴백: 임시 워커 생성 (기존 로직)
       const workerRaw = await global.createStockfishWorker(1, 32);
       const workerObj = { worker: workerRaw, busy: false };
       const result = await global.analyzeWithWorker(

@@ -1096,8 +1096,17 @@ async function getNullMoveThreat(fen, moveUci) {
     // 차례를 다시 mover로 고정 (Null Move)
     const nullFen = window.boardToFen(boardAfter, turn, cast, null, 0, 1);
     
+    // [개선] 메인 엔진을 방해하지 않는 analyzeBackground 사용
+    if (typeof window.analyzeBackground === 'function') {
+      const result = await window.analyzeBackground(nullFen, 20, 1000, 1);
+      if (result && result.pvs && result.pvs[1] && result.pvs[1].pv && result.pvs[1].pv.length > 0) {
+        return result.pvs[1].pv[0];
+      }
+      return null;
+    }
+
     return new Promise(resolve => {
-      // engine.js의 기능을 빌려 짧게 분석
+      // 폴백: engine.js의 기능을 빌려 짧게 분석
       if (typeof window.executeEnginePlayMove !== 'function') return resolve(null);
       window.executeEnginePlayMove(nullFen, (bestUci) => {
         resolve(bestUci);

@@ -1226,9 +1226,18 @@ function analyzeWithWorker(workerObj, fen, depth, movetime, multipv) {
       } else if (line.startsWith('bestmove')) {
         workerObj.busy = false;
 
+        // [보완] bestmove 라인에서 직접 수 추출 (info 라인이 부족한 경우 대비)
+        const bmMatch = line.match(/^bestmove\s+(\S+)/);
+        const bestUci = (bmMatch && bmMatch[1] !== '(none)') ? bmMatch[1] : null;
+
         // 미완성 사이클도 반영 (movetime 초과로 중간 종료된 경우)
         for (const [k, v] of Object.entries(completeCycle)) {
           if (!pvs[k] || v.depth >= pvs[k].depth) pvs[k] = v;
+        }
+
+        // [보완] 만약 pvs가 비어있는데 bestUci가 있다면 최소한의 정보 생성 (MoveJudgment/Coach 캐시용)
+        if (Object.keys(pvs).length === 0 && bestUci) {
+          pvs[1] = { depth: 1, score_type: 'cp', score_val: 0, pv: [bestUci] };
         }
 
         const processed = {};
@@ -1250,6 +1259,47 @@ function analyzeWithWorker(workerObj, fen, depth, movetime, multipv) {
     worker.postMessage(`go depth ${depth} movetime ${movetime}`);
   });
 }
+
+/**
+ * 백그라운드 워커 풀(bgWorkers)을 사용하여 분석 수행 (메인 분석 방해 없음)
+ * 가용 워커가 없으면 임시 워커를 생성하여 처리
+ */
+async function analyzeBackground(fen, depth, movetime, multipv = 1) {
+  let workerObj = null;
+  let isTemp = false;
+
+  // 가용한 백그라운드 워커 찾기
+  if (bgWorkers && bgWorkers.length > 0) {
+    workerObj = bgWorkers.find(w => !w.busy);
+  }
+
+  if (!workerObj) {
+    console.log('[Engine] 가용 백그라운드 워커 없음, 임시 워커 생성');
+    try {
+      const tempWorker = await createStockfishWorker(1, 32);
+      workerObj = { worker: tempWorker, busy: false };
+      isTemp = true;
+    } catch (e) {
+      console.warn('[Engine] 임시 워커 생성 실패, 메인 엔진 사용 시도');
+      // 최후의 수단으로 메인 워커 사용 (이때는 인터럽트 발생 가능)
+      if (mainWorker && mainWorker.postMessage) {
+        workerObj = { worker: mainWorker, busy: false };
+      } else {
+        throw new Error('사용 가능한 엔진 워커가 없습니다.');
+      }
+    }
+  }
+
+  try {
+    const result = await analyzeWithWorker(workerObj, fen, depth, movetime, multipv);
+    return result;
+  } finally {
+    if (isTemp && workerObj && workerObj.worker) {
+      try { workerObj.worker.terminate(); } catch (e) {}
+    }
+  }
+}
+window.analyzeBackground = analyzeBackground;
 
 // ── 전체 기보 병렬 분석 시작 ─────────────────────────────────
 // 수 분류는 Lichess API(%judgment)만 사용하므로 로컬 백그라운드 분석 비활성화
