@@ -16,7 +16,43 @@ export default async function handler(req, res) {
 
     console.log('[API Proxy] Requesting URL:', url); // 디버깅용 로그
 
-    // ... (이하 동일)
+    // System prompt 추출 및 User prompt 구성 (최대 호환성을 위해 하나로 합침)
+    let systemInstruction = '';
+    let userMessage = '';
+
+    if (Array.isArray(messages)) {
+      systemInstruction = messages.find(m => m.role === 'system')?.content || '';
+      userMessage = messages.find(m => m.role === 'user')?.content || '';
+    } else if (prompt) {
+      userMessage = prompt;
+    }
+
+    if (!userMessage) {
+      return res.status(400).json({ error: '요청 본문에 messages 또는 prompt가 필요합니다.' });
+    }
+
+    // 시스템 지침을 유저 메시지 앞에 추가하여 모든 API 버전에서 호환되도록 구성
+    const combinedPrompt = systemInstruction 
+      ? `System Instructions:
+${systemInstruction}
+
+User Message:
+${userMessage}`
+      : userMessage;
+
+    const payload = {
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: combinedPrompt }]
+        }
+      ],
+      generationConfig: {
+        maxOutputTokens: max_tokens || 1000,
+        temperature: temperature || 0.3,
+      }
+    };
+
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
