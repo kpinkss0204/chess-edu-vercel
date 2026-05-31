@@ -2243,6 +2243,11 @@ class ChessGame {
     const eloBlackMatch=pgn.match(/\[BlackElo "([^"]+)"\]/);
     const timeControlMatch = pgn.match(/\[TimeControl "([^"]+)"\]/);
 
+    // 결과 파싱: 백/흑 승리 여부 판단
+    const result = resultMatch ? resultMatch[1] : null;
+    const whiteWon = result === '1-0';
+    const blackWon = result === '0-1';
+
     if (whiteMatch) {
       document.getElementById('info-white').textContent = whiteMatch[1];
       document.getElementById('name-white').textContent = whiteMatch[1];
@@ -2259,6 +2264,35 @@ class ChessGame {
     }
     if (dateMatch)   document.getElementById('info-date').textContent = dateMatch[1];
     if (resultMatch) document.getElementById('info-result').textContent = resultMatch[1];
+
+    // 플레이어 패널 결과 배지 업데이트
+    ['white', 'black'].forEach(color => {
+      const nameEl = document.getElementById(`name-${color}`);
+      if (!nameEl) return;
+      // 기존 배지 제거
+      const old = nameEl.parentElement.querySelector('.result-badge');
+      if (old) old.remove();
+      const won = color === 'white' ? whiteWon : blackWon;
+      const lost = color === 'white' ? blackWon : whiteWon;
+      if (won || lost) {
+        const badge = document.createElement('span');
+        badge.className = 'result-badge';
+        badge.textContent = won ? '승' : '패';
+        badge.style.cssText = `
+          display:inline-block;
+          margin-left:6px;
+          padding:1px 7px;
+          border-radius:10px;
+          font-size:11px;
+          font-weight:700;
+          vertical-align:middle;
+          background:${won ? 'var(--accent-green-dark,#1e6641)' : 'rgba(180,40,40,0.25)'};
+          color:${won ? '#6effa0' : '#ff7070'};
+          border:1px solid ${won ? 'var(--accent-green,#4caf77)' : 'rgba(220,60,60,0.5)'};
+        `;
+        nameEl.insertAdjacentElement('afterend', badge);
+      }
+    });
     if (openingMatch)document.getElementById('info-opening').textContent = openingMatch[1];
     
     // TimeControl 정보가 있으면 결과 행 옆이나 다른 곳에 표시 가능 (여기서는 콘솔이나 info에 추가 고려)
