@@ -1176,6 +1176,21 @@ async function runPositionCommentary() {
     // 최신 컨텍스트 다시 빌드 (라인이 갱신됐을 수 있음)
     let freshCtx = buildChessContext();
 
+    // ── 신규: 방금 둔 수 평가 (Move Judgment) ──
+    if (typeof buildMoveJudgment === 'function' && game && game.historyIndex >= 0) {
+      updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 직전 수 평가 중...` });
+      try {
+        const mj = await buildMoveJudgment(game);
+        freshCtx.moveJudgment = mj;
+        if (mj) {
+          console.log('[Coach] MoveJudgment:', mj.judgment, mj.accuracy + '%', mj.playedSan, '→', mj.bestSan);
+        }
+      } catch (mjErr) {
+        console.warn('[Coach] moveJudgment 계산 실패 (무시):', mjErr);
+        freshCtx.moveJudgment = null;
+      }
+    }
+
     // ── 신규: 방치 시 위협 분석 (Null Move Threat) ──
     const pv1 = (freshCtx.pvData && freshCtx.pvData[1]) || (window.pvData && window.pvData[1]);
     const m1Uci = pv1 && pv1.pv ? pv1.pv[0] : (pv1 && pv1.moves ? pv1.moves[0] : null);
@@ -1209,7 +1224,9 @@ async function runPositionCommentary() {
         await new Promise(r => setTimeout(r, 300));
       }
       // 위협 데이터가 반영된 최신 컨텍스트로 재빌드
+      const mjTemp = freshCtx.moveJudgment;
       freshCtx = buildChessContext();
+      freshCtx.moveJudgment = mjTemp;
     }
 
     updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> AI 해설 생성 중...` });
@@ -1466,10 +1483,24 @@ function buildCommentaryPrompt(ctx) {
   if (ctx.pgnMoves) lines.push(`전체 기보: ${ctx.pgnMoves}`);
   lines.push(`FEN: ${ctx.fen}`);
 
+  // ★ [추가] 방금 둔 수 평가 블록 삽입 (데이터 제공)
+  if (ctx.moveJudgment && ctx.moveJudgment.promptBlock) {
+    lines.push(``);
+    lines.push(ctx.moveJudgment.promptBlock);
+  }
+
   lines.push(``);
   lines.push(`[작성 지침]`);
   lines.push(`- **포지션 상황** 으로 시작. ${hasEngineLine ? '**최선수 분석** 포함.' : '엔진 라인 없음 → **최선수 분석**은 "엔진 수순 준비 중" 한 문장만. **이후 수순** 섹션 생략.'}`);
-  lines.push(`- 나머지 섹션(**약점 분석**, **강점 분석**, **위협 & 아이디어**, **이후 수순**)은 포지션에 실제로 해당하는 것만 선택.`);
+  
+  // ★ [수정] moveJudgment가 있을 때 섹션 목록에 '직전 수 분석' 추가 및 지침 강화
+  if (ctx.moveJudgment && ctx.moveJudgment.promptBlock) {
+    lines.push(`- 나머지 섹션(**약점 분석**, **강점 분석**, **위협 & 아이디어**, **이후 수순**, **직전 수 분석**)은 포지션에 실제로 해당하는 것만 선택.`);
+    lines.push(`- **직전 수 분석**: [방금 둔 수 평가] 블록의 판정과 이유를 바탕으로 직전 수가 왜 좋은지/나쁜지를 상세히 설명하세요. 반드시 마지막 섹션으로 배치하세요.`);
+  } else {
+    lines.push(`- 나머지 섹션(**약점 분석**, **강점 분석**, **위협 & 아이디어**, **이후 수순**)은 포지션에 실제로 해당하는 것만 선택.`);
+  }
+
   if (hasEngineLine) {
     lines.push(`- **최선수 분석**: [엔진 추천 수순]의 "최선 수순" SAN만 사용. 브리프·합법 수 목록에 없는 수 추가 금지.`);
     lines.push(`- **이후 수순**: [방치 시 위협 분석]을 근거로 최선수의 진짜 목적을 설명하세요. 단순히 수순 나열이 아니라 "만약 상대가 방치하면 ~와 같은 위협이 있기 때문에 ~로 응수해야 한다"는 논리적 흐름(Threat-based)을 따르세요.`);
@@ -1731,6 +1762,7 @@ function formatCommentary(text) {
     { key: '위협 & 아이디어', icon: '⚡', cls: 'section-threat' },
     { key: '최선수 분석',    icon: '♟️', cls: 'section-best'   },
     { key: '이후 수순',      icon: '🔮', cls: 'section-plan'   },
+    { key: '직전 수 분석',    icon: '🚩', cls: 'section-eval'   },
   ];
 
   const SECTION_KEYS = SECTION_DEFS.map(s => s.key);

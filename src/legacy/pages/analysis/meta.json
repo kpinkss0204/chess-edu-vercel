@@ -19,6 +19,7 @@
     "chess-wasm-fixed/analysis-cache.js",
     "chess-wasm-fixed/game.js",
     "chess-wasm-fixed/position-brief.js",
+    "chess-wasm-fixed/move-judgment.js",
     "chess-wasm-fixed/coach.js",
     "chess-wasm-fixed/ui.js",
     "chess-wasm-fixed/endgame-practice.js",
