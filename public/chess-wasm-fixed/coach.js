@@ -1688,7 +1688,7 @@ async function callGroqAPIWithSystemTemp(systemPrompt, userContent, maxTokens = 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'gemini-1.5-flash-latest',
+        model: 'gemini-1.5-flash',
         max_tokens: maxTokens,
         temperature: temperature,
         messages: [
