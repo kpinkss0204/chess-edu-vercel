@@ -1793,6 +1793,9 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
         
         // 마크다운 처리 개선
         body.innerHTML = text
+          .replace(/^---+\s*$/gm, '')           // --- 수평선 제거
+          .replace(/^___+\s*$/gm, '')           // ___ 수평선 제거
+          .replace(/^\*\*\*+\s*$/gm, '')        // *** 수평선 제거
           .replace(/^###\s*(.*)/gm, '<h3>$1</h3>')
           .replace(/^##\s*(.*)/gm, '<h2>$1</h2>')
           .replace(/^#\s*(.*)/gm, '<h1>$1</h1>')
