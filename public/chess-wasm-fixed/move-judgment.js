@@ -693,12 +693,12 @@
     const moverKr = COLOR_KR[mover];
     const lines   = [];
 
-    // "수 옆에 평가 딱지는 붙이지 말고" 요청에 따라 이모지 제거
+    // AI 지침용 판정 명칭 (이모지 추가하여 가독성 및 중요도 향상)
     const judgmentKr = {
-      blunder:    '블런더',
-      mistake:    '실수',
-      inaccuracy: '부정확한 수',
-    }[judgment] || (wpLoss <= WP_GOOD ? '좋은 수' : '정확한 수');
+      blunder:    '블런더 ❌',
+      mistake:    '실수 ⚠️',
+      inaccuracy: '부정확한 수 △',
+    }[judgment] || (wpLoss <= WP_GOOD ? '좋은 수 ✅' : '정확한 수 ✓');
 
     lines.push(`[방금 둔 수 평가 — 코드 계산 사실, AI는 이 데이터만 사용]`);
     lines.push(``);
@@ -738,14 +738,14 @@
     lines.push(`[AI 해설 지침]`);
     if (judgment === 'blunder' || judgment === 'mistake') {
       const jLabel = judgment === 'blunder' ? '블런더' : '실수';
-      lines.push(`• **직전 수 분석** 섹션 첫 문장을 "${moverKr}이 ${playedSan}을(를) 두었는데 이는 ${jLabel}입니다"로 시작하세요.`);
+      lines.push(`• **포지션 상황** 섹션 첫 문장을 "${moverKr}이 ${playedSan}을(를) 두었는데 이는 ${jLabel}입니다"로 시작하세요.`);
       lines.push(`• 위 코드 계산 근거만 사용하세요. 수치(승률%, cp)는 언급하지 마세요.`);
       lines.push(`• 이 데이터에 없는 이유를 만들어내지 마세요.`);
     } else if (wpLoss <= WP_GOOD) {
-      lines.push(`• **직전 수 분석** 섹션에서 ${moverKr}의 ${playedSan}이 좋은 이유를 위 데이터 기반으로 설명하세요.`);
+      lines.push(`• **포지션 상황** 섹션에서 ${moverKr}의 ${playedSan}이 좋은 이유를 위 데이터 기반으로 설명하세요.`);
       lines.push(`• 마이너스 요인은 언급하지 마세요 (이미 필터링됨).`);
     } else {
-      lines.push(`• 직전 수에 대한 평가를 **직전 수 분석** 섹션에 자연스럽게 서술하세요.`);
+      lines.push(`• 직전 수에 대한 간략한 평가를 **포지션 상황** 섹션에 자연스럽게 포함하세요.`);
     }
 
     return lines.join('\n');
