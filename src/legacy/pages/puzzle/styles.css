@@ -1,6 +1,6 @@
 /* ===== RESET & BASE ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; overflow: hidden; }
+html, body { min-height: 100%; }
 
 :root {
   --bg-primary: #1a1a1a;
@@ -43,8 +43,7 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   display: flex;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -56,10 +55,8 @@ body {
 #main {
   flex: 1;
   display: flex;
-  overflow: hidden;
   min-width: 0;
-  min-height: 0;
-  height: 100%;
+  min-height: 100%;
 }
 
 /* ===== PUZZLE CONTENT ===== */
@@ -67,10 +64,8 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   background: var(--bg-primary);
-  height: 100%;
-  min-height: 0;
+  min-height: 100%;
 }
 
 /* ===== TOP BAR ===== */
@@ -136,9 +131,7 @@ body {
 /* ===== SCROLL WRAPPER ===== */
 #puzzle-scroll {
   flex: 1;
-  overflow-y: auto;
   padding: 24px 28px;
-  min-height: 0;
 }
 
 /* ===== SECTION HEADER ===== */
@@ -906,9 +899,6 @@ body {
 #theme-list-view {
   display: flex;
   flex: 1;
-  overflow: hidden;
-  height: 100%;
-  min-height: 0;
 }
 
 
@@ -959,9 +949,9 @@ body {
     --board-size: min(98vw, calc(100vh - 200px));
   }
   body { padding-bottom: 0; }
-  #main { margin-left: 0 !important; height: 100vh; overflow: hidden; }
-  #puzzle-board-view { flex-direction: column !important; height: 100vh; overflow: hidden; }
-  #puzzle-board-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px !important; overflow-y: auto; }
+  #main { margin-left: 0 !important; min-height: 100vh; }
+  #puzzle-board-view { flex-direction: column !important; min-height: 100vh; }
+  #puzzle-board-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px !important; }
   #puzzle-board-wrap {
     width: var(--board-size) !important;
     height: var(--board-size) !important;
