@@ -1624,14 +1624,12 @@ async function callCommentaryAPI(ctx) {
 
   const prompt = buildCommentaryPrompt(ctx);
 
-  // 디버깅 로그 추가 (개발 모드만)
-  if (window.DEBUG_COACH) {
-    console.group('%c[AI Coach] Commentary API Request', 'color: #4CAF50; font-weight: bold;');
-    console.log('System Prompt:', SYSTEM);
-    console.log('User Prompt:', prompt);
-    console.log('Refined Context:', ctx);
-    console.groupEnd();
-  }
+  // 디버깅 로그 출력 (AI에게 전달되는 정제된 데이터 확인용)
+  console.group('%c[AI Coach] Commentary API Request', 'color: #4CAF50; font-weight: bold;');
+  console.log('System Prompt:', SYSTEM);
+  console.log('User Prompt:', prompt);
+  console.log('Refined Context:', ctx);
+  console.groupEnd();
 
   return callGroqAPIWithSystemTemp(SYSTEM, prompt, 2000, 0.28);
 }
