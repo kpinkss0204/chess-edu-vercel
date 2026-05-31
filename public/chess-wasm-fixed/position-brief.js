@@ -55,17 +55,17 @@
 
         if (piece === 'P') {
           const dir = color === 'w' ? -1 : 1;
-          if (dr === dir && Math.abs(df) === 1) out[color].push({ sq: idxToSq(r, f), piece });
+          if (dr === dir && Math.abs(df) === 1) out[color].push({ sq: idxToSq(r, f), piece, r, f });
           continue;
         }
         if (piece === 'N') {
           if ((Math.abs(dr) === 2 && Math.abs(df) === 1) || (Math.abs(dr) === 1 && Math.abs(df) === 2))
-            out[color].push({ sq: idxToSq(r, f), piece });
+            out[color].push({ sq: idxToSq(r, f), piece, r, f });
           continue;
         }
         if (piece === 'K') {
           if (Math.abs(dr) <= 1 && Math.abs(df) <= 1 && (dr || df))
-            out[color].push({ sq: idxToSq(r, f), piece });
+            out[color].push({ sq: idxToSq(r, f), piece, r, f });
           continue;
         }
         const straight = dr === 0 || df === 0;
@@ -79,7 +79,7 @@
           if (board[cr][cf]) { blocked = true; break; }
           cr += stepR; cf += stepF;
         }
-        if (!blocked) out[color].push({ sq: idxToSq(r, f), piece });
+        if (!blocked) out[color].push({ sq: idxToSq(r, f), piece, r, f });
       }
     }
     return out;
@@ -345,64 +345,153 @@
     return null;
   }
 
+  /**
+   * 두 상태(이전, 이후)를 비교하여 수의 파급력을 분석합니다.
+   * @param {object} stateBefore 이전 국면
+   * @param {object} move 이동 객체
+   * @param {object} stateAfter 이후 국면
+   */
+  function analyzeMoveImpact(stateBefore, move, stateAfter) {
+    const mover = stateBefore.turn;
+    const opp   = mover === 'w' ? 'b' : 'w';
+    const impact = {
+      tactics: [],      // 포크, 핀, 체크 등
+      mobility: 0,      // 이동 가능 칸 변화
+      newAttackers: [], // 새롭게 공격받는 기물
+      openedLines: [],  // 이 수로 인해 길이 열린 아군 기물
+      controlDelta: 0,  // 중앙 통제력 변화
+      isCapture: false, // 기물 획득 여부
+      capturedPiece: null,
+      isCheck: false,   // 체크 여부
+      defendedPieces: [] // 새롭게 수비하게 된 기물
+    };
+
+    try {
+      const [tr, tc] = move.to;
+
+      // 0. 기본 특성 (체크, 캡처)
+      const targetBefore = stateBefore.board[tr][tc];
+      if (targetBefore && targetBefore[0] === opp) {
+        impact.isCapture = true;
+        impact.capturedPiece = PIECE_KR[targetBefore[1]];
+        impact.tactics.push('capture');
+      }
+
+      const oppKingSq = findKingSq(stateAfter.board, opp);
+      if (oppKingSq && getAttackersOnSquare(stateAfter.board, oppKingSq[0], oppKingSq[1])[mover].length > 0) {
+        impact.isCheck = true;
+        impact.tactics.push('check');
+      }
+
+      // 1. 활동성(Mobility) 변화량
+      const movesBefore = global.getAllLegalMoves(stateBefore.board, mover, stateBefore.castling, stateBefore.enPassant).length;
+      const movesAfter  = global.getAllLegalMoves(stateAfter.board, mover, stateAfter.castling, stateAfter.enPassant).length;
+      impact.mobility = movesAfter - movesBefore;
+
+      // 2. 신규 공격 위협 & 수비 강화
+      for(let r=0; r<8; r++) {
+        for(let f=0; f<8; f++) {
+          const target = stateAfter.board[r][f];
+          if (!target) continue;
+          
+          const atks = getAttackersOnSquare(stateAfter.board, r, f)[mover];
+          const isAttackingThisSq = atks.some(a => a.sq === idxToSq(tr, tc));
+          
+          if (isAttackingThisSq) {
+            if (target[0] === opp) {
+              impact.newAttackers.push({ sq: idxToSq(r, f), piece: PIECE_KR[target[1]], val: PIECE_VAL[target[1]] });
+            } else if (target[0] === mover && (r !== tr || f !== tc)) {
+              impact.defendedPieces.push(PIECE_KR[target[1]]);
+            }
+          }
+        }
+      }
+
+      // 3. 길 열기 (Opened Lines) - 폰 전진 등으로 비숍/룩/퀸의 길이 열렸는지 확인
+      for(let r=0; r<8; r++) {
+        for(let f=0; f<8; f++) {
+          const atksB = getAttackersOnSquare(stateBefore.board, r, f)[mover];
+          const atksA = getAttackersOnSquare(stateAfter.board, r, f)[mover];
+          // 새로 추가된 공격자 중, 움직이지 않은 기물이 있다면 길이 열린 것
+          for (const aA of atksA) {
+            if (aA.sq !== idxToSq(tr, tc) && !atksB.some(aB => aB.sq === aA.sq)) {
+              const pName = PIECE_KR[aA.piece];
+              if (pName && !impact.openedLines.includes(pName)) impact.openedLines.push(pName);
+            }
+          }
+        }
+      }
+
+      // 4. 중앙 통제력 변화 (d4, d5, e4, e5)
+      const center = [[3,3],[3,4],[4,3],[4,4]];
+      let ctrlBefore = 0, ctrlAfter = 0;
+      center.forEach(([r, f]) => {
+        if (getAttackersOnSquare(stateBefore.board, r, f)[mover].length > 0) ctrlBefore++;
+        if (getAttackersOnSquare(stateAfter.board, r, f)[mover].length > 0) ctrlAfter++;
+      });
+      impact.controlDelta = ctrlAfter - ctrlBefore;
+    } catch(e) { console.warn('[PositionBrief] analyzeMoveImpact error:', e); }
+
+    return impact;
+  }
+
+  function findKingSq(board, color) {
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const c = board[r][f];
+        if (c && c[0] === color && c[1] === 'K') return [r, f];
+      }
+    }
+    return null;
+  }
+
+  /** 수의 전략적 파급력 요약 문구 생성 */
+  function getImpactNote(impact) {
+    const notes = [];
+    if (impact.isCheck) return '상대 킹 체크';
+    if (impact.isCapture) return `${impact.capturedPiece} 포획`;
+    
+    if (impact.openedLines.length > 0) notes.push(`${impact.openedLines.join(', ')}의 길 확보`);
+    if (impact.controlDelta > 0) notes.push('중앙 통제력 강화');
+    if (impact.mobility > 5) notes.push('활동성 크게 개선');
+    if (impact.defendedPieces.length > 0) notes.push(`${impact.defendedPieces[0]} 수비`);
+    if (impact.newAttackers.length > 0) {
+      const top = impact.newAttackers.sort((a,b)=>b.val - a.val)[0];
+      notes.push(`${top.sq}의 ${top.piece} 압박`);
+    }
+    
+    return notes.length > 0 ? notes.join(', ') : '포지션 개선 및 전개';
+  }
+
   /** 엔진 PV를 따라가며 수마다 태그·설명 생성 */
   function annotateEngineLine(fen, uciMoves, maxPlies) {
     if (!uciMoves || !uciMoves.length || typeof global.uciToMove !== 'function') return [];
-    const state = parseFenState(fen);
-    if (!state) return [];
+    let currentState = parseFenState(fen);
+    if (!currentState) return [];
 
-    let { board, turn, castling, enPassant } = state;
     const steps = [];
     const limit = Math.min(maxPlies || 8, uciMoves.length);
 
     for (let i = 0; i < limit; i++) {
       const uci = uciMoves[i];
-      const legal = global.getAllLegalMoves(board, turn, castling, enPassant);
-      const move = global.uciToMove(uci, board, turn, castling, enPassant);
+      const move = global.uciToMove(uci, currentState.board, currentState.turn, currentState.castling, currentState.enPassant);
       if (!move) break;
 
-      const san = global.moveToSAN(board, move, turn, legal);
-      const mover = COLOR_KR[turn];
-      const tags = [];
-      const captured = board[move.to[0]][move.to[1]];
-      const epCap = move.enPassant ? (turn === 'w' ? 'bP' : 'wP') : null;
+      const beforeState = cloneState(currentState);
+      const { state: nextState, san } = applyMoveToState(beforeState, move);
+      const mover = COLOR_KR[beforeState.turn];
+      
+      // 파급력 분석 수행 (모든 수에 대해)
+      const impact = analyzeMoveImpact(beforeState, move, nextState);
+      const reason = getImpactNote(impact);
+      const forkNote = forkAfterMove(nextState.board, move, beforeState.turn);
 
-      if (captured || epCap) {
-        const cap = captured || epCap;
-        tags.push('capture');
-      }
-      if (san.includes('+')) tags.push('check');
-      if (san.includes('#')) tags.push('mate');
+      let note = `${mover} ${san} (${reason})`;
+      if (forkNote) note += ` [${forkNote}]`;
 
-      const boardAfter = global.applyMoveToBoard(board.map(r => [...r]), move, turn);
-      const forkNote = forkAfterMove(boardAfter, move, turn);
-      if (forkNote) tags.push('fork');
-let note = `${mover} ${san}`;
-if (tags.includes('mate')) {
-  note += ' → 즉시 체크메이트';
-} else if (tags.includes('check')) {
-  note += ' → 체크, 상대는 킹을 안전한 칸으로 피해야 함';
-} else if (tags.includes('capture')) {
-  const cap = captured || epCap;
-  const capName = PIECE_KR[cap[1]];
-  const targetSq = idxToSq(move.to[0], move.to[1]);
-  note += ` → ${targetSq}의 ${COLOR_KR[cap[0]]} ${capName} 포획`;
-}
-      if (forkNote) note += ` (${forkNote})`;
+      steps.push({ ply: i + 1, san, mover, tags: impact.tactics, note, impact });
 
-      steps.push({ ply: i + 1, san, mover, tags, note });
-
-      if (boardAfter[move.to[0]][move.to[1]] === turn + 'K') {
-        if (turn === 'w') { castling.wK = false; castling.wQ = false; }
-        else { castling.bK = false; castling.bQ = false; }
-      }
-      if (move.from[0] === 7 && move.from[1] === 7) castling.wK = false;
-      if (move.from[0] === 7 && move.from[1] === 0) castling.wQ = false;
-      if (move.from[0] === 0 && move.from[1] === 7) castling.bK = false;
-      if (move.from[0] === 0 && move.from[1] === 0) castling.bQ = false;
-      enPassant = move.doublePush ? [move.to[0] - (turn === 'w' ? -1 : 1), move.to[1]] : null;
-      turn = turn === 'w' ? 'b' : 'w';
-      board = boardAfter;
+      currentState = nextState;
     }
     return steps;
   }
@@ -700,108 +789,6 @@ if (tags.includes('mate')) {
 
     lines.push('말투: "경기는 ~", "지금 ~", "~라고 볼 수 있겠어요", "~거든요" 등 흐름 있는 구어체 해설.');
     return lines.join('\n');
-  }
-
-  /**
-   * 두 상태(이전, 이후)를 비교하여 수의 파급력을 분석합니다.
-   * @param {object} stateBefore 이전 국면
-   * @param {object} move 이동 객체
-   * @param {object} stateAfter 이후 국면
-   */
-  function analyzeMoveImpact(stateBefore, move, stateAfter) {
-    const mover = stateBefore.turn;
-    const opp   = mover === 'w' ? 'b' : 'w';
-    const impact = {
-      tactics: [],      // 포크, 핀, 체크 등
-      mobility: 0,      // 이동 가능 칸 변화
-      prophylaxis: [],  // 상대 계획 차단 여부
-      newAttackers: [], // 새롭게 공격받는 기물
-      controlDelta: 0,  // 중앙 통제력 변화
-      isCapture: false, // 기물 획득 여부
-      capturedPiece: null,
-      isCheck: false    // 체크 여부
-    };
-
-    try {
-      // 0. 기본 특성 (체크, 캡처)
-      const [tr, tc] = move.to;
-      const targetBefore = stateBefore.board[tr][tc];
-      if (targetBefore && targetBefore[0] === opp) {
-        impact.isCapture = true;
-        impact.capturedPiece = PIECE_KR[targetBefore[1]];
-        impact.tactics.push('capture');
-      }
-
-      const oppKingSq = findKingSq(stateAfter.board, opp);
-      if (oppKingSq && isAttacked(stateAfter.board, oppKingSq[0], oppKingSq[1], mover)) {
-        impact.isCheck = true;
-        impact.tactics.push('check');
-      }
-
-      // 1. 활동성(Mobility) 변화량 (아군 기물 전체)
-      const movesBefore = global.getAllLegalMoves(stateBefore.board, mover, stateBefore.castling, stateBefore.enPassant).length;
-      const movesAfter  = global.getAllLegalMoves(stateAfter.board, mover, stateAfter.castling, stateAfter.enPassant).length;
-      impact.mobility = movesAfter - movesBefore;
-
-      // 2. 신규 공격 위협 (이동한 기물 중심)
-      const piece = stateAfter.board[tr][tc];
-      if (piece) {
-        const pMoves = global.pseudoMoves(stateAfter.board, tr, tc, stateAfter.castling, stateAfter.enPassant);
-        for (const pm of pMoves) {
-          const [ar, ac] = pm.to;
-          const target = stateAfter.board[ar][ac];
-          if (target && target[0] === opp) {
-            impact.newAttackers.push({
-              sq: idxToSq(ar, ac),
-              piece: PIECE_KR[target[1]],
-              val: PIECE_VAL[target[1]]
-            });
-          }
-        }
-      }
-
-      // 3. 포크 감지 (고가치 기물 2개 이상 공격)
-      const highValAtks = impact.newAttackers.filter(a => a.val >= 3 || a.piece === '킹');
-      if (highValAtks.length >= 2) impact.tactics.push('fork');
-
-      // 4. 중앙 통제력 변화 (d4, d5, e4, e5)
-      const center = [[3,3],[3,4],[4,3],[4,4]];
-      let ctrlBefore = 0, ctrlAfter = 0;
-      center.forEach(([r, f]) => {
-        const atksB = getAttackersOnSquare(stateBefore.board, r, f);
-        const atksA = getAttackersOnSquare(stateAfter.board, r, f);
-        if (atksB[mover].length > 0) ctrlBefore++;
-        if (atksA[mover].length > 0) ctrlAfter++;
-      });
-      impact.controlDelta = ctrlAfter - ctrlBefore;
-    } catch(e) { console.warn('[PositionBrief] analyzeMoveImpact error:', e); }
-
-    return impact;
-  }
-
-  function findKingSq(board, color) {
-    for (let r = 0; r < 8; r++) {
-      for (let f = 0; f < 8; f++) {
-        const c = board[r][f];
-        if (c && c[0] === color && c[1] === 'K') return [r, f];
-      }
-    }
-    return null;
-  }
-
-  /** "조용한 수"에 대한 전략적 가치 추출 */
-  function detectQuietMoveImpact(impact) {
-    const notes = [];
-    if (impact.mobility > 5) notes.push(`기물 활동성 크게 강화 (이동 가능 칸 +${impact.mobility})`);
-    else if (impact.mobility > 0) notes.push(`기물 기동성 개선`);
-
-    if (impact.controlDelta > 0) notes.push(`중앙 영역 통제력 강화`);
-    
-    if (impact.newAttackers.length > 0) {
-      const top = impact.newAttackers.sort((a,b)=>b.val - a.val)[0];
-      notes.push(`${top.sq}의 ${top.piece}를 압박하여 상대의 응수를 강제함`);
-    }
-    return notes;
   }
 
   /**
