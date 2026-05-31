@@ -31,12 +31,12 @@
     },
     philidor: {
       fen: '8/8/8/8/3pk3/R7/7r/3K4 w - - 0 1',
-      myColor: 'b',
+      myColor: 'w',
       title: '필리도어',
     },
     lucena: {
       fen: '4r3/R7/8/8/8/5K2/3p4/3k4 w - - 0 1',
-      myColor: 'w',
+      myColor: 'b',
       title: '루세나',
     },
     short_side_defense: {
