@@ -1203,35 +1203,6 @@
       border-color: var(--accent-green-bright);
     }
 
-    .piece-style-selector {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      margin-top: 8px;
-    }
-
-    .piece-style-btn {
-      padding: 5px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: var(--bg-tertiary);
-      color: var(--text-secondary);
-      transition: all 0.15s;
-      font-family: var(--font-main);
-    }
-
-    .piece-style-btn:hover {
-      background: var(--bg-hover);
-      color: var(--text-primary);
-    }
-
-    .piece-style-btn.selected {
-      background: var(--accent-green-dark);
-      border-color: var(--accent-green);
-      color: #fff;
-    }
 
     /* ===== STATUS BAR ===== */
     #status-bar {
