@@ -331,9 +331,18 @@
         const origRender = ChessGame.prototype.renderMoveList;
         if (!origRender || origRender._openingPatched) return;
 
+        let _isMoveClick = false;
+        window.setIsMoveClick = (val) => { _isMoveClick = val; };
+
         ChessGame.prototype.renderMoveList = function () {
           origRender.apply(this, arguments);
           try {
+            if (!_isMoveClick) {
+                // 수 클릭이 아닐 때만 평가 주석 업데이트 (예: 자동 분석 완료 후)
+                if (typeof updateMoveAnnotations === 'function') updateMoveAnnotations();
+            }
+            _isMoveClick = false; // 플래그 초기화
+            
             const op = getOpeningFromGame(this);
             const badge = document.getElementById('opening-badge');
             const ecoEl = document.getElementById('opening-eco');
@@ -363,6 +372,15 @@
           } catch (e) { }
         };
         ChessGame.prototype.renderMoveList._openingPatched = true;
+
+        // 게임 내 수 이동 핸들러 패치 (필요시)
+        if (typeof ChessGame.prototype.gotoMove === 'function') {
+            const _origGoto = ChessGame.prototype.gotoMove;
+            ChessGame.prototype.gotoMove = function() {
+                _isMoveClick = true;
+                _origGoto.apply(this, arguments);
+            }
+        }
       }
 
       // 스크립트가 game.js보다 먼저 로드될 수 있으므로 DOMContentLoaded 이후 시도
@@ -1390,7 +1408,7 @@ const SF_ANA_DEPTH = typeof LICHESS_SF_DEPTH !== 'undefined' ? LICHESS_SF_DEPTH 
           }
         }
 
-        if (CT && typeof CT.detectTacticsGame === 'function') {
+        if (CT && typeof CT.detectTacticsGame === 'function' && !window.location.pathname.includes('/analysis')) {
           setStatus('<span style="color:var(--text-secondary)">⏳ [2단계] 전술 분석 (ChessGrammar)…</span>');
           try {
             // 게임 전체 전술 분석을 한 번에 가져옴 (모든 수 분석 지원)
