@@ -455,10 +455,14 @@ function saveCurrentGame() {
 
 // 초기화 로직 (React 내비게이션 지원)
 function initPalSystem() {
+  document.body.classList.add('practice-page');
   palBuild();
   attachEvents();
   attachBoardEvents();
   attachUIEvents();
+  if (typeof window.tryInitPracticePage === 'function') {
+    window.tryInitPracticePage();
+  }
 }
 
 if (document.readyState === 'loading') {

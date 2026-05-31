@@ -24,16 +24,66 @@
 
   /** 학습 페이지 카드와 동일 엔드게임 포지션 */
   const ENDGAME_TOPICS = {
-    square_rule:        { fen: '8/1p4p1/5b1p/8/P2B4/2P5/1Pk2KP1/8 w - - 2 2',           myColor: 'w', title: '사각형 규칙' },
-    king_pawn_vs_king:  { fen: '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1',           myColor: 'w', title: '킹+폰 vs 킹' },
-    connected_passed: { fen: '8/8/8/K4k2/8/6P1/5P2/8 w - - 0 1',       myColor: 'w', title: '연결된 통과폰' },
-    breakthrough:      { fen: '8/ppp5/8/PPP5/8/7k/8/7K w - - 0 1',           myColor: 'w', title: '돌파' },
-    bar_rule:          { fen: '8/8/p3k3/P7/4KP2/8/8/8 w - - 0 1',          myColor: 'w', title: '바의 규칙' },
-    philidor:          { fen: '8/8/8/8/3pk3/R7/7r/3K4 w - - 0 1',       myColor: 'b', title: '필리도어' },
-    lucena:            { fen: '4r3/R7/8/8/8/5K2/3p4/3k4 w - - 0 1',          myColor: 'w', title: '루세나' },
-    short_side_defense:{ fen: '1r6/8/8/8/7R/K7/2p5/2k5 w - - 0 1',         myColor: 'w', title: '숏 사이드 디펜스' },
-    mate_king_queen_vs_king: { fen: '8/8/8/3k4/8/8/8/4KQ2 w - - 0 1',     myColor: 'w', title: '킹·퀸 vs 킹' },
-    mate_king_rook_vs_king:  { fen: '8/8/8/3k4/8/8/8/4KR2 w - - 0 1',     myColor: 'w', title: '킹·룩 vs 킹' },
+    square_rule: {
+      fen: '8/8/7k/8/2P3p1/8/5K2/8 w - - 0 1',
+      myColor: 'w',
+      title: '사각형 규칙',
+    },
+    king_pawn_vs_king: {
+      fen: '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1',
+      myColor: 'w',
+      title: '킹+폰 vs 킹',
+    },
+    connected_passed: {
+      fen: '8/8/8/K4k2/8/6P1/5P2/8 w - - 0 1',
+      myColor: 'w',
+      title: '연결된 통과폰',
+    },
+    breakthrough: {
+      fen: '8/ppp5/8/PPP5/8/7k/8/7K w - - 0 1',
+      myColor: 'w',
+      title: '돌파',
+    },
+    bar_rule: {
+      fen: '8/8/p3k3/P7/4KP2/8/8/8 w - - 0 1',
+      myColor: 'w',
+      title: '바의 규칙',
+    },
+    philidor: {
+      fen: '8/8/8/8/3pk3/R7/7r/3K4 w - - 0 1',
+      myColor: 'b',
+      title: '필리도어',
+    },
+    lucena: {
+      fen: '4r3/R7/8/8/8/5K2/3p4/3k4 w - - 0 1',
+      myColor: 'w',
+      title: '루세나',
+    },
+    short_side_defense: {
+      fen: '1r6/8/8/8/7R/K7/2p5/2k5 w - - 0 1',
+      myColor: 'w',
+      title: '숏 사이드 디펜스',
+    },
+    mate_king_queen_vs_king: {
+      fen: '8/8/8/3k4/8/8/8/4KQ2 w - - 0 1',
+      myColor: 'w',
+      title: '킹·퀸 vs 킹',
+    },
+    mate_king_rook_vs_king: {
+      fen: '8/8/8/3k4/8/8/8/4KR2 w - - 0 1',
+      myColor: 'w',
+      title: '킹·룩 vs 킹',
+    },
+    rook_vs_queen: {
+      fen: '8/2QK4/8/8/8/8/3rk3/8 w - - 0 1',
+      myColor: 'w',
+      title: '룩 vs 퀸',
+    },
+    queen_vs_pawn: {
+      fen: '8/2QK4/8/8/8/8/3pk3/8 w - - 0 1',
+      myColor: 'w',
+      title: '퀸 vs 폰',
+    },
   };
 
   function readTopicFromUrl() {
