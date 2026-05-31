@@ -419,6 +419,7 @@
   global.WasmChess = {
     isInBounds,
     enemyColor,
+    pseudoMoves,
     isAttacked,
     findKing,
     isInCheck,

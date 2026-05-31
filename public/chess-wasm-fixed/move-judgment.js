@@ -746,10 +746,16 @@
       if (!fenBefore || !fenAfter || !playedSan) return null;
 
       // Step 1: 평가값 수집
-      const cpBefore = getCpFromCache(fenBefore);
-      let   cpAfter  = getCpFromCache(fenAfter);
+      let cpBefore = getCpFromCache(fenBefore);
+      if (cpBefore === null) cpBefore = await ensureCpForFen(fenBefore);
+
+      let cpAfter = getCpFromCache(fenAfter);
       if (cpAfter === null) cpAfter = await ensureCpForFen(fenAfter);
-      if (cpBefore === null || cpAfter === null) return null;
+
+      if (cpBefore === null || cpAfter === null) {
+        console.warn('[MoveJudgment] 평가값 수집 실패:', { cpBefore, cpAfter });
+        return null;
+      }
 
       // Step 2: lichess 판정
       const judgment = global.lichessCpAdviceJudgment(cpBefore, cpAfter, mover);
