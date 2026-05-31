@@ -1727,17 +1727,26 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
 4. 전술적 측면에서 어떤 유형(핀, 포크 등)에 취약하며 어떤 훈련이 필요한지.
 5. 전반적인 총평과 다음 단계를 위한 조언.
 
-[중요 지시 사항]
-- 반드시 **한국어**로만 답변하세요.
-- **한자(漢字)를 절대 사용하지 마세요.** (예: "不存在" 대신 "없음" 또는 "존재하지 않음" 사용)
-- 베트남어, 일본어 등 다른 외국어 단어를 절대 섞지 마세요.
-- 체스 전문 용어는 한국어 또는 표준 영어 용어를 사용하세요.
-- 친절하고 격려하는 어조를 유지하며, 마크다운 형식을 사용하여 가독성 있게 작성하세요.
+[언어 규칙 — 최우선 준수 사항]
+- 출력 언어: **오직 한국어만** 사용하세요.
+- **절대 금지**: 한자(漢字), 베트남어(chơi, bạn, khi 등), 일본어, 중국어 단어·문자를 단 하나도 사용하지 마세요.
+- 체스 전문 용어(Pin, Fork, Skewer, Blunder 등)는 영어 표기 허용.
+- 예시: "交流" → "교류", "不存在" → "없음", "chơi" → "플레이" 로 반드시 대체.
+
+[답변 형식]
+- 친절하고 격려하는 어조를 유지하며, 마크다운 형식으로 가독성 있게 작성하세요.
 `;
+
+        const systemPrompt = `당신은 세계적인 체스 코치입니다.
+[언어 규칙 — 반드시 준수]
+- 출력 언어: 오직 한국어만 사용하십시오.
+- 절대 금지: 한자(漢字), 베트남어(chơi, bạn 등), 일본어, 중국어, 아랍어 등 한국어·영어 이외의 모든 문자·단어 사용 금지.
+- 체스 전문 용어(Pin, Fork, Skewer 등)는 영어 표기 허용.
+- 위 규칙을 위반하는 단어가 하나라도 포함되면 응답 전체가 무효 처리됩니다.`;
 
         const requestBody = {
           messages: [
-            { role: 'system', content: '당신은 세계적인 체스 코치입니다. 모든 답변은 반드시 한국어로만 작성해야 하며, 한자나 다른 외국어를 절대 혼용하지 마십시오.' },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: prompt }
           ],
           temperature: 0.3
@@ -1760,10 +1769,27 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
         }
 
         if (!response.ok) throw new Error('AI 응답을 가져오지 못했습니다.');
-        const data = await response.json();
+        let data = await response.json();
         
         // OpenAI 호환 포맷 (data.choices[0].message.content) 또는 직렬화된 포맷 대응
-        const text = data.choices?.[0]?.message?.content || data.answer || data.text || '분석 결과를 생성할 수 없습니다.';
+        let text = data.choices?.[0]?.message?.content || data.answer || data.text || '분석 결과를 생성할 수 없습니다.';
+
+        // 베트남어·한자 등 외국어 감지 시 Gemini로 재시도
+        const hasForeinChar = /[\u4e00-\u9fff\u3400-\u4dbf]/.test(text) // 한자·중국어
+          || /[àáâãèéêìíòóôõùúýăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(text); // 베트남어
+        if (hasForeinChar) {
+          console.warn('[AI] 외국어 감지 — Gemini로 재시도합니다.');
+          body.innerHTML = '<div class="ai-loading">언어 오류 감지 — Gemini로 재시도 중...</div>';
+          const retryRes = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...requestBody, model: 'gemini-2.5-flash-lite' })
+          });
+          if (retryRes.ok) {
+            const retryData = await retryRes.json();
+            text = retryData.choices?.[0]?.message?.content || text;
+          }
+        }
         
         // 마크다운 처리 개선
         body.innerHTML = text
