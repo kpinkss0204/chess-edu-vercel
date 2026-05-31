@@ -10,9 +10,9 @@ export default async function handler(req, res) {
   try {
     const { model, messages, prompt, max_tokens, temperature } = req.body;
     
-    // Gemini API v1 사용
+    // Gemini API v1beta 사용 (gemini-1.5-flash 이상 모델은 v1beta에서 지원)
     const geminiModel = model || 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1/models/${geminiModel}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
 
     console.log('[API Proxy] Requesting URL:', url); // 디버깅용 로그
 
