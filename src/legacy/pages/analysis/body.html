@@ -149,11 +149,6 @@
               <span id="engine-name">Stockfish 18 WASM</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
-              <button id="best-explain-toggle" onclick="toggleBestExplainPanel()" title="최선수 설명" style="background:none;border:1px solid var(--border-color);border-radius:4px;
-                     color:var(--text-muted);cursor:pointer;font-size:10px;padding:2px 6px;
-                     transition:all 0.15s;white-space:nowrap;">
-                📖 설명
-              </button>
               <span class="depth-info" id="depth-info">로딩 중...</span>
             </div>
           </div>
@@ -167,22 +162,6 @@
 
           <div class="top-moves" id="top-moves">
             <div class="top-moves-empty" id="top-moves-empty">엔진 초기화 중...</div>
-          </div>
-
-          <!-- 최선수 설명 패널 -->
-          <div id="best-explain-panel" style="display:none;">
-            <!-- 헤더: 라벨 + 수순 바 + 새로고침 -->
-            <div class="best-explain-header">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-                <span class="best-explain-header-label">Explaining the next best moves</span>
-                <button class="threat-refresh-btn" onclick="runBestMoveExplain()" title="새로고침">↻</button>
-              </div>
-              <div id="best-explain-seq" class="best-seq-bar"></div>
-            </div>
-            <!-- 설명 본문 -->
-            <div id="best-explain-content">
-              <div class="threat-loading">분석 중...</div>
-            </div>
           </div>
 
           <div id="move-list-wrap">
