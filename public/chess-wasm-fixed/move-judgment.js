@@ -550,18 +550,103 @@
     return null;
   }
 
-  // ⑨ tacticsAfterBest: coach.js의 extractPositionInsights 재사용
+  // ── ChessGrammar tactics 결과를 한국어 텍스트 배열로 변환 (공통 헬퍼) ──────
+  const GRAMMAR_KR = {
+    fork:          (t, san) => `${san} 이후 포크 — ${_fmtTargets(t)} 동시 공격`,
+    absPin:        (t, san) => `${san} 이후 절대 핀 — ${_fmtTargets(t)} (킹 앞)`,
+    relPin:        (t, san) => `${san} 이후 상대 핀 — ${_fmtTargets(t)}`,
+    pin:           (t, san) => `${san} 이후 핀 — ${_fmtTargets(t)}`,
+    skewer:        (t, san) => `${san} 이후 스큐어 — ${_fmtTargets(t)}`,
+    discovered:    (t, san) => `${san} 이후 디스커버드 어택 — ${_fmtTargets(t)}`,
+    doubleCheck:   (t, san) => `${san} 이후 더블 체크`,
+    deflection:    (t, san) => `${san} 이후 편향(Deflection) — ${_fmtTargets(t)} 수비 해제`,
+    interference:  (t, san) => `${san} 이후 간섭(Interference) — ${_fmtTargets(t)}`,
+    trap:          (t, san) => `${san} 이후 기물 트랩 — ${_fmtTargets(t)} 탈출 불가`,
+    backRankMate:  (t, san) => `${san} 이후 백랭크 메이트 위협`,
+    smotheredMate: (t, san) => `${san} 이후 스모더드 메이트 위협`,
+    checkmate:     (t, san) => `${san} 이후 체크메이트 위협`,
+  };
+
+  const PIECE_NAME_KR = {
+    king: '킹', queen: '퀸', rook: '룩', bishop: '비숍', knight: '나이트', pawn: '폰',
+    K: '킹', Q: '퀸', R: '룩', B: '비숍', N: '나이트', P: '폰',
+  };
+
+  function _fmtTargets(tactic) {
+    const targets = tactic && tactic.targets ? tactic.targets : [];
+    if (!targets.length) return '';
+    return targets.slice(0, 3).map(tgt => {
+      const name = PIECE_NAME_KR[tgt.piece_name] || tgt.piece_name || tgt.piece || '';
+      const sq   = tgt.square || tgt.sq || '';
+      return name && sq ? `${name}(${sq})` : (name || sq);
+    }).filter(Boolean).join('+');
+  }
+
+  function _grammarTacticsToItems(tactics, san, sign) {
+    if (!tactics) return [];
+    const items = [];
+    const order = ['checkmate','backRankMate','smotheredMate','doubleCheck',
+                   'fork','absPin','relPin','skewer','discovered',
+                   'deflection','interference','trap'];
+    for (const key of order) {
+      if (!tactics[key]) continue;
+      const fn = GRAMMAR_KR[key];
+      if (fn) items.push({ sign, text: fn(tactics[key], san), grammarKey: key });
+    }
+    return items;
+  }
+
+  // ⑨ tacticsAfterBest: extractPositionInsights(로컬) + ChessGrammar 병행
+  //    ※ 이 함수는 동기 — Grammar 결과는 grammarBestTactics 인자로 외부 주입
   const TACTIC_TAGS = ['[포크]','[이중 압박]','[킹존 압박]','[디스커버드 어택]',
                        '[집중 압박]','[수적 우세]','[추크추방]'];
-  function calcTacticsAfterBest(fenAfterBest, bestSan) {
-    if (!fenAfterBest || typeof global.extractPositionInsights !== 'function') return [];
-    try {
-      const insights = global.extractPositionInsights(fenAfterBest) || [];
-      return insights
-        .filter(s => TACTIC_TAGS.some(tag => s.startsWith(tag)))
-        .slice(0, 3)
-        .map(t => ({ sign: 'plus', text: `${bestSan} 이후 ${t}` }));
-    } catch(e) { return []; }
+  function calcTacticsAfterBest(fenAfterBest, bestSan, grammarBestTactics) {
+    const results = [];
+
+    // (a) 로컬 extractPositionInsights — 빠르고 항상 동작
+    if (fenAfterBest && typeof global.extractPositionInsights === 'function') {
+      try {
+        const insights = global.extractPositionInsights(fenAfterBest) || [];
+        insights
+          .filter(s => TACTIC_TAGS.some(tag => s.startsWith(tag)))
+          .slice(0, 2)
+          .forEach(t => results.push({ sign: 'plus', text: `${bestSan} 이후 ${t}`, src: 'local' }));
+      } catch(e) {}
+    }
+
+    // (b) ChessGrammar 결과 병합 (중복 전술 제거: 같은 key는 Grammar 우선)
+    if (grammarBestTactics) {
+      const grammarItems = _grammarTacticsToItems(grammarBestTactics, bestSan, 'plus');
+      const existingLocalKeys = new Set(
+        results.map(r => {
+          if (r.text.includes('포크')) return 'fork';
+          if (r.text.includes('디스커버드')) return 'discovered';
+          return '__none__';
+        })
+      );
+      grammarItems.forEach(gi => {
+        // Grammar 항목이 로컬과 겹치면 로컬 항목을 교체(더 정확한 Grammar 우선)
+        const dupIdx = results.findIndex(r =>
+          r.src === 'local' && gi.grammarKey &&
+          r.text.toLowerCase().includes(gi.grammarKey.replace(/[A-Z]/g, c => ' '+c.toLowerCase()).trim())
+        );
+        if (dupIdx >= 0) results[dupIdx] = gi;
+        else results.push(gi);
+      });
+    }
+
+    return results.slice(0, 4);
+  }
+
+  // ⑨-b tacticsAfterPlayed: 실제 둔 수 이후 상대에게 허용한 전술 (Grammar 주입)
+  function calcTacticsAfterPlayed(grammarPlayedTactics, playedSan, oppBestSan) {
+    if (!grammarPlayedTactics) return [];
+    // 상대 관점 전술이므로 sign='minus' (내게 불리)
+    const items = _grammarTacticsToItems(grammarPlayedTactics, oppBestSan || '응수', 'minus');
+    return items.map(item => ({
+      ...item,
+      text: `${playedSan} 이후 상대에게 ${item.text.replace((oppBestSan||'응수') + ' 이후 ', '')} 허용`,
+    })).slice(0, 3);
   }
 
   // ⑩ missedTactic
@@ -611,8 +696,9 @@
     collect(raw.mateMissed);
     collect(raw.materialGainBest);
     collect(raw.tacticsAfterBest);
+    collect(raw.tacticsAfterPlayed); // [Grammar] 실제 둔 수 이후 허용 전술
     collect(raw.missedTactic);
-    collect(raw.opponentResponse); // [추가] 상대방 응징 수집
+    collect(raw.opponentResponse);
 
     // Case 1: Best/OK — 마이너스 제거, 플러스만
     if (isGood || isOk) {
@@ -684,6 +770,23 @@
   }
 
   // ── Step 5: prompt 블록 조립 ──────────────────────────────────
+  // Grammar tactics 요약 텍스트 (opponentResponse 등에서 사용)
+  function formatGrammarTacticNames(tactics) {
+    if (!tactics) return '';
+    const found = [];
+    if (tactics.checkmate || tactics.backRankMate || tactics.smotheredMate) found.push('메이트 위협');
+    if (tactics.doubleCheck)  found.push('더블 체크');
+    if (tactics.fork)         found.push('포크');
+    if (tactics.absPin)       found.push('절대 핀');
+    if (tactics.relPin || (tactics.pin && !tactics.absPin)) found.push('핀');
+    if (tactics.skewer)       found.push('스큐어');
+    if (tactics.discovered)   found.push('디스커버드 어택');
+    if (tactics.deflection)   found.push('편향');
+    if (tactics.interference) found.push('간섭');
+    if (tactics.trap)         found.push('기물 트랩');
+    return found.join(', ');
+  }
+
   function buildPromptBlock(params) {
     const {
       judgment, accuracy, wpLoss,
@@ -734,6 +837,20 @@
     if (filtered.contradictionNote) {
       lines.push(`[AI 해설 지침] ${filtered.contradictionNote}`);
       lines.push(``);
+    }
+
+    // Grammar 전술 섹션 (allowed / best)
+    const grammarAllowed = (filtered.playedSection || []).filter(x => x.grammarKey);
+    const grammarBest    = (filtered.bestSection   || []).filter(x => x.grammarKey);
+    if (grammarAllowed.length > 0) {
+      lines.push(`━━ ChessGrammar 감지 전술 (허용) ━━`);
+      grammarAllowed.forEach(x => lines.push(`• ${x.text}`));
+      lines.push('');
+    }
+    if (grammarBest.length > 0 && bestSan && !wasEngineMove) {
+      lines.push(`━━ ChessGrammar 감지 전술 (최선수) ━━`);
+      grammarBest.forEach(x => lines.push(`• ${x.text}`));
+      lines.push('');
     }
 
     lines.push(`[AI 해설 지침]`);
@@ -810,6 +927,43 @@
 
       if (!stateBefore || !stateAfterPlayed) return null;
 
+      // Step 4: ChessGrammar API 병렬 호출 (fenAfterPlayed + fenAfterBest)
+      // rate-limit은 ChessTactics 내부 큐가 처리 → await 가능
+      const CT = typeof global.ChessTactics !== 'undefined' ? global.ChessTactics : null;
+
+      let grammarPlayedTactics = null; // 실제 둔 수 후 — 상대 관점 허용 전술
+      let grammarBestTactics   = null; // 최선수 후 — 내 관점 전술 기회
+
+      if (CT && typeof CT.detectTactics === 'function') {
+        try {
+          // fenAfterPlayed: 상대 차례이므로 상대가 가진 전술 기회 = 내가 허용한 것
+          // fenAfterBest:   역시 상대 차례이나 최선수가 만들어낸 전술 (내가 둬서 생긴 위협)
+          //   → 단, 최선수 후 상대 관점 전술은 "내가 만든 위협"이 아니므로
+          //     fenAfterBest의 반대 턴(mover 관점)을 전달해야 함
+          //     → API는 FEN의 turn 기준으로 분석하므로, fenAfterBest의 turn이 opp이면
+          //       opp가 할 수 있는 것 = 내게 불리 → 올바르게 내 위협만 뽑으려면
+          //       "내가 방금 둔 뒤(fenAfterBest)에서 상대가 할 전술"이 아니라
+          //       "내가 최선수를 두기 전(fenBefore)에서 내 관점" 이 필요.
+          //       실용적으로: fenAfterBest = 상대차례 → 상대 전술 = 내가 허용한 위협
+          //                   fenAfterBest turn을 뒤집어 전달하면 내 위협이 됨
+          //       ChessGrammar API는 FEN의 turn 기준 → fenAfterBest를 그대로 전달하되
+          //       "이 포지션에서 내가(mover) 구사할 전술"을 얻으려면
+          //       turn을 mover로 변경한 FEN을 사용
+          const fenBestForMover = fenAfterBest
+            ? fenAfterBest.replace(/^([^ ]+ )([wb])/, (_, prefix, t) => prefix + mover)
+            : null;
+
+          const [gPlayed, gBest] = await Promise.all([
+            fenAfter      ? CT.detectTactics(fenAfter,          { depth: 'l2' }) : Promise.resolve(null),
+            fenBestForMover ? CT.detectTactics(fenBestForMover, { depth: 'l2' }) : Promise.resolve(null),
+          ]);
+          grammarPlayedTactics = gPlayed;
+          grammarBestTactics   = gBest;
+        } catch(e) {
+          console.warn('[MoveJudgment] ChessGrammar 병렬 호출 실패:', e.message);
+        }
+      }
+
       // Step 4: reasons 계산
       const raw = {
         lostMaterial:       calcLostMaterial(stateBefore.board, stateAfterPlayed.board, mover),
@@ -828,30 +982,42 @@
                               stateAfterBest ? stateAfterBest.board : null,
                               mover, bestSan
                             ),
-        tacticsAfterBest:   calcTacticsAfterBest(fenAfterBest, bestSan),
+        // Grammar 결과를 인자로 주입 (sync 함수 유지, 비동기 의존 없음)
+        tacticsAfterBest:   calcTacticsAfterBest(fenAfterBest, bestSan, grammarBestTactics),
+        tacticsAfterPlayed: calcTacticsAfterPlayed(grammarPlayedTactics, playedSan, oppBestSan),
         missedTactic:       null,
-        // [추가] 상대방의 전술적 응징 감지
+        // 상대방의 전술적 응징 (기물 득실 + 체크 + Grammar 전술 통합)
         opponentResponse:   null,
       };
       raw.missedTactic = calcMissedTactic(
         raw.mateCreated, raw.hangingAfterBest, raw.tacticsAfterBest, bestSan
       );
 
-      // 상대방 응징 로직: 내가 둔 수 때문에 상대가 전술적 이득을 취하는지
+      // 상대방 응징 로직: 기물 손실 / 체크 / Grammar 전술 허용 통합 감지
       if (oppBestSan && fenAfterOppResponse) {
         const oppMover = mover === 'w' ? 'b' : 'w';
         const oppStateAfterResponse = fenToState(fenAfterOppResponse);
         if (oppStateAfterResponse) {
           const oppGain  = calcLostMaterial(stateAfterPlayed.board, oppStateAfterResponse.board, oppMover);
           const isCheck  = oppBestSan.includes('+');
-          const insights = global.extractPositionInsights ? global.extractPositionInsights(fenAfterOppResponse) : [];
-          const isFork   = insights.some(ins => ins.includes('[포크]') && ins.includes(oppBestSan.replace(/[+#]/g,'')));
 
-          if ((oppGain && oppGain.sign === 'plus' && oppGain.netGain >= 1) || isCheck || isFork) {
+          // 로컬 포크 감지
+          const insights = global.extractPositionInsights ? global.extractPositionInsights(fenAfterOppResponse) : [];
+          const isForkLocal = insights.some(ins => ins.includes('[포크]') && ins.includes(oppBestSan.replace(/[+#]/g,'')));
+
+          // Grammar 전술 감지 (이미 grammarPlayedTactics에 포함 — fenAfter 기반)
+          const grammarTacticNames = grammarPlayedTactics
+            ? formatGrammarTacticNames(grammarPlayedTactics) : '';
+
+          const hasThreat = (oppGain && oppGain.sign === 'plus' && oppGain.netGain >= 1)
+                          || isCheck || isForkLocal || grammarTacticNames;
+
+          if (hasThreat) {
             let desc = `상대의 ${oppBestSan} 응수 허용`;
-            if (isFork) desc += ' (포크 위협)';
+            if (grammarTacticNames) desc += ` (${grammarTacticNames})`;
+            else if (isForkLocal)   desc += ' (포크 위협)';
             if (oppGain && oppGain.sign === 'plus') desc += ` — ${oppGain.netGain}점 손실 위험`;
-            else if (isCheck) desc += ' — 체크 위협';
+            else if (isCheck)       desc += ' — 체크 위협';
 
             raw.opponentResponse = { sign: 'minus', text: desc, san: oppBestSan };
           }
