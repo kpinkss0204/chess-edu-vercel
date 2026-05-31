@@ -10,7 +10,11 @@
 
   function pieceImg(piece) {
     // piece = 'wK', 'bP', etc.
-    return `${PIECE_STYLE_BASE}${currentPieceStyle}/${piece}.svg`;
+    // window._currentPieceStyle 우선 (ui.js setPieceStyle에서 세팅)
+    const style = (typeof global._currentPieceStyle === 'string' && global._currentPieceStyle)
+      ? global._currentPieceStyle
+      : currentPieceStyle;
+    return `${PIECE_STYLE_BASE}${style}/${piece}.svg`;
   }
 
   const PIECE_NAMES = {

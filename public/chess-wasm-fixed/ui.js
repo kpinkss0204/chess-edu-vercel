@@ -54,6 +54,15 @@ function init() {
 }
 
 function bootstrapUi() {
+  // 저장된 기물 스타일 복원
+  const savedStyle = localStorage.getItem('pieceStyle');
+  if (savedStyle) {
+    window._currentPieceStyle = savedStyle;
+    // 버튼 선택 상태 복원
+    document.querySelectorAll('.piece-style-btn').forEach(b => {
+      b.classList.toggle('selected', b.getAttribute('onclick').includes(`'${savedStyle}'`));
+    });
+  }
   init();
 }
 
@@ -278,7 +287,10 @@ function setTheme(name) {
 }
 
 function setPieceStyle(style, btn) {
-  currentPieceStyle = style;
+  // window._currentPieceStyle: chess.js IIFE 클로저의 pieceImg()가 읽는 전역 브릿지
+  window._currentPieceStyle = style;
+  currentPieceStyle = style; // 하위 호환 유지
+  localStorage.setItem('pieceStyle', style);
   document.querySelectorAll('.piece-style-btn').forEach(b=>b.classList.remove('selected'));
   if (btn) btn.classList.add('selected');
   game.renderBoard();
