@@ -353,6 +353,32 @@ body {
   color: var(--text-primary);
 }
 
+#hint-toggle-btn.active {
+  background: var(--accent-green-dark);
+  border-color: var(--accent-green);
+  color: #fff;
+}
+
+#hint-panel {
+  background: rgba(127, 166, 80, 0.08);
+  border: 1px solid rgba(127, 166, 80, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 8px;
+  animation: fadeIn 0.2s ease;
+}
+
+#hint-content {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ===== PIECE PALETTE ===== */
 #tab-palette {
   padding: 0;

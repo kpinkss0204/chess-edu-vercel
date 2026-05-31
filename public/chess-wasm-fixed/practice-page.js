@@ -51,12 +51,12 @@
     },
     philidor: {
       fen: '8/8/8/8/3pk3/R7/7r/3K4 w - - 0 1',
-      myColor: 'b',
+      myColor: 'w',
       title: '필리도어',
     },
     lucena: {
       fen: '4r3/R7/8/8/8/5K2/3p4/3k4 w - - 0 1',
-      myColor: 'w',
+      myColor: 'b',
       title: '루세나',
     },
     short_side_defense: {
@@ -247,6 +247,15 @@
     panel.style.display = 'block';
     btn.classList.add('active');
     btn.title = '힌트 숨기기';
+
+    // 힌트가 위치한 설정 탭으로 자동 이동
+    if (typeof window.switchTab === 'function') {
+      window.switchTab('config');
+    }
+    // 모바일인 경우 우측 패널 열기
+    if (window.innerWidth <= 768 && typeof window.toggleMobilePanel === 'function') {
+      window.toggleMobilePanel(true);
+    }
 
     var hintContent = document.getElementById('hint-content');
     if (!hintContent) return;
