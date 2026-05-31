@@ -1232,6 +1232,12 @@ async function runPositionCommentary() {
     updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> AI 해설 생성 중...` });
 
     const answer = await callCommentaryAPI(freshCtx);
+    
+    // API 요청 후 엔진 업데이트 루프 복구
+    if (typeof window.flushCycleToDisplay === 'function') {
+      window.flushCycleToDisplay();
+    }
+    
     const cleaned = sanitizeAnswer(answer, freshCtx);
 
     updateCoachUI({
@@ -1610,12 +1616,14 @@ async function callCommentaryAPI(ctx) {
 
   const prompt = buildCommentaryPrompt(ctx);
 
-  // 디버깅 로그 추가
-  console.group('%c[AI Coach] Commentary API Request', 'color: #4CAF50; font-weight: bold;');
-  console.log('System Prompt:', SYSTEM);
-  console.log('User Prompt:', prompt);
-  console.log('Refined Context:', ctx);
-  console.groupEnd();
+  // 디버깅 로그 추가 (개발 모드만)
+  if (window.DEBUG_COACH) {
+    console.group('%c[AI Coach] Commentary API Request', 'color: #4CAF50; font-weight: bold;');
+    console.log('System Prompt:', SYSTEM);
+    console.log('User Prompt:', prompt);
+    console.log('Refined Context:', ctx);
+    console.groupEnd();
+  }
 
   return callGroqAPIWithSystemTemp(SYSTEM, prompt, 2000, 0.28);
 }

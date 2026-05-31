@@ -1392,3 +1392,7 @@ function handleBgResult({ fen, turn, pvs }) {
     }, 1200);
   }
 }
+
+// ── coach.js 용 외부 인터페이스 노출 ──────────────────────────
+// AI 코치 API 호출 후 엔진 업데이트 복구용
+window.flushCycleToDisplay = flushCycleToDisplay;
