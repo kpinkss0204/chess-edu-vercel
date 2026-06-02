@@ -52,20 +52,53 @@
     return Math.max(0, Math.min(100, raw + 1));
   }
 
-  function gameAccuracyFromEvals(evalRows, myColor) {
+  function gameAccuracyFromEvals(evalRows, myColor, phases) {
     let sumReciprocal = 0, count = 0;
+    let phaseStats = {
+      opening: { sum: 0, count: 0 },
+      middle: { sum: 0, count: 0 },
+      end: { sum: 0, count: 0 }
+    };
+
+    const middlePly = (phases && phases.middle !== null) ? phases.middle : Infinity;
+    const endPly = (phases && phases.end !== null) ? phases.end : Infinity;
+
     for (let ply = 1; ply < evalRows.length; ply++) {
       const isWhiteMove = ply % 2 === 1;
       const mover = isWhiteMove ? 'w' : 'b';
       const isMe = (isWhiteMove && myColor === 'w') || (!isWhiteMove && myColor === 'b');
       if (!isMe) continue;
+
       const cpB = evalRows[ply - 1].cpw, cpA = evalRows[ply].cpw;
       const wpB = lichessWinPercentForMover(cpB, mover);
       const wpA = lichessWinPercentForMover(cpA, mover);
       const acc = lichessMoveAccuracyPercent(wpB, wpA);
-      if (acc > 0) { sumReciprocal += 1 / acc; count++; }
+
+      if (acc > 0) {
+        const reciprocal = 1 / acc;
+        sumReciprocal += reciprocal;
+        count++;
+
+        let phase = 'opening';
+        if (ply >= endPly) phase = 'end';
+        else if (ply >= middlePly) phase = 'middle';
+
+        phaseStats[phase].sum += reciprocal;
+        phaseStats[phase].count++;
+      }
     }
-    return count === 0 ? 0 : Math.round(count / sumReciprocal);
+
+    const totalAcc = count === 0 ? 0 : Math.round(count / sumReciprocal);
+    const openingAcc = phaseStats.opening.count === 0 ? 0 : Math.round(phaseStats.opening.count / phaseStats.opening.sum);
+    const middleAcc = phaseStats.middle.count === 0 ? 0 : Math.round(phaseStats.middle.count / phaseStats.middle.sum);
+    const endAcc = phaseStats.end.count === 0 ? 0 : Math.round(phaseStats.end.count / phaseStats.end.sum);
+
+    return {
+      accuracy: totalAcc,
+      opening: openingAcc,
+      middle: middleAcc,
+      end: endAcc
+    };
   }
 
   /** states[].fen 순서로 Stockfish 평가 (records analyzeGame 과 동일 파라미터). */

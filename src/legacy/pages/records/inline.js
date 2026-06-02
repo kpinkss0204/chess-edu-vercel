@@ -399,8 +399,16 @@ window.toggleMobilePanel = toggleMobilePanel;
         return result;
       }
 
-      // ── 게임 정확도 계산 (조화평균)
-      result.myAccuracy = gameAccuracyFromEvals(evalRows, myColor);
+      // ── 게임 단계 판별 (오프닝, 미들게임, 엔드게임)
+      const phases = typeof ChessDivider !== 'undefined' ? ChessDivider.divide(states) : { middle: null, end: null };
+
+      // ── 게임 정확도 계산 (단계별 포함)
+      const accObj = gameAccuracyFromEvals(evalRows, myColor, phases);
+      result.myAccuracy = accObj.accuracy;
+      result.openingAcc = accObj.opening;
+      result.middleAcc  = accObj.middle;
+      result.endAcc     = accObj.end;
+      result.phases     = phases;
 
       const missedRef = { count: 0 };
       const CT = typeof ChessTactics !== 'undefined' ? ChessTactics : null;
@@ -921,9 +929,10 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         _statsGameDetails = [];
         const openingStatsMap = new Map();
 
-        let newlyAnalyzedCount = 0;
-        let cachedAnalysisCount = 0;
         let sumMyAccuracy = 0, accuracyCount = 0;
+        let sumOpeningAcc = 0, openingAccCount = 0;
+        let sumMiddleAcc = 0, middleAccCount = 0;
+        let sumEndAcc = 0, endAccCount = 0;
 
         function accumulateFromAnalysis(doc, a) {
           sumMyBlunders += a.myBlunders || 0;
@@ -960,6 +969,9 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
             _statsGameDetails.push({ doc, tacticEvents: a.tacticEvents, moveJudgments: a.moveJudgments });
           }
           if (a.myAccuracy > 0) { sumMyAccuracy += a.myAccuracy; accuracyCount++; }
+          if (a.openingAcc > 0) { sumOpeningAcc += a.openingAcc; openingAccCount++; }
+          if (a.middleAcc > 0) { sumMiddleAcc += a.middleAcc; middleAccCount++; }
+          if (a.endAcc > 0) { sumEndAcc += a.endAcc; endAccCount++; }
         }
 
         const updateLoadingUI = (idx, label = '포지션 분석 중…', extra = '') => {
@@ -1058,6 +1070,9 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
                 decoyFound: a.decoyFound || 0, decoyMissed: a.decoyMissed || 0,
                 myCpSum: a.myCpSum, myMoveCount: a.myMoveCount, totalMoves: a.totalMoves,
                 myAccuracy: a.myAccuracy || 0,
+                openingAcc: a.openingAcc || 0,
+                middleAcc: a.middleAcc || 0,
+                endAcc: a.endAcc || 0,
                 forkFound: a.forkFound, forkMissed: a.forkMissed, oppForkCreated: a.oppForkCreated || {},
                 tacticEvents: (a.tacticEvents || []).map(ev => ({
                   type: ev.type, subtype: ev.subtype, piece: ev.piece || '',
@@ -1078,6 +1093,9 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         }
 
         const avgMyAccuracy = accuracyCount > 0 ? Math.round(sumMyAccuracy / accuracyCount) : 0;
+        const avgOpeningAcc = openingAccCount > 0 ? Math.round(sumOpeningAcc / openingAccCount) : 0;
+        const avgMiddleAcc  = middleAccCount > 0 ? Math.round(sumMiddleAcc / middleAccCount) : 0;
+        const avgEndAcc     = endAccCount > 0 ? Math.round(sumEndAcc / endAccCount) : 0;
 
         _statsCache = {
           total, wins, losses, draws, winsW, lossesW, drawsW, winsB, lossesB, drawsB,
@@ -1099,6 +1117,9 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           decoyFound: sumDecoyFound, decoyMissed: sumDecoyMissed,
           avgCpLoss: sumMoves > 0 ? Math.round(sumCp / sumMoves) : 0,
           myAccuracy: avgMyAccuracy,
+          openingAcc: avgOpeningAcc,
+          middleAcc: avgMiddleAcc,
+          endAcc: avgEndAcc,
           openingStats: Array.from(openingStatsMap.values())
             .sort((a, b) => (b.w.total + b.b.total) - (a.w.total + a.b.total))
         };
@@ -1386,6 +1407,28 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           <div class="stats-hero-card">
             <div class="stats-hero-label">승률</div>
             <div class="stats-hero-value" style="color:var(--accent-orange)">${winPct}<span class="stats-hero-unit">%</span></div>
+          </div>
+        </div>
+
+        <!-- [추가] 단계별 정확도 리포트 -->
+        <div class="stats-card-group">
+          <div class="stats-group-title">🎯 게임 단계별 평균 정확도 (Opening / Middle / End)</div>
+          <div class="phase-accuracy-grid">
+            <div class="phase-acc-card">
+              <div class="phase-acc-label">오프닝</div>
+              <div class="phase-acc-value">${s.openingAcc}%</div>
+              <div class="phase-acc-bar"><div class="phase-acc-fill opening" style="width:${s.openingAcc}%"></div></div>
+            </div>
+            <div class="phase-acc-card">
+              <div class="phase-acc-label">미들게임</div>
+              <div class="phase-acc-value">${s.middleAcc}%</div>
+              <div class="phase-acc-bar"><div class="phase-acc-fill middle" style="width:${s.middleAcc}%"></div></div>
+            </div>
+            <div class="phase-acc-card">
+              <div class="phase-acc-label">엔드게임</div>
+              <div class="phase-acc-value">${s.endAcc}%</div>
+              <div class="phase-acc-bar"><div class="phase-acc-fill end" style="width:${s.endAcc}%"></div></div>
+            </div>
           </div>
         </div>
 
@@ -1711,6 +1754,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
   * 나보다 높은 레이팅 상대: ${s.winsHigher}승 ${s.drawsHigher}무 ${s.lossesHigher}패 (승률: ${Math.round(s.winsHigher/Math.max(1, s.winsHigher+s.drawsHigher+s.lossesHigher)*100)}%)
   * 나보다 낮은 레이팅 상대: ${s.winsLower}승 ${s.drawsLower}무 ${s.lossesLower}패 (승률: ${Math.round(s.winsLower/Math.max(1, s.winsLower+s.drawsLower+s.lossesLower)*100)}%)
 - 평균 정확도 (Lichess Accuracy%): ${s.myAccuracy}%
+- 단계별 정확도: 오프닝 ${s.openingAcc}%, 미들게임 ${s.middleAcc}%, 엔드게임 ${s.endAcc}%
 - 평균 Centipawn Loss: ${s.avgCpLoss}
 - 주요 전술 성과:
   * 핀(Pin): ${s.pinFound}회 성공 / ${s.pinMissed}회 놓침
