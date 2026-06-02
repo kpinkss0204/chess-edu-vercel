@@ -1555,6 +1555,7 @@
       color: var(--text-muted);
     }
 
+    .coach-header-btn,
     #coach-toggle-btn {
       width: 28px;
       height: 28px;
@@ -1571,6 +1572,11 @@
       flex-shrink: 0;
     }
 
+    .coach-header-btn {
+      font-size: 14px; /* refresh icon looks better slightly larger */
+    }
+
+    .coach-header-btn:hover,
     #coach-toggle-btn:hover {
       background: var(--bg-hover);
       color: var(--text-primary);
