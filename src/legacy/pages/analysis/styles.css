@@ -1386,31 +1386,6 @@
       background: rgba(80, 144, 208, 0.08);
     }
 
-    /* Drag support */
-    .piece-img {
-      cursor: grab;
-      user-select: none;
-      -webkit-user-drag: none;
-      -webkit-user-select: none;
-      pointer-events: auto;
-    }
-
-    .piece-img:active {
-      cursor: grabbing;
-    }
-
-    #chessboard {
-      user-select: none;
-      -webkit-user-select: none;
-    }
-
-    /* 드래그 중 전체 선택 방지 */
-    body.dragging,
-    body.dragging * {
-      user-select: none !important;
-      cursor: grabbing !important;
-    }
-
     .icon {
       display: block;
     }
@@ -2762,20 +2737,9 @@
       position: fixed;
       inset: 0;
       z-index: 498;
-      background: rgba(0, 0, 0, 0.5);
-    }
-
-    /* ── 우클릭 화살표 오버레이 ── */
-    .board-arrow-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 20;
-      overflow: visible;
-    }
+      flex: 1 !important;
+      }
+      }
 
     /* 분석 페이지 특화 모바일 스타일 */
     @media (max-width: 768px) {

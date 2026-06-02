@@ -472,7 +472,25 @@
     if (!window._fbDb || !window._user) return;
     try {
       const pgn = _game.pgn();
-      const resultStr = _game.game_over() ? (_game.in_checkmate() ? (enemyColor(_game.turn()) === 'w' ? '1-0' : '0-1') : '1/2-1/2') : '*';
+      
+      // 결과 판정 로직 개선 (기권, 시간초과 대응)
+      let resultStr = '*';
+      if (result === 'checkmate') {
+        resultStr = enemyColor(_game.turn()) === 'w' ? '1-0' : '0-1';
+      } else if (result === 'resign_w' || result === 'timeout_w') {
+        resultStr = '0-1';
+      } else if (result === 'resign_b' || result === 'timeout_b') {
+        resultStr = '1-0';
+      } else if (_game.game_over()) {
+        if (_game.in_checkmate()) {
+          resultStr = enemyColor(_game.turn()) === 'w' ? '1-0' : '0-1';
+        } else {
+          resultStr = '1/2-1/2';
+        }
+      } else if (result === 'draw') {
+        resultStr = '1/2-1/2';
+      }
+
       const myName = window._user.displayName || window._user.email.split('@')[0];
       const oppName = document.getElementById('opp-name-el')?.textContent || '상대방';
       const whiteName = _myColor === 'w' ? myName : oppName;
