@@ -148,24 +148,6 @@ body {
   margin-left: 6px;
 }
 
-.player-clock {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.5px;
-}
-
-.player-clock.active {
-  background: var(--accent-green-dark);
-  border-color: var(--accent-green);
-  color: #fff;
-}
-
 .captured-pieces {
   flex: 1;
   display: flex;
