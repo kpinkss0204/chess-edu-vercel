@@ -599,7 +599,13 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           const dateStr = doc.playedAt ? new Date(doc.playedAt.seconds * 1000).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '—';
           const whiteRating = doc.whiteRating ? ` (${doc.whiteRating})` : '';
           const blackRating = doc.blackRating ? ` (${doc.blackRating})` : '';
-          item.innerHTML = `<div class="record-result-badge ${badgeClass}">${badge}</div><div class="record-info"><div class="record-players">${doc.whiteName || '백'}${whiteRating} vs ${doc.blackName || '흑'}${blackRating}</div><div class="record-meta"><span>${label}</span><span>${doc.moveCount || 0}수</span><span>${dateStr}</span></div></div>`;
+          
+          let accuracyBadge = '';
+          if (doc.tacticAnalysis && doc.tacticAnalysis.myAccuracy) {
+            accuracyBadge = `<div class="record-accuracy-badge">${Math.round(doc.tacticAnalysis.myAccuracy)}%</div>`;
+          }
+
+          item.innerHTML = `<div class="record-result-badge ${badgeClass}">${badge}</div><div class="record-info"><div class="record-players">${doc.whiteName || '백'}${whiteRating} vs ${doc.blackName || '흑'}${blackRating}</div><div class="record-meta"><span>${label}</span><span>${doc.moveCount || 0}수</span><span>${dateStr}</span></div></div>${accuracyBadge}`;
           item.addEventListener('click', () => openRecord(doc, item));
           listEl.appendChild(item);
         });
@@ -667,6 +673,20 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       document.getElementById('vp-my-result').className = 'vp-result-label ' + (myWin ? 'win' : myLose ? 'lose' : 'draw');
       document.getElementById('vp-opp-result').textContent = myWin ? '패배' : myLose ? '승리' : '무승부';
       document.getElementById('vp-opp-result').className = 'vp-result-label ' + (myWin ? 'lose' : myLose ? 'win' : 'draw');
+      
+      // [추가] 정확도 요약 업데이트
+      const vaCard = document.getElementById('viewer-accuracy-card');
+      if (doc.tacticAnalysis && doc.tacticAnalysis.myAccuracy) {
+        const ta = doc.tacticAnalysis;
+        document.getElementById('va-total').textContent = Math.round(ta.myAccuracy) + '%';
+        document.getElementById('va-opening').textContent = (ta.openingAcc || 0) + '%';
+        document.getElementById('va-middle').textContent = (ta.middleAcc || 0) + '%';
+        document.getElementById('va-end').textContent = (ta.endAcc || 0) + '%';
+        vaCard.style.display = 'block';
+      } else {
+        vaCard.style.display = 'none';
+      }
+
       renderMoveTokens();
       document.getElementById('viewer-empty').style.display = 'none';
       document.getElementById('viewer-container').style.display = 'flex';

@@ -1713,6 +1713,70 @@
 .phase-acc-fill.middle { background: #e08c3a; }
 .phase-acc-fill.end { background: #4a90e2; }
 
+/* Viewer Accuracy Summary Card */
+.viewer-accuracy-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+
+.va-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.va-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.va-item {
+  text-align: center;
+  padding: 6px 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.va-item.total {
+  background: rgba(127, 166, 80, 0.1);
+  border-color: rgba(127, 166, 80, 0.2);
+}
+
+.va-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.va-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-family: var(--font-accent);
+}
+
+.va-item.total .va-value {
+  color: var(--accent-green-bright);
+}
+
+/* Record Item Accuracy Badge */
+.record-accuracy-badge {
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(127, 166, 80, 0.15);
+  color: var(--accent-green-bright);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
 @media (max-width: 768px) {
   .phase-accuracy-grid {
     grid-template-columns: 1fr;
