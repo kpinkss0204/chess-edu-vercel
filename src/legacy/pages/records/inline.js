@@ -496,6 +496,7 @@ window.toggleMobilePanel = toggleMobilePanel;
         }
       }
 
+      let pendingBlunderPly = -1;
       for (let i = 1; i < states.length; i++) {
         const mover = states[i - 1].turn;
         const san = states[i].san || '';
@@ -503,6 +504,34 @@ window.toggleMobilePanel = toggleMobilePanel;
         const cpBefore = evalRows[i - 1].cpw;
         const cpAfter = evalRows[i].cpw;
         const bad = lichessCpAdviceJudgment(cpBefore, cpAfter, mover);
+
+        // [추가] 상대 블런더 포착 여부 확인
+        if (isMe && pendingBlunderPly !== -1) {
+          const isCaught = !bad || bad === 'inaccuracy';
+          const subtype = isCaught ? 'found' : 'missed';
+          if (isCaught) result.oppBlunderFound++;
+          else result.oppBlunderMissed++;
+          
+          // 전술 이벤트에 추가하여 모달에서 확인 가능하게 함
+          const blunderMove = states[pendingBlunderPly + 1];
+          const PIECE_MAP = { P: 'P', N: 'N', B: 'B', R: 'R', Q: 'Q', K: 'K' };
+          let blunderPiece = '';
+          if (blunderMove.move) {
+            const from = blunderMove.move.from;
+            blunderPiece = states[pendingBlunderPly].board[from[0]][from[1]]?.[1] || '';
+          }
+
+          result.tacticEvents.push({
+            type: 'oppBlunder',
+            subtype: subtype,
+            piece: blunderPiece,
+            moveNum: Math.ceil((pendingBlunderPly + 1) / 2),
+            san: blunderMove.san || '',
+            plyIdx: pendingBlunderPly
+          });
+          pendingBlunderPly = -1;
+        }
+
         const judgmentTag = bad ? ((isMe ? 'my' : 'opp') + bad.charAt(0).toUpperCase() + bad.slice(1)) : null;
         if (result.moveJudgments.length < i) result.moveJudgments.push(judgmentTag);
         if (isMe) {
@@ -516,9 +545,31 @@ window.toggleMobilePanel = toggleMobilePanel;
         } else {
           if (bad === 'inaccuracy') result.oppInaccuracies++;
           else if (bad === 'mistake') result.oppMistakes++;
-          else if (bad === 'blunder') result.oppBlunders++;
+          else if (bad === 'blunder') {
+            result.oppBlunders++;
+            pendingBlunderPly = i - 1; // 상대가 블런더를 범한 시점
+          }
         }
         if (san.includes('#') && isMe) result.checkmates++;
+      }
+
+      // 루프 종료 후 처리되지 않은 상대 블런더 (상대 블런더 후 게임 종료/기권 등)
+      if (pendingBlunderPly !== -1) {
+        result.oppBlunderFound++;
+        const blunderMove = states[pendingBlunderPly + 1];
+        let blunderPiece = '';
+        if (blunderMove && blunderMove.move) {
+          const from = blunderMove.move.from;
+          blunderPiece = states[pendingBlunderPly].board[from[0]][from[1]]?.[1] || '';
+        }
+        result.tacticEvents.push({
+          type: 'oppBlunder',
+          subtype: 'found',
+          piece: blunderPiece,
+          moveNum: Math.ceil((pendingBlunderPly + 1) / 2),
+          san: (blunderMove && blunderMove.san) || '',
+          plyIdx: pendingBlunderPly
+        });
       }
       return result;
     }
@@ -1274,7 +1325,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
                 moveJudgments: a.moveJudgments || [],
                 analyzedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 sfDepth: __RC.SF_DEPTH,
-                analysisVersion: 5
+                analysisVersion: 6
               };
               await _fbDb.collection('game_records').doc(doc.id).update({ tacticAnalysis: savePayload });
             } catch (saveErr) { console.warn('[stats] 저장 실패:', saveErr); }

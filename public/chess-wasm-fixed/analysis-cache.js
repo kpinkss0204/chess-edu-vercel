@@ -16,8 +16,8 @@
     if (!ta || !Array.isArray(ta.moveJudgments) || ta.moveJudgments.length === 0) return false;
     if (expectedMoveCount > 0 && ta.moveJudgments.length < expectedMoveCount) return false;
     
-    // [개선] ChessGrammar 모든 수 분석이 포함된 버전(v5)이어야 완료로 간주
-    return ta.analysisVersion != null && ta.analysisVersion >= 5;
+    // [개선] ChessGrammar 모든 수 분석이 포함된 버전(v6)이어야 완료로 간주
+    return ta.analysisVersion != null && ta.analysisVersion >= 6;
   }
 
   function clearGameAnalysisCache(game) {
