@@ -928,6 +928,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         const total = docs.length;
         _statsGameDetails = [];
         const openingStatsMap = new Map();
+        let cachedAnalysisCount = 0, newlyAnalyzedCount = 0;
 
         let sumMyAccuracy = 0, accuracyCount = 0;
         let sumOpeningAcc = 0, openingAccCount = 0;
