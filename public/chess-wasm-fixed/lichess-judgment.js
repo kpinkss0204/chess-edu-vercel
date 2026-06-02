@@ -88,10 +88,10 @@
       }
     }
 
-    const totalAcc = count === 0 ? 0 : Math.round(count / sumReciprocal);
-    const openingAcc = phaseStats.opening.count === 0 ? 0 : Math.round(phaseStats.opening.count / phaseStats.opening.sum);
-    const middleAcc = phaseStats.middle.count === 0 ? 0 : Math.round(phaseStats.middle.count / phaseStats.middle.sum);
-    const endAcc = phaseStats.end.count === 0 ? 0 : Math.round(phaseStats.end.count / phaseStats.end.sum);
+    const totalAcc = count === 0 ? null : Math.round(count / sumReciprocal);
+    const openingAcc = phaseStats.opening.count === 0 ? null : Math.round(phaseStats.opening.count / phaseStats.opening.sum);
+    const middleAcc = phaseStats.middle.count === 0 ? null : Math.round(phaseStats.middle.count / phaseStats.middle.sum);
+    const endAcc = phaseStats.end.count === 0 ? null : Math.round(phaseStats.end.count / phaseStats.end.sum);
 
     return {
       accuracy: totalAcc,

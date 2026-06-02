@@ -729,10 +729,11 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       const vaCard = document.getElementById('viewer-accuracy-card');
       if (doc.tacticAnalysis && doc.tacticAnalysis.myAccuracy) {
         const ta = doc.tacticAnalysis;
+        const fmtAcc = (val) => (val === null || val === undefined || val === 0) ? '-' : Math.round(val) + '%';
         document.getElementById('va-total').textContent = Math.round(ta.myAccuracy) + '%';
-        document.getElementById('va-opening').textContent = (ta.openingAcc || 0) + '%';
-        document.getElementById('va-middle').textContent = (ta.middleAcc || 0) + '%';
-        document.getElementById('va-end').textContent = (ta.endAcc || 0) + '%';
+        document.getElementById('va-opening').textContent = fmtAcc(ta.openingAcc);
+        document.getElementById('va-middle').textContent = fmtAcc(ta.middleAcc);
+        document.getElementById('va-end').textContent = fmtAcc(ta.endAcc);
         vaCard.style.display = 'block';
       } else {
         vaCard.style.display = 'none';
@@ -963,59 +964,53 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       let labels = [], data = [];
       const analyzedDocs = docs.filter(d => d.tacticAnalysis && d.tacticAnalysis.myAccuracy);
       
-      if (period === '1D') {
-        // 최근 24시간 (3시간 단위)
-        for (let i = 7; i >= 0; i--) {
-          const start = new Date(now.getTime() - (i + 1) * 3 * 3600000);
-          const end = new Date(now.getTime() - i * 3 * 3600000);
-          const periodDocs = analyzedDocs.filter(d => {
-            const t = d.playedAt ? d.playedAt.seconds * 1000 : 0;
-            return t >= start.getTime() && t < end.getTime();
-          });
-          labels.push(`${start.getHours()}시`);
-          const avg = periodDocs.length ? periodDocs.reduce((sum, d) => sum + d.tacticAnalysis.myAccuracy, 0) / periodDocs.length : null;
-          data.push(avg ? Math.round(avg) : null);
+      if (analyzedDocs.length === 0) return { labels, data };
+
+      // 데이터가 존재하는 가장 오래된 시점 찾기
+      const timestamps = analyzedDocs.map(d => d.playedAt ? d.playedAt.seconds * 1000 : 0).filter(t => t > 0);
+      if (timestamps.length === 0) return { labels, data };
+      
+      const minTime = Math.min(...timestamps);
+      const startTime = new Date(minTime);
+      startTime.setHours(0, 0, 0, 0); // 날짜 기준 시작
+
+      let intervalMs;
+      if (period === '1D') intervalMs = 24 * 3600000;
+      else if (period === '1W') intervalMs = 7 * 24 * 3600000;
+      else if (period === '1M') intervalMs = 30 * 24 * 3600000;
+      else if (period === '1Y') intervalMs = 365 * 24 * 3600000;
+      else intervalMs = 30 * 24 * 3600000;
+
+      let current = new Date(startTime.getTime());
+      
+      // 만약 데이터 범위가 너무 넓으면 (예: 1일 단위인데 1년치 데이터), 성능을 위해 루프 제한
+      while (current <= now) {
+        const next = new Date(current.getTime() + intervalMs);
+        
+        const periodDocs = analyzedDocs.filter(d => {
+          const t = d.playedAt ? d.playedAt.seconds * 1000 : 0;
+          return t >= current.getTime() && t < next.getTime();
+        });
+
+        let label = '';
+        if (period === '1D') {
+          label = `${current.getMonth() + 1}/${current.getDate()}`;
+        } else if (period === '1W') {
+          label = `${current.getMonth() + 1}/${current.getDate()}주`;
+        } else if (period === '1M') {
+          label = `${current.getFullYear().toString().slice(2)}/${current.getMonth() + 1}`;
+        } else if (period === '1Y') {
+          label = `${current.getFullYear()}년`;
         }
-      } else if (period === '1W') {
-        // 최근 7일
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(now.getTime() - i * 24 * 3600000);
-          const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
-          const periodDocs = analyzedDocs.filter(doc => {
-            const t = doc.playedAt ? new Date(doc.playedAt.seconds * 1000) : null;
-            return t && t.toLocaleDateString() === d.toLocaleDateString();
-          });
-          labels.push(dateStr);
-          const avg = periodDocs.length ? periodDocs.reduce((sum, doc) => sum + doc.tacticAnalysis.myAccuracy, 0) / periodDocs.length : null;
-          data.push(avg ? Math.round(avg) : null);
-        }
-      } else if (period === '1M') {
-        // 최근 30일 (5일 단위)
-        for (let i = 5; i >= 0; i--) {
-          const start = new Date(now.getTime() - (i + 1) * 5 * 24 * 3600000);
-          const end = new Date(now.getTime() - i * 5 * 24 * 3600000);
-          const periodDocs = analyzedDocs.filter(d => {
-            const t = d.playedAt ? d.playedAt.seconds * 1000 : 0;
-            return t >= start.getTime() && t < end.getTime();
-          });
-          labels.push(`${start.getMonth() + 1}/${start.getDate()}~`);
-          const avg = periodDocs.length ? periodDocs.reduce((sum, d) => sum + d.tacticAnalysis.myAccuracy, 0) / periodDocs.length : null;
-          data.push(avg ? Math.round(avg) : null);
-        }
-      } else if (period === '1Y') {
-        // 최근 12개월
-        for (let i = 11; i >= 0; i--) {
-          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-          const monthStr = `${d.getMonth() + 1}월`;
-          const periodDocs = analyzedDocs.filter(doc => {
-            const t = doc.playedAt ? new Date(doc.playedAt.seconds * 1000) : null;
-            return t && t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth();
-          });
-          labels.push(monthStr);
-          const avg = periodDocs.length ? periodDocs.reduce((sum, doc) => sum + doc.tacticAnalysis.myAccuracy, 0) / periodDocs.length : null;
-          data.push(avg ? Math.round(avg) : null);
-        }
+
+        labels.push(label);
+        const avg = periodDocs.length ? periodDocs.reduce((sum, d) => sum + d.tacticAnalysis.myAccuracy, 0) / periodDocs.length : null;
+        data.push(avg ? Math.round(avg) : null);
+
+        current = next;
+        if (labels.length > 100) break; // 최대 100개 포인트로 제한
       }
+
       return { labels, data };
     }
 
@@ -1211,10 +1206,10 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           if ((a.tacticEvents && a.tacticEvents.length) || (a.moveJudgments && a.moveJudgments.length)) {
             _statsGameDetails.push({ doc, tacticEvents: a.tacticEvents, moveJudgments: a.moveJudgments });
           }
-          if (a.myAccuracy > 0) { sumMyAccuracy += a.myAccuracy; accuracyCount++; }
-          if (a.openingAcc > 0) { sumOpeningAcc += a.openingAcc; openingAccCount++; }
-          if (a.middleAcc > 0) { sumMiddleAcc += a.middleAcc; middleAccCount++; }
-          if (a.endAcc > 0) { sumEndAcc += a.endAcc; endAccCount++; }
+          if (a.myAccuracy !== null && a.myAccuracy !== undefined) { sumMyAccuracy += a.myAccuracy; accuracyCount++; }
+          if (a.openingAcc !== null && a.openingAcc !== undefined) { sumOpeningAcc += a.openingAcc; openingAccCount++; }
+          if (a.middleAcc !== null && a.middleAcc !== undefined) { sumMiddleAcc += a.middleAcc; middleAccCount++; }
+          if (a.endAcc !== null && a.endAcc !== undefined) { sumEndAcc += a.endAcc; endAccCount++; }
         }
 
         const updateLoadingUI = (idx, label = '포지션 분석 중…', extra = '') => {
@@ -1325,7 +1320,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
                 moveJudgments: a.moveJudgments || [],
                 analyzedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 sfDepth: __RC.SF_DEPTH,
-                analysisVersion: 6
+                analysisVersion: 7
               };
               await _fbDb.collection('game_records').doc(doc.id).update({ tacticAnalysis: savePayload });
             } catch (saveErr) { console.warn('[stats] 저장 실패:', saveErr); }
@@ -1335,10 +1330,10 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           }
         }
 
-        const avgMyAccuracy = accuracyCount > 0 ? Math.round(sumMyAccuracy / accuracyCount) : 0;
-        const avgOpeningAcc = openingAccCount > 0 ? Math.round(sumOpeningAcc / openingAccCount) : 0;
-        const avgMiddleAcc  = middleAccCount > 0 ? Math.round(sumMiddleAcc / middleAccCount) : 0;
-        const avgEndAcc     = endAccCount > 0 ? Math.round(sumEndAcc / endAccCount) : 0;
+        const avgMyAccuracy = accuracyCount > 0 ? Math.round(sumMyAccuracy / accuracyCount) : null;
+        const avgOpeningAcc = openingAccCount > 0 ? Math.round(sumOpeningAcc / openingAccCount) : null;
+        const avgMiddleAcc  = middleAccCount > 0 ? Math.round(sumMiddleAcc / middleAccCount) : null;
+        const avgEndAcc     = endAccCount > 0 ? Math.round(sumEndAcc / endAccCount) : null;
 
         _statsCache = {
           total, wins, losses, draws, winsW, lossesW, drawsW, winsB, lossesB, drawsB,
@@ -1637,6 +1632,8 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       const dPct = Math.round((s.draws / total) * 100) || 0;
       const lPct = 100 - wPct - dPct;
 
+      const fmt = (v) => (v === null || v === undefined) ? '-' : v + '%';
+
       contentEl.innerHTML = `
         <div class="stats-hero">
           <div class="stats-hero-card">
@@ -1645,7 +1642,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           </div>
           <div class="stats-hero-card">
             <div class="stats-hero-label">평균 종합 정확도</div>
-            <div class="stats-hero-value" style="color:var(--accent-green-bright)">${avgAcc}<span class="stats-hero-unit">%</span></div>
+            <div class="stats-hero-value" style="color:var(--accent-green-bright)">${fmt(avgAcc)}</div>
           </div>
           <div class="stats-hero-card">
             <div class="stats-hero-label">승률</div>
@@ -1659,18 +1656,18 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           <div class="phase-accuracy-grid">
             <div class="phase-acc-card">
               <div class="phase-acc-label">오프닝</div>
-              <div class="phase-acc-value">${s.openingAcc}%</div>
-              <div class="phase-acc-bar"><div class="phase-acc-fill opening" style="width:${s.openingAcc}%"></div></div>
+              <div class="phase-acc-value">${fmt(s.openingAcc)}</div>
+              <div class="phase-acc-bar"><div class="phase-acc-fill opening" style="width:${s.openingAcc || 0}%"></div></div>
             </div>
             <div class="phase-acc-card">
               <div class="phase-acc-label">미들게임</div>
-              <div class="phase-acc-value">${s.middleAcc}%</div>
-              <div class="phase-acc-bar"><div class="phase-acc-fill middle" style="width:${s.middleAcc}%"></div></div>
+              <div class="phase-acc-value">${fmt(s.middleAcc)}</div>
+              <div class="phase-acc-bar"><div class="phase-acc-fill middle" style="width:${s.middleAcc || 0}%"></div></div>
             </div>
             <div class="phase-acc-card">
               <div class="phase-acc-label">엔드게임</div>
-              <div class="phase-acc-value">${s.endAcc}%</div>
-              <div class="phase-acc-bar"><div class="phase-acc-fill end" style="width:${s.endAcc}%"></div></div>
+              <div class="phase-acc-value">${fmt(s.endAcc)}</div>
+              <div class="phase-acc-bar"><div class="phase-acc-fill end" style="width:${s.endAcc || 0}%"></div></div>
             </div>
           </div>
         </div>
@@ -1824,24 +1821,6 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
           </div>
         </div>
 
-        <div class="stats-card-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-          <div>
-            <div class="stats-group-title">📏 대국 길이</div>
-            <div class="avg-moves-card">
-              <div class="avg-moves-num">${s.avgMoves}</div>
-              <div class="avg-moves-desc">평균 대국 수<br><span style="font-size:11px">대국당 평균 ${s.avgMoves}수 진행</span></div>
-            </div>
-          </div>
-          <div>
-            <div class="stats-group-title">🏁 종료 방식 요약</div>
-            <div class="end-list">
-              ${renderEndItem('체크메이트', s.endCheckmate, total)}
-              ${renderEndItem('기권/기타', s.endResign, total)}
-              ${renderEndItem('시간 초과', s.endTimeout, total)}
-              ${renderEndItem('무승부', s.endDraw, total)}
-            </div>
-          </div>
-        </div>
         <div style="height:32px"></div>
       `;
 
