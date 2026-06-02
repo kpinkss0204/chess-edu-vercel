@@ -1777,6 +1777,48 @@
   margin-left: auto;
 }
 
+/* Trend Chart Styles */
+.stats-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.chart-periods {
+  display: flex;
+  gap: 4px;
+}
+
+.cp-btn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cp-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.cp-btn.active {
+  background: var(--accent-green-bright);
+  border-color: var(--accent-green-bright);
+  color: #fff;
+  font-weight: 800;
+}
+
+.trend-chart-container {
+  height: 200px;
+  position: relative;
+  width: 100%;
+}
+
 @media (max-width: 768px) {
   .phase-accuracy-grid {
     grid-template-columns: 1fr;
