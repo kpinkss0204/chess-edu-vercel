@@ -1165,6 +1165,11 @@ async function runPositionCommentary() {
   if (boardAreaRpc) boardAreaRpc.classList.add('coach-open');
   coachOpen = true;
 
+  // 패널 제목 업데이트
+  const panelTitle = document.querySelector('#coach-panel .panel-title-text') || 
+                     document.querySelector('#coach-inline .coach-header-title');
+  if (panelTitle) panelTitle.textContent = '📋 GM AI 전략 브리핑';
+
   const ctx = buildChessContext();
   if (!ctx) return;
 
@@ -1184,6 +1189,18 @@ async function runPositionCommentary() {
 
     // 최신 컨텍스트 다시 빌드 (라인이 갱신됐을 수 있음)
     let freshCtx = buildChessContext();
+
+    // ── 신규: 상세 평가(Detailed Eval) 가져오기 ──
+    updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 상세 전략 지표 분석 중...` });
+    try {
+      const dEval = await getDetailedEval(freshCtx.fen);
+      if (dEval) {
+        freshCtx.detailedEval = dEval;
+        console.log('[Coach] Detailed Eval:', dEval);
+      }
+    } catch (deErr) {
+      console.warn('[Coach] 상세 평가 가져오기 실패:', deErr);
+    }
 
     // ── 신규: 방금 둔 수 평가 (Move Judgment) ──
     if (typeof buildMoveJudgment === 'function' && game && game.historyIndex >= 0) {
@@ -1404,6 +1421,18 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수`);
   lines.push(`현재 형세: ${ctx.advantageDesc}`);
 
+  // ── [신규] 상세 평가 지표 추가 ──
+  if (ctx.detailedEval) {
+    const de = ctx.detailedEval;
+    lines.push(`[상세 포지셔널 지표 (Positive = 백 유리, Negative = 흑 유리)]`);
+    lines.push(`  • 활동성(Mobility): ${de.mobility > 0 ? '+' : ''}${de.mobility.toFixed(2)}`);
+    lines.push(`  • 킹 안전도(King Safety): ${de.kingSafety > 0 ? '+' : ''}${de.kingSafety.toFixed(2)}`);
+    lines.push(`  • 공간(Space): ${de.space > 0 ? '+' : ''}${de.space.toFixed(2)}`);
+    lines.push(`  • 폰 구조(Pawns): ${de.pawnStructure > 0 ? '+' : ''}${de.pawnStructure.toFixed(2)}`);
+    lines.push(`  • 기물 불균형(Imbalance): ${de.imbalance > 0 ? '+' : ''}${de.imbalance.toFixed(2)}`);
+    lines.push(`  ※ 지표 해석: 기물 숫자가 같더라도 위 지표 중 하나가 1.0 이상 차이 나면 기물 하나(폰) 이상의 가치 차이가 있는 것으로 간주하세요.`);
+  }
+
   if (ctx.lastMoveSan) {
     const ann = ctx.lastMoveAnnotation ? ` (${ctx.lastMoveAnnotation})` : '';
     lines.push(`직전 수: ${ctx.lastMoveSan}${ann} (상대방인 ${lastMoverLabel}이 둠)`);
@@ -1418,6 +1447,16 @@ function buildCommentaryPrompt(ctx) {
     if (liveLine3) lines.push(`3순위 수순: ${liveLine3}`);
   } else {
     lines.push(`[엔진 라인 미준비] 구조·브리프·직전 수 맥락만 설명.`);
+  }
+
+  // ── [신규] 상대방의 응징(Refutation) 정보 명시 ──
+  if (ctx.moveJudgment && ctx.moveJudgment.raw && ctx.moveJudgment.raw.opponentResponse) {
+    const resp = ctx.moveJudgment.raw.opponentResponse;
+    lines.push(``);
+    lines.push(`[상대방의 징벌 수순 (Refutation)]`);
+    lines.push(`  • 위협적인 응수: ${resp.san}`);
+    lines.push(`  • 근거: ${resp.text}`);
+    lines.push(`  ※ AI 지침: 사용자가 실수를 했다면, 반드시 위 응수를 언급하며 '왜' 안 좋은지 구체적인 전술적 근거를 제시하세요.`);
   }
 
   // 사용자 화살표 (후보수 / 수순) 정제
@@ -1605,29 +1644,22 @@ function buildCoachPrompt(ctx, question) {
 
 // 포지션 해설 전용 API 호출
 async function callCommentaryAPI(ctx) {
-  const SYSTEM = `당신은 유튜브 채널 "체스인사이드"의 해설자이자 마스터 체스 코치입니다. 당신의 목표는 현재 포지션을 종합적으로 분석하여 학습자에게 전략적 방향과 구체적인 전술을 모두 제공하는 것입니다.
+  const moverLabel = ctx.turn === 'w' ? '백' : '흑';
+  const opponentLabel = ctx.turn === 'w' ? '흑' : '백';
 
-아래 예시들이 당신이 지켜야 할 정확한 말투와 구조입니다. 특히 **이후 수순** 섹션의 논리적 흐름을 주목하세요.
+  const SYSTEM = `당신은 유튜브 채널 "체스인사이드"의 해설자이자 마스터 체스 코치입니다. 당신의 목표는 제공된 데이터를 바탕으로 'GM AI 전략 브리핑'을 제공하는 것입니다.
 
-───────────────────────────────────────
-【예시 A — 위협 기반의 이후 수순 설명】
-**포지션 상황**
-지금 백이 d4를 두면서 중앙 싸움을 걸어왔고요. 흑은 Nf6로 대응하며 기물 전개를 이어가고 있습니다.
+【섹션 구성 및 논리 규칙 — 절대 준수】
+1. **포지션 상황**: 현재 차례인 ${moverLabel}의 입장에서 상황을 진단하세요.
+2. **이후 수순**: 반드시 아래의 **'위협-응수'** 논리 구조를 따르세요.
+   - 구조: "만약 ${moverLabel}이 최선수를 두었는데, 상대방(${opponentLabel})이 이를 방치하고 차례를 넘긴다면(Null Move), ${moverLabel}은 [추가 위협 수]를 두어 결정적인 이득을 챙길 수 있습니다. 따라서 ${opponentLabel}은 반드시 이를 막기 위해 대응해야 합니다."
+   - **주의**: 절대로 "${opponentLabel}이 [${moverLabel}의 수]를 두지 않고"와 같이 주어를 섞지 마세요. 수는 오직 주인만이 둡니다.
 
-**이후 수순**
-백이 여기서 **Nb5**로 나이트를 전진시키는 것이 매우 날카로운데요. 만약 흑이 이를 방치한다면, 백은 다음 수에 **Nxc7+**를 두어 킹을 체크함과 동시에 룩을 잡아내는 **치명적인 포크**를 성공시킬 위협을 가지고 있습니다. 따라서 흑은 **Na6**나 **d6**와 같은 수로 c7 지점을 반드시 수비해야 하고, 이 과정에서 백은 주도권을 잡고 경기를 풀어나갈 수 있게 됩니다.
-
-【예시 B — 조용한 수(예방)의 설명】
-**이후 수순**
-백이 둔 **a3**는 언뜻 보기엔 평범한 수처럼 보이지만, 사실 흑의 **Nb4** 침투를 미리 차단하는 아주 중요한 **예방적 수**입니다. 만약 백이 이 수를 두지 않았다면 흑의 나이트가 중앙으로 뛰어들며 백의 퀸과 비숍을 괴롭혔을 텐데, **a3**를 통해 그 가능성을 원천 봉쇄하고 룩의 활동성까지 확보하는 일석이조의 효과를 노리고 있습니다.
-───────────────────────────────────────
-
-【작성 세부 지침 — 공수 교대 절대 주의】
-1. **위협 중심 해설**: **이후 수순** 섹션은 단순히 수순을 나열하지 마세요. "만약 상대가 방치한다면 벌어질 위협(Null-move Threat)"을 먼저 언급하고, 이를 막기 위한 "상대의 응수"를 설명하는 논리적 구조를 따르세요.
-2. **역할 고정**: 당신은 지금 차례인 플레이어(Mover)의 관점에서 분석해야 합니다.
-3. **주어 명시**: 모든 수순 해설에서 "백이 ~하면, 흑이 ~하고"와 같이 주어를 매번 명시하세요.
-4. **말투**: 체스인사이드 유튜브 스타일 (~고요, ~거든요, ~겠습니다, ~는 거죠).
-5. **금기 사항**: cp/점수 수치 사용 금지, 할루시네이션(불가능한 수) 주의, 모호한 단어("반격", "카운터") 남발 금지.`;
+【작성 세부 지침】
+- **데이터 우선**: 제공된 [엔진 수순]과 [방치 시 위협 분석] 데이터만 사용하세요. 스스로 수읽기를 지어내지 마세요.
+- **주어 명시**: 모든 문장에 "백이 ~하면", "흑이 ~하고"와 같이 주어를 매번 명시하세요.
+- **말투**: 체스인사이드 스타일 (~고요, ~거든요, ~겠습니다, ~는 거죠).
+- **금기**: cp/승률 수치 언급 금지. 할루시네이션(불가능한 수) 주의.`;
 
   const prompt = buildCommentaryPrompt(ctx);
 

@@ -579,6 +579,16 @@ body {
   flex-shrink: 0;
 }
 
+.board-arrow-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+  z-index: 20;
+}
+
 .puzzle-board-placeholder {
   text-align: center;
   color: var(--text-muted);

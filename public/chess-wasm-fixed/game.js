@@ -41,12 +41,6 @@ class ChessGame {
     this.pendingPromo = null;
     this.halfMove = 0;
     this.fullMove = 1;
-
-    // User Arrows (Right-click drawing)
-    this._userArrows = [];
-    this._arrowStart = null;
-    this._rightDragging = false;
-
     this.renderBoard();
     this.renderMoveList();
     this.updateStatus();
@@ -623,7 +617,6 @@ class ChessGame {
     }
 
     this.updateCapturedPieces();
-    this.redrawUserArrows();
   }
 
   // ── AI 인터랙티브 동기화 메서드 (Phase 2) ──────────────────
@@ -1617,170 +1610,6 @@ class ChessGame {
     elWhite.innerHTML = capturedByWhite.map(p=>
       `<img src="${pieceImg(p)}" style="width:18px;height:18px;opacity:0.9" alt="${p}">`
     ).join('');
-  }
-
-  // ── 우클릭 화살표 그리기 중앙 집중화 ────────────────────────
-  
-  /**
-   * 보드 요소에 우클릭 화살표 이벤트를 연결합니다.
-   * @param {HTMLElement} boardEl 
-   */
-  attachUserArrowEvents(boardEl) {
-    if (!boardEl) return;
-    this._userArrowBoard = boardEl;
-
-    // 우클릭 시작: 시작 칸 기억
-    boardEl.addEventListener('contextmenu', (e) => e.preventDefault());
-
-    boardEl.addEventListener('mousedown', (e) => {
-      if (e.button === 2) { // 우클릭
-        this._rightDragging = true;
-        this._arrowStart = this._getBoardSquareFromEvent(e);
-      } else if (e.button === 0) { // 좌클릭: 화살표 초기화
-        this._userArrows = [];
-        this.redrawUserArrows();
-        this._arrowStart = null;
-        this._rightDragging = false;
-      }
-    });
-
-    // mouseup은 document에 등록 (보드 밖에서 떼도 잡힘)
-    const onUp = (e) => {
-      if (e.button !== 2) return;
-      if (!this._rightDragging || !this._arrowStart) {
-        this._rightDragging = false;
-        this._arrowStart = null;
-        return;
-      }
-      this._rightDragging = false;
-
-      const sq = this._getBoardSquareFromEvent(e);
-      if (!sq) { this._arrowStart = null; return; }
-
-      // 시작 칸 == 끝 칸: 화살표 전체 초기화
-      if (sq.col === this._arrowStart.col && sq.row === this._arrowStart.row) {
-        this._userArrows = [];
-      } else {
-        // 토글 처리
-        const idx = this._userArrows.findIndex(a =>
-          a.fc === this._arrowStart.col && a.fr === this._arrowStart.row &&
-          a.tc === sq.col && a.tr === sq.row
-        );
-        if (idx >= 0) this._userArrows.splice(idx, 1);
-        else this._userArrows.push({
-          fc: this._arrowStart.col, fr: this._arrowStart.row,
-          tc: sq.col, tr: sq.row
-        });
-      }
-
-      this.redrawUserArrows();
-      this._arrowStart = null;
-    };
-
-    document.addEventListener('mouseup', onUp);
-    
-    // coach.js 호환성을 위해 window 노출
-    const self = this;
-    Object.defineProperty(window, '_userArrows', {
-      get: function() { return self._userArrows; },
-      configurable: true
-    });
-  }
-
-  _getBoardSquareFromEvent(e) {
-    const board = this._userArrowBoard;
-    if (!board) return null;
-    const rect = board.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width - 1, e.clientX - rect.left));
-    const y = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
-    return {
-      col: Math.floor(x / rect.width * 8),
-      row: Math.floor(y / rect.height * 8)
-    };
-  }
-
-  ensureArrowSvg() {
-    const SVG_NS = 'http://www.w3.org/2000/svg';
-    const MARKER_ID = 'user-arrow-svg-head';
-    const ARROW_COLOR = 'rgba(255, 165, 0, 0.92)';
-
-    let existingSvg = document.getElementById('board-svg-overlay') || document.getElementById('user-arrow-svg');
-    if (!existingSvg) {
-      const board = document.getElementById('chessboard') || this._userArrowBoard;
-      if (!board) return null;
-      let wrap = board.parentElement;
-      if (!wrap || getComputedStyle(wrap).position === 'static') wrap = board;
-      
-      existingSvg = document.createElementNS(SVG_NS, 'svg');
-      existingSvg.id = 'user-arrow-svg';
-      existingSvg.setAttribute('viewBox', '0 0 800 800');
-      existingSvg.setAttribute('preserveAspectRatio', 'none');
-      existingSvg.classList.add('board-arrow-overlay');
-      wrap.appendChild(existingSvg);
-      if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
-    }
-
-    let g = existingSvg.querySelector('#user-arrow-svg-arrows');
-    if (!g) {
-      // Marker defs
-      let defs = existingSvg.querySelector('defs');
-      if (!defs) {
-        defs = document.createElementNS(SVG_NS, 'defs');
-        existingSvg.prepend(defs);
-      }
-      if (!document.getElementById(MARKER_ID)) {
-        const mk = document.createElementNS(SVG_NS, 'marker');
-        mk.setAttribute('id', MARKER_ID);
-        mk.setAttribute('markerUnits', 'strokeWidth');
-        mk.setAttribute('markerWidth', '4'); mk.setAttribute('markerHeight', '4');
-        mk.setAttribute('refX', '2.5'); mk.setAttribute('refY', '2');
-        mk.setAttribute('orient', 'auto');
-        const mp = document.createElementNS(SVG_NS, 'path');
-        mp.setAttribute('d', 'M0,0 L4,2 L0,4 L1,2 Z');
-        mp.setAttribute('fill', ARROW_COLOR);
-        mk.appendChild(mp); defs.appendChild(mk);
-      }
-      g = document.createElementNS(SVG_NS, 'g');
-      g.id = 'user-arrow-svg-arrows';
-      existingSvg.appendChild(g);
-    }
-    return g;
-  }
-
-  redrawUserArrows() {
-    const g = this.ensureArrowSvg();
-    if (!g) return;
-    g.innerHTML = '';
-    const SVG_NS = 'http://www.w3.org/2000/svg';
-    const MARKER_ID = 'user-arrow-svg-head';
-    const ARROW_COLOR = 'rgba(255, 165, 0, 0.92)';
-    const ARROW_SW = 14;
-
-    this._userArrows.forEach(a => {
-      const from = { px: a.fc * 100 + 50, py: a.fr * 100 + 50 };
-      const to = { px: a.tc * 100 + 50, py: a.tr * 100 + 50 };
-      const dx = to.px - from.px, dy = to.py - from.py;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len < 1) return;
-      
-      const ux = dx / len, uy = dy / len;
-      const sw = ARROW_SW;
-      const sx = from.px + ux * sw * 1.1;
-      const sy = from.py + uy * sw * 1.1;
-      const ex = to.px - ux * sw * 2.4;
-      const ey = to.py - uy * sw * 2.4;
-      
-      if (Math.sqrt((ex - sx) ** 2 + (ey - sy) ** 2) < 5) return;
-
-      const line = document.createElementNS(SVG_NS, 'line');
-      line.setAttribute('x1', sx.toFixed(2)); line.setAttribute('y1', sy.toFixed(2));
-      line.setAttribute('x2', ex.toFixed(2)); line.setAttribute('y2', ey.toFixed(2));
-      line.setAttribute('stroke', ARROW_COLOR);
-      line.setAttribute('stroke-width', sw);
-      line.setAttribute('stroke-linecap', 'round');
-      line.setAttribute('marker-end', 'url(#' + MARKER_ID + ')');
-      g.appendChild(line);
-    });
   }
 
   renderMoveList() {

@@ -959,71 +959,29 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
     let _statsGameDetails = [];  // 게임별 전술 상세 [{doc, tacticEvents}]
     let _trendChart = null;
 
-    function getTrendData(docs, period) {
-      const now = new Date();
+    function getTrendData(docs) {
       let labels = [], data = [];
-      const analyzedDocs = docs.filter(d => d.tacticAnalysis && d.tacticAnalysis.myAccuracy);
+      const analyzedDocs = docs
+        .filter(d => d.tacticAnalysis && d.tacticAnalysis.myAccuracy)
+        .sort((a, b) => (a.playedAt?.seconds || 0) - (b.playedAt?.seconds || 0));
       
       if (analyzedDocs.length === 0) return { labels, data };
 
-      // 데이터가 존재하는 가장 오래된 시점 찾기
-      const timestamps = analyzedDocs.map(d => d.playedAt ? d.playedAt.seconds * 1000 : 0).filter(t => t > 0);
-      if (timestamps.length === 0) return { labels, data };
-      
-      const minTime = Math.min(...timestamps);
-      const startTime = new Date(minTime);
-      startTime.setHours(0, 0, 0, 0); // 날짜 기준 시작
-
-      let intervalMs;
-      if (period === '1D') intervalMs = 24 * 3600000;
-      else if (period === '1W') intervalMs = 7 * 24 * 3600000;
-      else if (period === '1M') intervalMs = 30 * 24 * 3600000;
-      else if (period === '1Y') intervalMs = 365 * 24 * 3600000;
-      else intervalMs = 30 * 24 * 3600000;
-
-      let current = new Date(startTime.getTime());
-      
-      // 만약 데이터 범위가 너무 넓으면 (예: 1일 단위인데 1년치 데이터), 성능을 위해 루프 제한
-      while (current <= now) {
-        const next = new Date(current.getTime() + intervalMs);
-        
-        const periodDocs = analyzedDocs.filter(d => {
-          const t = d.playedAt ? d.playedAt.seconds * 1000 : 0;
-          return t >= current.getTime() && t < next.getTime();
-        });
-
-        let label = '';
-        if (period === '1D') {
-          label = `${current.getMonth() + 1}/${current.getDate()}`;
-        } else if (period === '1W') {
-          label = `${current.getMonth() + 1}/${current.getDate()}주`;
-        } else if (period === '1M') {
-          label = `${current.getFullYear().toString().slice(2)}/${current.getMonth() + 1}`;
-        } else if (period === '1Y') {
-          label = `${current.getFullYear()}년`;
-        }
-
+      analyzedDocs.forEach(d => {
+        const date = d.playedAt ? new Date(d.playedAt.seconds * 1000) : null;
+        const label = date ? `${date.getMonth() + 1}/${date.getDate()}` : '?';
         labels.push(label);
-        const avg = periodDocs.length ? periodDocs.reduce((sum, d) => sum + d.tacticAnalysis.myAccuracy, 0) / periodDocs.length : null;
-        data.push(avg ? Math.round(avg) : null);
-
-        current = next;
-        if (labels.length > 100) break; // 최대 100개 포인트로 제한
-      }
+        data.push(Math.round(d.tacticAnalysis.myAccuracy));
+      });
 
       return { labels, data };
     }
 
-    function renderTrendChart(period = '1M') {
+    function renderTrendChart() {
       const ctx = document.getElementById('accuracyTrendChart');
       if (!ctx) return;
 
-      // 버튼 활성화 상태 업데이트
-      document.querySelectorAll('.cp-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.getAttribute('onclick').includes(`'${period}'`));
-      });
-
-      const { labels, data } = getTrendData(_loadedDocs, period);
+      const { labels, data } = getTrendData(_loadedDocs);
 
       if (_trendChart) {
         _trendChart.destroy();
@@ -1038,7 +996,7 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         data: {
           labels: labels,
           datasets: [{
-            label: '평균 정확도 (%)',
+            label: '정확도 (%)',
             data: data,
             borderColor: '#a0c060',
             backgroundColor: 'rgba(160, 192, 96, 0.1)',
@@ -1676,12 +1634,6 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
         <div class="stats-card-group">
           <div class="stats-group-header">
             <div class="stats-group-title">📈 실력 향상 추이 (Accuracy Trend)</div>
-            <div class="chart-periods">
-              <button class="cp-btn" onclick="renderTrendChart('1D')">1일</button>
-              <button class="cp-btn" onclick="renderTrendChart('1W')">1주일</button>
-              <button class="cp-btn active" onclick="renderTrendChart('1M')">1달</button>
-              <button class="cp-btn" onclick="renderTrendChart('1Y')">1년</button>
-            </div>
           </div>
           <div class="trend-chart-container">
             <canvas id="accuracyTrendChart"></canvas>
@@ -1825,8 +1777,8 @@ const __RC = window.__RECORDS_CONSTS__ || { SF_DEPTH: 18, SF_MULTIPV: 3, FORK_CP
       `;
 
       renderOpeningStats(s.openingStats);
-      // [추가] 트렌드 차트 초기화 (기본 1개월)
-      setTimeout(() => renderTrendChart('1M'), 50);
+      // [추가] 트렌드 차트 초기화 (전체 범위)
+      setTimeout(() => renderTrendChart(), 50);
     }
 
     function renderTacticModernCard(icon, name, type, found, missed) {
@@ -2012,9 +1964,11 @@ ${s.openingStats.slice(0, 5).map(o => `- ${o.name} (백 승률: ${Math.round(o.w
 [요청 사항]
 1. 진영별(백/흑) 승률 차이에 대한 원인 분석 및 개선 방향.
 2. 상대 레이팅(높음/낮음)에 따른 본인의 플레이 성향 분석 (예: 강자에게 강한지, 약자에게 방심하는지).
-3. 현재 오프닝 선택이 효율적인지, 특정 오프닝에서 더 연마해야 할 점은 무엇인지.
-4. 전술적 측면에서 어떤 유형(핀, 포크 등)에 취약하며 어떤 훈련이 필요한지.
-5. 전반적인 총평과 다음 단계를 위한 조언.
+3. 게임 단계별(오프닝, 미들게임, 엔드게임) 정확도를 비교 분석하여, 가장 보완이 시급한 단계와 개선 전략 제시.
+4. 실력 향상 추세(최근 정확도 변화)를 바탕으로 현재 상승세인지, 정체기인지 분석하고 향후 목표 설정.
+5. 현재 오프닝 선택이 효율적인지, 특정 오프닝에서 더 연마해야 할 점은 무엇인지.
+6. 전술적 측면에서 어떤 유형(핀, 포크 등)에 취약하며 어떤 훈련이 필요한지.
+7. 전반적인 총평과 다음 단계를 위한 조언.
 
 [언어 규칙 — 최우선 준수 사항]
 - 출력 언어: **오직 한국어만** 사용하세요.
