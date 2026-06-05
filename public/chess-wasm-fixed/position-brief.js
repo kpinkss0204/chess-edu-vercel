@@ -805,6 +805,7 @@
    * @param {string} [opts.phase]
    * @param {number} [opts.moveCount]
    * @param {string} [opts.nullMoveThreatUci] // 추가: 방치 시 위협 수
+   * @param {string} [opts.immediateThreatUci] // 추가: 지금 차례를 넘길 시 위협 수
    */
   function buildPositionBrief(opts) {
     const fen = opts.fen;
@@ -831,7 +832,8 @@
       narrative: null,
       anchor: null,
       legalMoves: [],
-      nullMoveThreat: null, // 추가
+      nullMoveThreat: null, 
+      immediateThreat: null, // 추가
     };
 
     if (state) {
@@ -883,6 +885,31 @@
           brief.m1Impact = impact;
         }
       } catch(e) {}
+    }
+
+    // [신규] 즉각적 위협 (Immediate Threat)
+    if (opts.immediateThreatUci && typeof global.uciToMove === 'function') {
+      try {
+        const oppTurn = state.turn === 'w' ? 'b' : 'w';
+        const nullState = cloneState(state);
+        nullState.turn = oppTurn;
+
+        const itUci = opts.immediateThreatUci;
+        const it = global.uciToMove(itUci, nullState.board, nullState.turn, nullState.castling, nullState.enPassant);
+        if (it) {
+          const allLegal = global.getAllLegalMoves(nullState.board, nullState.turn, nullState.castling, nullState.enPassant);
+          const san = global.moveToSAN(nullState.board, it, nullState.turn, allLegal);
+          const { state: s_after_it } = applyMoveToState(nullState, it);
+          const itImpact = analyzeMoveImpact(nullState, it, s_after_it);
+
+          brief.immediateThreat = {
+            uci: itUci,
+            san: san,
+            impact: itImpact,
+            note: `${COLOR_KR[oppTurn]}이 ${san}를 두어 ${itImpact.tactics.join(', ')} 위협`
+          };
+        }
+      } catch(e) { console.warn('[PositionBrief] Immediate Threat 분석 실패:', e); }
     }
     
     // 방치 시 위협 분석 (Null Move Threat)
@@ -1048,6 +1075,28 @@
       lines.push('');
       lines.push('■ 전략 아이디어');
       brief.ideas.forEach(i => lines.push(`  • ${i.text}`));
+    }
+
+    if (brief.immediateThreat) {
+      const it = brief.immediateThreat;
+      lines.push('');
+      lines.push('[상대방의 즉각적 위협 (Threat Analysis)]');
+      lines.push(`만약 지금 차례인 당신(나)이 아무 것도 하지 않고 차례를 넘긴다면(Pass), 상대방은 다음과 같은 위협을 가집니다:`);
+      lines.push(`  • 상대의 위협 수: ${it.san}`);
+      lines.push(`  • 전술적 효과: ${it.impact.tactics.join(', ') || '공세 강화'}`);
+      if (it.impact.isCapture) lines.push(`  • 포획 대상: ${it.impact.capturedPiece}(${it.san.slice(-2)})`);
+      lines.push(`  • 의미: 현재 최선수를 두어야 하는 이유는 바로 이 위협을 막거나 상쇄하기 위함입니다.`);
+    }
+
+    if (brief.nullMoveThreat) {
+      const nt = brief.nullMoveThreat;
+      lines.push('');
+      lines.push('[나의 공격 의도 (Intent Analysis)]');
+      lines.push(`만약 당신(나)이 최선수(${brief.engineLine[0]?.san})를 두었는데 상대방이 아무런 대응을 하지 않는다면(Pass):`);
+      lines.push(`  • 나의 후속 위협 수: ${nt.san}`);
+      lines.push(`  • 전술적 효과: ${nt.impact.tactics.join(', ') || '공세 강화'}`);
+      if (nt.impact.isCapture) lines.push(`  • 포획 대상: ${nt.impact.capturedPiece}(${nt.san.slice(-2)})`);
+      lines.push(`  • 의미: 이것이 당신이 최선수를 두는 실질적인 목적(의도)입니다.`);
     }
 
     if (brief.engineLine.length) {
