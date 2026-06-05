@@ -1165,11 +1165,6 @@ async function runPositionCommentary() {
   if (boardAreaRpc) boardAreaRpc.classList.add('coach-open');
   coachOpen = true;
 
-  // 패널 제목 업데이트
-  const panelTitle = document.querySelector('#coach-panel .panel-title-text') || 
-                     document.querySelector('#coach-inline .coach-header-title');
-  if (panelTitle) panelTitle.textContent = '📋 GM AI 전략 브리핑';
-
   const ctx = buildChessContext();
   if (!ctx) return;
 
@@ -1189,18 +1184,6 @@ async function runPositionCommentary() {
 
     // 최신 컨텍스트 다시 빌드 (라인이 갱신됐을 수 있음)
     let freshCtx = buildChessContext();
-
-    // ── 신규: 상세 평가(Detailed Eval) 가져오기 ──
-    updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 상세 전략 지표 분석 중...` });
-    try {
-      const dEval = await getDetailedEval(freshCtx.fen);
-      if (dEval) {
-        freshCtx.detailedEval = dEval;
-        console.log('[Coach] Detailed Eval:', dEval);
-      }
-    } catch (deErr) {
-      console.warn('[Coach] 상세 평가 가져오기 실패:', deErr);
-    }
 
     // ── 신규: 방금 둔 수 평가 (Move Judgment) ──
     if (typeof buildMoveJudgment === 'function' && game && game.historyIndex >= 0) {
@@ -1421,18 +1404,6 @@ function buildCommentaryPrompt(ctx) {
   lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수`);
   lines.push(`현재 형세: ${ctx.advantageDesc}`);
 
-  // ── [신규] 상세 평가 지표 추가 ──
-  if (ctx.detailedEval) {
-    const de = ctx.detailedEval;
-    lines.push(`[상세 포지셔널 지표 (Positive = 백 유리, Negative = 흑 유리)]`);
-    lines.push(`  • 활동성(Mobility): ${de.mobility > 0 ? '+' : ''}${de.mobility.toFixed(2)}`);
-    lines.push(`  • 킹 안전도(King Safety): ${de.kingSafety > 0 ? '+' : ''}${de.kingSafety.toFixed(2)}`);
-    lines.push(`  • 공간(Space): ${de.space > 0 ? '+' : ''}${de.space.toFixed(2)}`);
-    lines.push(`  • 폰 구조(Pawns): ${de.pawnStructure > 0 ? '+' : ''}${de.pawnStructure.toFixed(2)}`);
-    lines.push(`  • 기물 불균형(Imbalance): ${de.imbalance > 0 ? '+' : ''}${de.imbalance.toFixed(2)}`);
-    lines.push(`  ※ 지표 해석: 기물 숫자가 같더라도 위 지표 중 하나가 1.0 이상 차이 나면 기물 하나(폰) 이상의 가치 차이가 있는 것으로 간주하세요.`);
-  }
-
   if (ctx.lastMoveSan) {
     const ann = ctx.lastMoveAnnotation ? ` (${ctx.lastMoveAnnotation})` : '';
     lines.push(`직전 수: ${ctx.lastMoveSan}${ann} (상대방인 ${lastMoverLabel}이 둠)`);
@@ -1447,16 +1418,6 @@ function buildCommentaryPrompt(ctx) {
     if (liveLine3) lines.push(`3순위 수순: ${liveLine3}`);
   } else {
     lines.push(`[엔진 라인 미준비] 구조·브리프·직전 수 맥락만 설명.`);
-  }
-
-  // ── [신규] 상대방의 응징(Refutation) 정보 명시 ──
-  if (ctx.moveJudgment && ctx.moveJudgment.raw && ctx.moveJudgment.raw.opponentResponse) {
-    const resp = ctx.moveJudgment.raw.opponentResponse;
-    lines.push(``);
-    lines.push(`[상대방의 징벌 수순 (Refutation)]`);
-    lines.push(`  • 위협적인 응수: ${resp.san}`);
-    lines.push(`  • 근거: ${resp.text}`);
-    lines.push(`  ※ AI 지침: 사용자가 실수를 했다면, 반드시 위 응수를 언급하며 '왜' 안 좋은지 구체적인 전술적 근거를 제시하세요.`);
   }
 
   // 사용자 화살표 (후보수 / 수순) 정제
@@ -1493,18 +1454,18 @@ function buildCommentaryPrompt(ctx) {
       lines.push(`■ 로직 계산 메이트 (최우선): ${ctx.positionBrief.mateIn1.join(', ')} 수로 1수만에 체크메이트 가능.`);
     }
     
-    // 추가: 방치 시 위협 (Null Move Threat) 상세
+    // 추가: 방치 시 위협 (Null Move Threat — 중요)
     if (ctx.positionBrief.nullMoveThreat) {
       const nt = ctx.positionBrief.nullMoveThreat;
+      const bMove = ctx.positionBrief.engineLine[0]?.san || '';
       lines.push(``);
-      lines.push(`[방치 시 위협 분석 (Null Move Threat)]`);
-      lines.push(`만약 ${firstTurnLabel}이 최선수(${ctx.positionBrief.engineLine[0]?.san})를 두었는데 상대방(${lastMoverLabel})이 응수하지 않고 차례를 넘긴다면(Null Move):`);
-      lines.push(`  • ${firstTurnLabel}의 추가 위협 수: ${nt.san}`);
+      lines.push(`[방치 시 위협 분석 (Null Move Threat — 중요)]`);
+      lines.push(`1단계: 현재 차례인 **${firstTurnLabel}**이 최선수(**${bMove}**)를 둡니다.`);
+      lines.push(`2단계: 상대방인 **${lastMoverLabel}**이 이에 응수하지 않고 차례를 넘깁니다(Null Move).`);
+      lines.push(`3단계: 그 결과, **${firstTurnLabel}**이 다음 수에 **${nt.san}**을 두어 결정적 위협을 가합니다.`);
       lines.push(`  • 전술적 효과: ${nt.impact.tactics.join(', ') || '공세 강화'}`);
-      if (nt.impact.isCapture) lines.push(`  • 포획 대상: ${nt.impact.capturedPiece}(${nt.san.slice(-2)})`);
-      if (nt.impact.isCheck) lines.push(`  • 위협: 상대 킹에 대한 직접적인 체크`);
-      lines.push(`  • 공격 대상: ${nt.impact.newAttackers.map(a => `${a.piece}(${a.sq})`).join(', ') || '없음'}`);
-      lines.push(`  • 전략적 의미: 이 수순이 ${firstTurnLabel}의 실질적인 공격 의도입니다. 상대는 이를 막기 위해 반드시 대응해야 합니다.`);
+      if (nt.impact.isCapture) lines.push(`  • 결과: ${firstTurnLabel}이 상대(${lastMoverLabel})의 ${nt.impact.capturedPiece}를 포획함`);
+      lines.push(`  ※ 해설 지침: 반드시 위의 1~3단계 논리를 사용하여 "${firstTurnLabel}이 ${bMove}를 두었을 때, ${lastMoverLabel}이 방치한다면 ${firstTurnLabel}은 ${nt.san}으로 응징할 수 있다"고 설명하세요.`);
     }
     
     // 추가: 최선수의 파급력 (활동성 등)
@@ -1646,14 +1607,17 @@ function buildCoachPrompt(ctx, question) {
 async function callCommentaryAPI(ctx) {
   const moverLabel = ctx.turn === 'w' ? '백' : '흑';
   const opponentLabel = ctx.turn === 'w' ? '흑' : '백';
+  const bestMove = (ctx.positionBrief && ctx.positionBrief.engineLine && ctx.positionBrief.engineLine[0]) ? ctx.positionBrief.engineLine[0].san : '';
+  const threatMove = (ctx.positionBrief && ctx.positionBrief.nullMoveThreat) ? ctx.positionBrief.nullMoveThreat.san : '';
 
   const SYSTEM = `당신은 유튜브 채널 "체스인사이드"의 해설자이자 마스터 체스 코치입니다. 당신의 목표는 제공된 데이터를 바탕으로 'GM AI 전략 브리핑'을 제공하는 것입니다.
 
 【섹션 구성 및 논리 규칙 — 절대 준수】
 1. **포지션 상황**: 현재 차례인 ${moverLabel}의 입장에서 상황을 진단하세요.
-2. **이후 수순**: 반드시 아래의 **'위협-응수'** 논리 구조를 따르세요.
-   - 구조: "만약 ${moverLabel}이 최선수를 두었는데, 상대방(${opponentLabel})이 이를 방치하고 차례를 넘긴다면(Null Move), ${moverLabel}은 [추가 위협 수]를 두어 결정적인 이득을 챙길 수 있습니다. 따라서 ${opponentLabel}은 반드시 이를 막기 위해 대응해야 합니다."
-   - **주의**: 절대로 "${opponentLabel}이 [${moverLabel}의 수]를 두지 않고"와 같이 주어를 섞지 마세요. 수는 오직 주인만이 둡니다.
+2. **이후 수순**: 반드시 아래의 **'위협-대응'** 논리 구조를 정확히 따르세요.
+   - **논리**: ${moverLabel}이 최선수를 두었을 때, 상대방(${opponentLabel})이 이를 방치(Null Move)할 경우 발생하는 위협을 설명합니다.
+   - **필수 템플릿**: "만약 ${moverLabel}이 **${bestMove}**를 두었는데, 상대방(${opponentLabel})이 아무런 대응을 하지 않고 차례를 넘긴다면, ${moverLabel}은 다음 수에 **${threatMove}**를 두어 [전술적 이득]을 챙길 수 있습니다. 따라서 ${opponentLabel}은 반드시 이를 막기 위해 대응해야 합니다."
+   - **주의**: 절대로 "${opponentLabel}이 [${moverLabel}의 수]를 두지 않고"와 같이 주어를 섞지 마세요. ${bestMove}는 ${moverLabel}의 수이며, 방치(Ignore)하는 주체는 ${opponentLabel}입니다.
 
 【작성 세부 지침】
 - **데이터 우선**: 제공된 [엔진 수순]과 [방치 시 위협 분석] 데이터만 사용하세요. 스스로 수읽기를 지어내지 마세요.
