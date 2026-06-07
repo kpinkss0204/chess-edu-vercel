@@ -188,9 +188,10 @@ function releaseSharedMainEngine() {
 function connectSharedMainEngine() {
   return new Promise((resolve, reject) => {
     let settled = false;
+    // ★ 수정: 35초 → 5초로 단축 (SharedWorker 내 Worker 생성 실패는 거의 즉시 에러가 옴)
     const t = setTimeout(() => {
       if (!settled) reject(new Error('SharedWorker stream 연결 타임아웃'));
-    }, 35000);
+    }, 5000);
     const finish = (fn) => {
       if (settled) return;
       settled = true;
@@ -213,6 +214,7 @@ function connectSharedMainEngine() {
           return;
         }
         if (msg.type === 'error' && msg.message) {
+          // ★ 수정: 에러 메시지를 즉시 reject (35초 기다리지 않음)
           finish(() => reject(new Error(msg.message)));
         }
       };
