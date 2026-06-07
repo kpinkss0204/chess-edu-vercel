@@ -128,6 +128,7 @@ let _bcMyId           = 'tab_' + Math.random().toString(36).slice(2);
 let _bcHeartbeatTimer = null;
 let _bcWatchdogTimer  = null;
 let _bcClientReady    = false;  // client 탭이 owner에게 연결된 상태
+let _bcElectResolve   = null;   // 선출 Promise의 resolve 함수
 
 function _bcSend(msg) {
   try { if (_bc) _bc.postMessage({ ...msg, _from: _bcMyId }); } catch (_) {}
@@ -143,7 +144,6 @@ function _bcStartHeartbeat() {
 function _bcResetWatchdog() {
   clearTimeout(_bcWatchdogTimer);
   _bcWatchdogTimer = setTimeout(() => {
-    // owner가 죽은 것으로 판단 → 이 탭이 owner로 승격 시도
     console.warn('[BC] owner 응답 없음 — 이 탭이 owner로 재선출 시도');
     _bcRole    = null;
     _bcOwnerId = null;
@@ -153,9 +153,7 @@ function _bcResetWatchdog() {
 }
 
 function _bcElect() {
-  // owner 입후보 브로드캐스트 — 더 빠른 탭이 owner가 됨
   _bcSend({ type: 'bc_candidate', candidateId: _bcMyId });
-  // 500ms 내에 기존 owner가 응답 없으면 이 탭이 owner로 확정
   setTimeout(() => {
     if (_bcRole === null) {
       console.log('[BC] 이 탭이 owner로 선출됨:', _bcMyId);
@@ -167,56 +165,73 @@ function _bcElect() {
   }, 500);
 }
 
+/**
+ * BroadcastChannel 초기화 + owner 선출까지 완료되는 Promise를 반환.
+ * resolve({ role: 'owner'|'client', ownerId })
+ */
 function _initBroadcastChannel() {
-  if (typeof BroadcastChannel === 'undefined') return false;
+  if (typeof BroadcastChannel === 'undefined') return null;
+
   _bc = new BroadcastChannel(_BC_CHANNEL);
 
+  // ── 메시지 핸들러를 먼저 등록 ──
   _bc.onmessage = (ev) => {
     const msg = ev.data;
     if (!msg || msg._from === _bcMyId) return;
 
-    // ── owner 수신 처리 ──
     if (_bcRole === 'owner') {
       if (msg.type === 'bc_uci') {
-        // client가 보낸 UCI 명령을 실제 Worker에 전달
         if (mainWorker && mainReady) mainWorker.postMessage(msg.line);
         return;
       }
       if (msg.type === 'bc_candidate') {
-        // 다른 탭이 owner 입후보 → 내가 살아있음을 알림
+        // 다른 탭이 입후보 → 내가 살아있음을 즉시 알림
         _bcSend({ type: 'bc_owner_ready', ownerId: _bcMyId });
         return;
       }
       return;
     }
 
-    // ── client 수신 처리 ──
     if (msg.type === 'bc_owner_ready') {
-      if (_bcRole === null || _bcOwnerId !== msg.ownerId) {
-        _bcRole    = 'client';
-        _bcOwnerId = msg.ownerId;
-        _bcClientReady = true;
-        console.log('[BC] owner 확인됨:', msg.ownerId, '→ client 모드');
-        _bcResetWatchdog();
-      }
+      _bcRole        = 'client';
+      _bcOwnerId     = msg.ownerId;
+      _bcClientReady = true;
+      console.log('[BC] owner 확인됨:', msg.ownerId, '→ client 모드');
+      _bcResetWatchdog();
+      // Promise resolve 콜백 호출
+      if (_bcElectResolve) { _bcElectResolve('client'); _bcElectResolve = null; }
       return;
     }
     if (msg.type === 'bc_heartbeat') {
-      if (_bcRole === 'client' && msg.ownerId === _bcOwnerId) {
-        _bcResetWatchdog();
-      }
+      if (_bcRole === 'client' && msg.ownerId === _bcOwnerId) _bcResetWatchdog();
       return;
     }
     if (msg.type === 'bc_uci_line') {
-      // owner가 브로드캐스트한 엔진 출력 → 이 탭의 handleMainWorkerMessage로 전달
-      if (_bcRole === 'client' && msg.line) {
-        handleMainWorkerMessage({ data: msg.line });
-      }
+      if (_bcRole === 'client' && msg.line) handleMainWorkerMessage({ data: msg.line });
       return;
     }
   };
 
-  return true;
+  // owner/client 선출 결과를 기다리는 Promise
+  return new Promise((resolve) => {
+    _bcElectResolve = resolve; // client가 되면 핸들러에서 호출
+
+    // 기존 owner에게 질의
+    _bcSend({ type: 'bc_candidate', candidateId: _bcMyId });
+
+    // 700ms 내 응답 없으면 → 이 탭이 owner
+    setTimeout(() => {
+      if (_bcRole === null) {
+        _bcRole    = 'owner';
+        _bcOwnerId = _bcMyId;
+        _bcElectResolve = null;
+        _bcSend({ type: 'bc_owner_ready', ownerId: _bcMyId });
+        _bcStartHeartbeat();
+        console.log('[BC] 이 탭이 owner로 선출됨:', _bcMyId);
+        resolve('owner');
+      }
+    }, 700);
+  });
 }
 
 function releaseSharedMainEngine() {
@@ -315,52 +330,31 @@ async function initEngine() {
     const bgThr   = 1;
 
     // ── BroadcastChannel로 탭 간 엔진 소유권 조율 ─────────────
-    // owner 탭만 실제 Stockfish Worker를 생성하고,
-    // client 탭은 UCI 명령을 채널로 보내고 결과를 채널로 받음.
     let usedBC = false;
+    const bcPromise = _initBroadcastChannel(); // null(미지원) or Promise<'owner'|'client'>
 
-    if (_initBroadcastChannel()) {
+    if (bcPromise) {
       if (!skipFullScreenOverlay) {
         document.getElementById('loading-text').textContent =
           '엔진 소유권 확인 중... (탭 간 공유)';
       }
 
-      // 기존 owner가 있는지 500ms 대기
-      _bcSend({ type: 'bc_candidate', candidateId: _bcMyId });
-      await new Promise(r => setTimeout(r, 600));
+      const bcRole = await bcPromise; // 700ms 이내 확정
 
-      if (_bcRole === 'client' && _bcClientReady) {
+      if (bcRole === 'client') {
         // ── client 모드: 실제 Worker 생성 없이 채널만 사용 ──
         usedBC = true;
-        _useSharedWorkerMain = true;
         mainReady = true;
-
-        // mainWorker 프록시: UCI 명령을 채널로 owner에게 전달
         mainWorker = {
-          postMessage(line) {
-            _bcSend({ type: 'bc_uci', line });
-            // owner가 처리 후 bc_uci_line으로 결과를 브로드캐스트함
-          }
+          postMessage(line) { _bcSend({ type: 'bc_uci', line }); }
         };
-
-        // watchdog: owner 사라지면 자동으로 재선출
         _bcResetWatchdog();
         window.addEventListener('pagehide', releaseSharedMainEngine, { once: false });
-        console.log('[Engine] 메인 엔진 — BroadcastChannel client 모드 (owner:', _bcOwnerId, ')');
-
+        console.log('[Engine] BroadcastChannel client 모드 (owner:', _bcOwnerId, ')');
       } else {
-        // ── owner 모드: 실제 Worker 생성 후 출력을 채널로 브로드캐스트 ──
-        _bcRole    = 'owner';
-        _bcOwnerId = _bcMyId;
-        _bcSend({ type: 'bc_owner_ready', ownerId: _bcMyId });
-        _bcStartHeartbeat();
-        console.log('[Engine] 메인 엔진 — BroadcastChannel owner 모드');
+        // owner 모드 → 아래에서 실제 Worker 생성
+        console.log('[Engine] BroadcastChannel owner 모드');
       }
-    }
-
-    if (!usedBC) {
-      // BroadcastChannel 미지원 환경 → 탭 전용 Worker
-      console.log(`[Engine] 코어: ${cores} | 메인: ${mainThr}스레드 | 백그라운드: ${bgCount}개`);
     }
 
     // owner 또는 BC 미지원 시 실제 Worker 초기화
