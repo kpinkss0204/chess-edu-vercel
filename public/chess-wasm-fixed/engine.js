@@ -357,49 +357,26 @@ async function initEngine() {
       }
     }
 
-    // owner 또는 BC 미지원 시 실제 Worker 초기화
+    // owner 또는 BC 미지원 시 실제 Worker 초기화 (메인 1개만)
     if (_bcRole !== 'client') {
-      console.log(`[Engine] 코어: ${cores} | 메인 Worker 생성 중...`);
-
-      const workerPromises = [
-        createStockfishWorker(mainThr, 128),
-        ...Array.from({ length: bgCount }, () => createStockfishWorker(bgThr, 32))
-      ];
+      console.log(`[Engine] 메인 Worker 생성 중...`);
 
       if (!skipFullScreenOverlay) {
         document.getElementById('loading-text').textContent =
-          `Stockfish 18 초기화 중... (0/${1 + bgCount})`;
+          `Stockfish 18 초기화 중...`;
       }
 
-      let doneCount = 0;
-      const results = await Promise.all(workerPromises.map((p, idx) =>
-        p.then(w => {
-          doneCount++;
-          if (!skipFullScreenOverlay) {
-            document.getElementById('loading-text').textContent =
-              `Stockfish 18 초기화 중... (${doneCount}/${1 + bgCount})`;
-          }
-          return { idx, worker: w };
-        })
-      ));
-
-      for (let i = 0; i < results.length; i++) {
-        const { idx, worker: w } = results[i];
-        if (idx === 0) {
-          mainWorker = w;
-          // owner면 엔진 출력을 채널로 브로드캐스트
-          mainWorker.onmessage = (e) => {
-            handleMainWorkerMessage(e);
-            if (_bcRole === 'owner' && _bc && typeof e.data === 'string') {
-              _bcSend({ type: 'bc_uci_line', line: e.data });
-            }
-          };
-          mainReady = true;
-        } else {
-          bgWorkers.push({ worker: w, busy: false });
+      const w = await createStockfishWorker(1, 128);
+      mainWorker = w;
+      mainWorker.onmessage = (e) => {
+        handleMainWorkerMessage(e);
+        if (_bcRole === 'owner' && _bc && typeof e.data === 'string') {
+          _bcSend({ type: 'bc_uci_line', line: e.data });
         }
-      }
-      console.log(`[Engine] 초기화 완료 — 메인 1개 + 백그라운드 ${bgCount}개`);
+      };
+      mainReady = true;
+      bgWorkers = []; // bgWorkers 미사용 (startBgAnalysis 비활성화됨)
+      console.log(`[Engine] 초기화 완료 — 메인 Worker 1개`);
     }
 
     setEngineBadge('ready',
