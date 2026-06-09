@@ -103,7 +103,7 @@ const evalCache = (() => {
 })();
 
 // ── Worker 풀 ────────────────────────────────────────────────
-// mainWorker  : 화면 포지션 분석 전용 (실제 Worker 또는 BroadcastChannel 프록시)
+// mainWorker  : 화면 포지션 분석 전용 (실제 Worker 또는 SharedWorker 프록시 { postMessage })
 // bgWorkers[] : 백그라운드 전체 기보 병렬 분석
 let mainWorker      = null;
 let bgWorkers       = [];
@@ -113,133 +113,6 @@ let mainReady       = false;
 let renderTimer     = null;
 let engineSearching = false;  // go 전송 후 bestmove 수신 전
 let pendingNextFen  = null;   // stop 후 bestmove 오면 실행할 다음 분석 파라미터
-
-// ── BroadcastChannel 엔진 공유 ───────────────────────────────
-// 같은 origin의 탭들 중 하나만 실제 Stockfish Worker를 소유(owner).
-// 나머지 탭(client)은 채널로 UCI 명령을 보내고 결과를 수신.
-const _BC_CHANNEL   = 'stockfish_engine_bus';
-const _BC_HEARTBEAT = 2000;   // owner가 살아있음을 알리는 주기(ms)
-const _BC_TIMEOUT   = 5000;   // 이 시간 동안 heartbeat 없으면 owner 재선출
-
-let _bc               = null;   // BroadcastChannel 인스턴스
-let _bcRole           = null;   // 'owner' | 'client'
-let _bcOwnerId        = null;   // 현재 owner 탭 ID
-let _bcMyId           = 'tab_' + Math.random().toString(36).slice(2);
-let _bcHeartbeatTimer = null;
-let _bcWatchdogTimer  = null;
-let _bcClientReady    = false;  // client 탭이 owner에게 연결된 상태
-let _bcElectResolve   = null;   // 선출 Promise의 resolve 함수
-
-function _bcSend(msg) {
-  try { if (_bc) _bc.postMessage({ ...msg, _from: _bcMyId }); } catch (_) {}
-}
-
-function _bcStartHeartbeat() {
-  clearInterval(_bcHeartbeatTimer);
-  _bcHeartbeatTimer = setInterval(() => {
-    _bcSend({ type: 'bc_heartbeat', ownerId: _bcMyId });
-  }, _BC_HEARTBEAT);
-}
-
-function _bcResetWatchdog() {
-  clearTimeout(_bcWatchdogTimer);
-  _bcWatchdogTimer = setTimeout(() => {
-    console.warn('[BC] owner 응답 없음 — 이 탭이 owner로 재선출 시도');
-    _bcRole    = null;
-    _bcOwnerId = null;
-    _bcClientReady = false;
-    _bcElect();
-  }, _BC_TIMEOUT);
-}
-
-function _bcElect() {
-  _bcSend({ type: 'bc_candidate', candidateId: _bcMyId });
-  setTimeout(() => {
-    if (_bcRole === null) {
-      console.log('[BC] 이 탭이 owner로 선출됨:', _bcMyId);
-      _bcRole    = 'owner';
-      _bcOwnerId = _bcMyId;
-      _bcSend({ type: 'bc_owner_ready', ownerId: _bcMyId });
-      _bcStartHeartbeat();
-    }
-  }, 500);
-}
-
-/**
- * BroadcastChannel 초기화 + owner 선출까지 완료되는 Promise를 반환.
- * resolve({ role: 'owner'|'client', ownerId })
- */
-function _initBroadcastChannel() {
-  if (typeof BroadcastChannel === 'undefined') return null;
-
-  _bc = new BroadcastChannel(_BC_CHANNEL);
-
-  // ── 메시지 핸들러를 먼저 등록 ──
-  _bc.onmessage = (ev) => {
-    const msg = ev.data;
-    if (!msg || msg._from === _bcMyId) return;
-
-    if (_bcRole === 'owner') {
-      if (msg.type === 'bc_uci') {
-        if (mainWorker && mainReady) mainWorker.postMessage(msg.line);
-        return;
-      }
-      if (msg.type === 'bc_candidate') {
-        // 다른 탭이 입후보 → 내가 살아있음을 즉시 알림
-        _bcSend({ type: 'bc_owner_ready', ownerId: _bcMyId });
-        return;
-      }
-      return;
-    }
-
-    if (msg.type === 'bc_owner_ready') {
-      _bcRole        = 'client';
-      _bcOwnerId     = msg.ownerId;
-      _bcClientReady = true;
-      console.log('[BC] owner 확인됨:', msg.ownerId, '→ client 모드');
-      _bcResetWatchdog();
-      // Promise resolve 콜백 호출
-      if (_bcElectResolve) { _bcElectResolve('client'); _bcElectResolve = null; }
-      return;
-    }
-    if (msg.type === 'bc_heartbeat') {
-      if (_bcRole === 'client' && msg.ownerId === _bcOwnerId) _bcResetWatchdog();
-      return;
-    }
-    if (msg.type === 'bc_uci_line') {
-      if (_bcRole === 'client' && msg.line) handleMainWorkerMessage({ data: msg.line });
-      return;
-    }
-  };
-
-  // owner/client 선출 결과를 기다리는 Promise
-  return new Promise((resolve) => {
-    _bcElectResolve = resolve; // client가 되면 핸들러에서 호출
-
-    // 기존 owner에게 질의
-    _bcSend({ type: 'bc_candidate', candidateId: _bcMyId });
-
-    // 700ms 내 응답 없으면 → 이 탭이 owner
-    setTimeout(() => {
-      if (_bcRole === null) {
-        _bcRole    = 'owner';
-        _bcOwnerId = _bcMyId;
-        _bcElectResolve = null;
-        _bcSend({ type: 'bc_owner_ready', ownerId: _bcMyId });
-        _bcStartHeartbeat();
-        console.log('[BC] 이 탭이 owner로 선출됨:', _bcMyId);
-        resolve('owner');
-      }
-    }, 700);
-  });
-}
-
-function releaseSharedMainEngine() {
-  // BroadcastChannel 방식에서는 별도 해제 불필요 (owner 유지)
-  if (_bcRole === 'client') {
-    _bcClientReady = false;
-  }
-}
 
 // Worker 생성: Blob URL 방식
 function createStockfishWorker(threads = 1, hashMb = 64) {
@@ -252,13 +125,18 @@ function createStockfishWorker(threads = 1, hashMb = 64) {
       worker.onmessage = (e) => {
         const line = typeof e.data === 'string' ? e.data.trim() : null;
         if (!line) return;
+        // 모든 메시지 로그 (초기화 전까지)
         if (!ready) console.log('[SF]', line.substring(0, 120));
 
         if (line.includes('uciok')) {
           uciReceived = true;
+          // 단일 스레드 빌드이므로 Threads는 항상 1로 설정 (unreachable 에러 방지)
           worker.postMessage('setoption name Threads value 1');
           worker.postMessage('setoption name Hash value ' + hashMb);
+          // Lite 버전에서 지원하지 않는 옵션 제거 (크래시 방지 및 로그 정리)
+          // worker.postMessage('setoption name UCI_AnalyseMode value true');
           worker.postMessage('setoption name Move Overhead value 0');
+          // worker.postMessage('setoption name Contempt value 0');
           worker.postMessage('setoption name Skill Level value 20');
           worker.postMessage('isready');
         } else if (line.includes('readyok') && !ready) {
@@ -273,11 +151,13 @@ function createStockfishWorker(threads = 1, hashMb = 64) {
         reject(e);
       };
 
+      // 500ms 후 uci 전송 (WASM 로드 대기)
       setTimeout(() => {
         console.log('[Stockfish] uci 전송');
         worker.postMessage('uci');
       }, 500);
 
+      // 타임아웃 30초
       setTimeout(() => {
         if (!ready) {
           const why = uciReceived ? 'readyok 미수신' : 'uciok 미수신';
@@ -292,10 +172,57 @@ function createStockfishWorker(threads = 1, hashMb = 64) {
   });
 }
 
-// 같은 탭에서 분석 보드를 다시 열 때 전체 화면 오버레이 생략
+
+// 같은 탭에서 분석 보드를 다시 열 때 전체 화면 오버레이 생략 (SharedWorker 재사용 시 특히 빠름)
 const STOCKFISH_OVERLAY_SESSION_KEY = 'chess_education_sf_analysis_ready';
 
-// (connectSharedMainEngine 제거 — BroadcastChannel 방식으로 대체됨)
+function releaseSharedMainEngine() {
+  if (!_useSharedWorkerMain || !_mainEnginePort) return;
+  try {
+    _mainEnginePort.postMessage({ type: 'releaseStream' });
+  } catch (e) { /* ignore */ }
+  _mainEnginePort = null;
+  _useSharedWorkerMain = false;
+}
+
+function connectSharedMainEngine() {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const t = setTimeout(() => {
+      if (!settled) reject(new Error('SharedWorker stream 연결 타임아웃'));
+    }, 35000);
+    const finish = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(t);
+      fn();
+    };
+    try {
+      const sw = new SharedWorker('/stockfish-shared-worker.js', { name: 'stockfish-shared' });
+      const port = sw.port;
+      _mainEnginePort = port;
+      port.onmessage = (e) => {
+        const msg = e.data;
+        if (!msg) return;
+        if (msg.type === 'uciLine' && msg.line) {
+          handleMainWorkerMessage({ data: typeof msg.line === 'string' ? msg.line.trim() : msg.line });
+          return;
+        }
+        if (msg.type === 'streamReady') {
+          finish(() => resolve());
+          return;
+        }
+        if (msg.type === 'error' && msg.message) {
+          finish(() => reject(new Error(msg.message)));
+        }
+      };
+      port.start();
+      port.postMessage({ type: 'claimStream' });
+    } catch (e) {
+      finish(() => reject(e));
+    }
+  });
+}
 
 // ── 엔진 초기화 ──────────────────────────────────────────────
 function hideLoading() {
@@ -329,61 +256,80 @@ async function initEngine() {
     const mainThr = Math.max(2, Math.floor(cores / 2));
     const bgThr   = 1;
 
-    // ── BroadcastChannel로 탭 간 엔진 소유권 조율 ─────────────
-    let usedBC = false;
-    const bcPromise = _initBroadcastChannel(); // null(미지원) or Promise<'owner'|'client'>
-
-    if (bcPromise) {
+    let usedShared = false;
+    if (typeof SharedWorker !== 'undefined') {
       if (!skipFullScreenOverlay) {
         document.getElementById('loading-text').textContent =
-          '엔진 소유권 확인 중... (탭 간 공유)';
+          'Stockfish 공유 엔진 연결 중... (처음만 전체 로딩)';
       }
-
-      const bcRole = await bcPromise; // 700ms 이내 확정
-
-      if (bcRole === 'client') {
-        // ── client 모드: 실제 Worker 생성 없이 채널만 사용 ──
-        usedBC = true;
-        mainReady = true;
+      try {
+        await connectSharedMainEngine();
         mainWorker = {
-          postMessage(line) { _bcSend({ type: 'bc_uci', line }); }
+          postMessage(s) {
+            _mainEnginePort.postMessage({ type: 'streamUci', line: s });
+          }
         };
-        _bcResetWatchdog();
+        mainReady = true;
+        _useSharedWorkerMain = true;
+        bgWorkers = [];
+        usedShared = true;
         window.addEventListener('pagehide', releaseSharedMainEngine, { once: false });
-        console.log('[Engine] BroadcastChannel client 모드 (owner:', _bcOwnerId, ')');
-      } else {
-        // owner 모드 → 아래에서 실제 Worker 생성
-        console.log('[Engine] BroadcastChannel owner 모드');
+        console.log('[Engine] 메인 엔진 — SharedWorker 스트림 (탭 간 WASM 1회)');
+      } catch (swErr) {
+        const swMsg = (swErr && (swErr.message || String(swErr))) || '';
+        // SharedWorker 전역에 Worker 생성자가 없는 브라우저(Safari 등)에서 흔함 — 전용 Worker 폴백이 정상 경로
+        if (/Worker is not defined|NESTED_WORKER_UNSUPPORTED/i.test(swMsg)) {
+          console.info('[Engine] SharedWorker 미사용 — 이 환경에서는 공유 워커 내부 전용 Worker를 쓸 수 없어 탭 전용 Worker로 Stockfish를 띄웁니다.');
+        } else {
+          console.warn('[Engine] SharedWorker 실패, 전용 Worker로 폴백:', swMsg || swErr);
+        }
+        releaseSharedMainEngine();
+        mainWorker = null;
+        mainReady = false;
+        _mainEnginePort = null;
+        _useSharedWorkerMain = false;
       }
     }
 
-    // owner 또는 BC 미지원 시 실제 Worker 초기화 (메인 1개만)
-    if (_bcRole !== 'client') {
-      console.log(`[Engine] 메인 Worker 생성 중...`);
+    if (!usedShared) {
+      console.log(`[Engine] 코어: ${cores} | 메인: ${mainThr}스레드 | 백그라운드: ${bgCount}개`);
+
+      const workerPromises = [
+        createStockfishWorker(mainThr, 128),
+        ...Array.from({ length: bgCount }, () => createStockfishWorker(bgThr, 32))
+      ];
 
       if (!skipFullScreenOverlay) {
         document.getElementById('loading-text').textContent =
-          `Stockfish 18 초기화 중...`;
+          `Stockfish 18 초기화 중... (0/${1 + bgCount})`;
       }
 
-      const w = await createStockfishWorker(1, 128);
-      mainWorker = w;
-      mainWorker.onmessage = (e) => {
-        handleMainWorkerMessage(e);
-        if (_bcRole === 'owner' && _bc && typeof e.data === 'string') {
-          _bcSend({ type: 'bc_uci_line', line: e.data });
+      let doneCount = 0;
+      const results = await Promise.all(workerPromises.map((p, idx) =>
+        p.then(w => {
+          doneCount++;
+          if (!skipFullScreenOverlay) {
+            document.getElementById('loading-text').textContent =
+              `Stockfish 18 초기화 중... (${doneCount}/${1 + bgCount})`;
+          }
+          return { idx, worker: w };
+        })
+      ));
+
+      for (let i = 0; i < results.length; i++) {
+        const { idx, worker: w } = results[i];
+        if (idx === 0) {
+          mainWorker = w;
+          mainWorker.onmessage = handleMainWorkerMessage;
+          mainReady = true;
+        } else {
+          bgWorkers.push({ worker: w, busy: false });
         }
-      };
-      mainReady = true;
-      bgWorkers = []; // bgWorkers 미사용 (startBgAnalysis 비활성화됨)
-      console.log(`[Engine] 초기화 완료 — 메인 Worker 1개`);
+      }
+      console.log(`[Engine] 초기화 완료 — 메인 1개 + 백그라운드 ${bgCount}개`);
     }
 
-    setEngineBadge('ready',
-      `SF18 WASM | 멀티코어 (${cores}C)` +
-      (_bcRole === 'client' ? ' · 탭 공유(client)' :
-       _bcRole === 'owner'  ? ' · 탭 공유(owner)'  : '')
-    );
+    setEngineBadge('ready', `SF18 WASM | 멀티코어 (${cores}C)` + (usedShared ? ' · 공유' : ''));
     hideLoading();
     try {
       sessionStorage.setItem(STOCKFISH_OVERLAY_SESSION_KEY, '1');

@@ -1081,7 +1081,7 @@ function extractPositionInsights(fen) {
 
 /** 방치 시 위협(Null Move Threat) 계산 */
 async function getNullMoveThreat(fen, moveUci) {
-  if (typeof window.uciToMove !== 'function' || typeof window.applyMoveToBoard !== 'function') return null;
+  if (!moveUci || typeof window.uciToMove !== 'function' || typeof window.applyMoveToBoard !== 'function') return null;
   try {
     const parts = fen.split(' ');
     const board = window.parseFenBoard(parts[0]);
@@ -1089,19 +1089,12 @@ async function getNullMoveThreat(fen, moveUci) {
     const cast  = window.parseFenCastling(parts[2]);
     const ep    = window.parseFenEP(parts[3]);
     
-    let nullFen = fen;
-
-    if (moveUci) {
-      const move = window.uciToMove(moveUci, board, turn, cast, ep);
-      if (!move) return null;
-      const boardAfter = window.applyMoveToBoard(board.map(r=>[...r]), move, turn);
-      // 차례를 다시 mover로 고정 (Null Move after a move)
-      nullFen = window.boardToFen(boardAfter, turn, cast, null, 0, 1);
-    } else {
-      // 현재 포지션에서 차례만 상대에게 넘김 (Immediate Null Move)
-      const oppTurn = turn === 'w' ? 'b' : 'w';
-      nullFen = window.boardToFen(board, oppTurn, cast, null, 0, 1);
-    }
+    const move = window.uciToMove(moveUci, board, turn, cast, ep);
+    if (!move) return null;
+    
+    const boardAfter = window.applyMoveToBoard(board.map(r=>[...r]), move, turn);
+    // 차례를 다시 mover로 고정 (Null Move)
+    const nullFen = window.boardToFen(boardAfter, turn, cast, null, 0, 1);
     
     // [개선] 메인 엔진을 방해하지 않는 analyzeBackground 사용
     if (typeof window.analyzeBackground === 'function') {
@@ -1211,35 +1204,25 @@ async function runPositionCommentary() {
     const pv1 = (freshCtx.pvData && freshCtx.pvData[1]) || (window.pvData && window.pvData[1]);
     const m1Uci = pv1 && pv1.pv ? pv1.pv[0] : (pv1 && pv1.moves ? pv1.moves[0] : null);
     
-    // 1) 즉각적 위협 (내가 지금 차례를 넘기면 상대방이 할 수 있는 것)
-    updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 상대방 위협 분석 중...` });
-    const immediateThreatUci = await getNullMoveThreat(freshCtx.fen, null);
-    if (immediateThreatUci) {
-      freshCtx.immediateThreatUci = immediateThreatUci;
-    }
-
-    // 2) 나의 공격 의도 (내가 최선수를 뒀는데 상대가 응수하지 않으면 할 수 있는 것)
     if (m1Uci) {
-      updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 나의 공격 의도 분석 중...` });
+      updateCoachUI({ html: `<div class="coach-dots"><span></span><span></span><span></span></div> 최선수 위협 분석 중...` });
       const threatUci = await getNullMoveThreat(freshCtx.fen, m1Uci);
       if (threatUci) {
         // 브리프 재빌드 시 위협 데이터 포함
         freshCtx.nullMoveThreatUci = threatUci;
+        if (typeof buildPositionBrief === 'function') {
+           const pv1Uci = pv1 && (pv1.pv || pv1.moves) ? (pv1.pv || pv1.moves) : [];
+           const pv2 = (freshCtx.pvData && freshCtx.pvData[2]) || (window.pvData && window.pvData[2]);
+           const pv2Uci = pv2 && (pv2.pv || pv2.moves) ? (pv2.pv || pv2.moves) : [];
+           
+           freshCtx.positionBrief = buildPositionBrief({
+             ...freshCtx,
+             pv1Uci,
+             pv2Uci,
+             nullMoveThreatUci: threatUci
+           });
+        }
       }
-    }
-
-    if (typeof buildPositionBrief === 'function') {
-      const pv1Uci = pv1 && (pv1.pv || pv1.moves) ? (pv1.pv || pv1.moves) : [];
-      const pv2 = (freshCtx.pvData && freshCtx.pvData[2]) || (window.pvData && window.pvData[2]);
-      const pv2Uci = pv2 && (pv2.pv || pv2.moves) ? (pv2.pv || pv2.moves) : [];
-      
-      freshCtx.positionBrief = buildPositionBrief({
-        ...freshCtx,
-        pv1Uci,
-        pv2Uci,
-        nullMoveThreatUci: freshCtx.nullMoveThreatUci,
-        immediateThreatUci: freshCtx.immediateThreatUci // position-brief.js가 이를 처리하도록 나중에 업데이트 필요할 수 있음
-      });
     }
 
     // 위협 패널이 아직 로딩 중이면 완료까지 대기 (최대 4초)
@@ -1413,22 +1396,22 @@ function buildCommentaryPrompt(ctx) {
   const liveLine3    = engineLineSanWithLabels(ctx, livePv3, 6) || ctx.line3;
 
   const hasEngineLine = !!(liveBestLine && liveBestLine.trim());
-  const firstTurnLabel  = ctx.turn === 'w' ? '나(AI, 백)' : '나(AI, 흑)';
-  const lastMoverLabel  = ctx.turn === 'w' ? '상대방(흑)' : '상대방(백)';
+  const firstTurnLabel  = ctx.turn === 'w' ? '백' : '흑';
+  const lastMoverLabel  = ctx.turn === 'w' ? '흑' : '백';
 
   lines.push(`[현재 국면 정보]`);
-  lines.push(`지금 차례: ${firstTurnLabel} (AI는 반드시 ${firstTurnLabel}의 입장에서 해설해야 함)`);
+  lines.push(`지금 차례: ${firstTurnLabel} (AI는 ${firstTurnLabel}의 입장에서 해설해야 함)`);
   lines.push(`게임 단계: ${ctx.phase} | 진행 수: ${ctx.moveCount}수`);
   lines.push(`현재 형세: ${ctx.advantageDesc}`);
 
   if (ctx.lastMoveSan) {
     const ann = ctx.lastMoveAnnotation ? ` (${ctx.lastMoveAnnotation})` : '';
-    lines.push(`직전 수: ${ctx.lastMoveSan}${ann} (${lastMoverLabel}이 둠)`);
+    lines.push(`직전 수: ${ctx.lastMoveSan}${ann} (상대방인 ${lastMoverLabel}이 둠)`);
   }
 
   lines.push(``);
   lines.push(`[엔진 추천 수순 — 절대 주의]`);
-  lines.push(`각 수 옆에 (백), (흑) 표시를 확인하고 주어(나/상대방)를 정확히 써주세요.`);
+  lines.push(`각 수 옆에 (백), (흑) 표시를 확인하고 주어를 정확히 써주세요.`);
   if (hasEngineLine) {
     lines.push(`최선 수순: ${liveBestLine}`);
     if (liveLine2) lines.push(`차선 수순: ${liveLine2}`);
@@ -1624,24 +1607,27 @@ function buildCoachPrompt(ctx, question) {
 async function callCommentaryAPI(ctx) {
   const SYSTEM = `당신은 유튜브 채널 "체스인사이드"의 해설자이자 마스터 체스 코치입니다. 당신의 목표는 현재 포지션을 종합적으로 분석하여 학습자에게 전략적 방향과 구체적인 전술을 모두 제공하는 것입니다.
 
-당신은 지금 차례인 플레이어(나, AI)의 입장에서 해설해야 합니다.
+아래 예시들이 당신이 지켜야 할 정확한 말투와 구조입니다. 특히 **이후 수순** 섹션의 논리적 흐름을 주목하세요.
 
 ───────────────────────────────────────
-【예시 A — 나의 공격 의도(Intent) 설명】
-**이후 수순**
-제가 여기서 **Nb5**로 나이트를 전진시키는 것이 매우 날카로운데요. 만약 상대방이 이를 방치하고 차례를 넘긴다면, 저는 다음 수에 **Nxc7+**를 두어 킹을 체크함과 동시에 룩을 잡아내는 **치명적인 포크**를 성공시킬 수 있습니다. 따라서 상대방은 c7 지점을 반드시 수비해야 하고, 이 과정에서 제가 주도권을 잡게 됩니다.
-
-【예시 B — 상대방의 위협(Threat) 대응 설명】
+【예시 A — 위협 기반의 이후 수순 설명】
 **포지션 상황**
-지금 상대방이 d4를 두면서 중앙을 압박하고 있는데요. 만약 제가 여기서 대응하지 않고 차례를 넘긴다면, 상대방은 **dxe5**로 제 중앙 폰을 잡으면서 기물 이득을 취할 위협을 가지고 있습니다. 그래서 저는 **Nf6**로 중앙을 보강하며 대응하는 것이 최선입니다.
+지금 백이 d4를 두면서 중앙 싸움을 걸어왔고요. 흑은 Nf6로 대응하며 기물 전개를 이어가고 있습니다.
+
+**이후 수순**
+백이 여기서 **Nb5**로 나이트를 전진시키는 것이 매우 날카로운데요. 만약 흑이 이를 방치한다면, 백은 다음 수에 **Nxc7+**를 두어 킹을 체크함과 동시에 룩을 잡아내는 **치명적인 포크**를 성공시킬 위협을 가지고 있습니다. 따라서 흑은 **Na6**나 **d6**와 같은 수로 c7 지점을 반드시 수비해야 하고, 이 과정에서 백은 주도권을 잡고 경기를 풀어나갈 수 있게 됩니다.
+
+【예시 B — 조용한 수(예방)의 설명】
+**이후 수순**
+백이 둔 **a3**는 언뜻 보기엔 평범한 수처럼 보이지만, 사실 흑의 **Nb4** 침투를 미리 차단하는 아주 중요한 **예방적 수**입니다. 만약 백이 이 수를 두지 않았다면 흑의 나이트가 중앙으로 뛰어들며 백의 퀸과 비숍을 괴롭혔을 텐데, **a3**를 통해 그 가능성을 원천 봉쇄하고 룩의 활동성까지 확보하는 일석이조의 효과를 노리고 있습니다.
 ───────────────────────────────────────
 
 【작성 세부 지침 — 공수 교대 절대 주의】
-1. **나(AI) vs 상대방**: 해설에서 '백', '흑'이라는 단어 대신 가급적 '저(나)', '상대방'이라는 표현을 사용하여 역할을 명확히 구분하세요.
-2. **위협 중심 논리**: "만약 ~가 방치한다면 벌어질 위협"을 먼저 언급하고, 이를 막기 위한 "응수"를 설명하는 논리적 구조를 따르세요.
-3. **주어 명시**: "제가 ~하면, 상대방이 ~하고"와 같이 주어를 매번 명시하여 혼동을 방지하세요.
+1. **위협 중심 해설**: **이후 수순** 섹션은 단순히 수순을 나열하지 마세요. "만약 상대가 방치한다면 벌어질 위협(Null-move Threat)"을 먼저 언급하고, 이를 막기 위한 "상대의 응수"를 설명하는 논리적 구조를 따르세요.
+2. **역할 고정**: 당신은 지금 차례인 플레이어(Mover)의 관점에서 분석해야 합니다.
+3. **주어 명시**: 모든 수순 해설에서 "백이 ~하면, 흑이 ~하고"와 같이 주어를 매번 명시하세요.
 4. **말투**: 체스인사이드 유튜브 스타일 (~고요, ~거든요, ~겠습니다, ~는 거죠).
-5. **금기 사항**: cp/점수 수치 사용 금지, 할루시네이션(불가능한 수) 주의.`;
+5. **금기 사항**: cp/점수 수치 사용 금지, 할루시네이션(불가능한 수) 주의, 모호한 단어("반격", "카운터") 남발 금지.`;
 
   const prompt = buildCommentaryPrompt(ctx);
 

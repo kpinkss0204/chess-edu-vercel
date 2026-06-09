@@ -85,13 +85,6 @@ function _initSF() {
       _sfWorker = new Worker(SF_PATH);
     } catch (e) {
       _failInit(e);
-      // ★ 수정: Worker 생성 실패를 즉시 모든 포트에 알림
-      // (기존엔 reject(e)만 하고 포트에 에러를 안 보내서
-      //  클라이언트가 35초 타임아웃까지 기다린 뒤 폴백했음)
-      const errMsg = (e && e.message) ? e.message : 'NESTED_WORKER_UNSUPPORTED';
-      _ports.forEach(p => {
-        try { p.postMessage({ type: 'error', message: errMsg }); } catch (_) {}
-      });
       reject(e);
       return;
     }

@@ -45,6 +45,16 @@
       const isAuthPage = path.endsWith('auth.html') || path.includes('/auth');
 
       if (user) {
+        // 이메일 인증 여부 확인 (비밀번호 로그인 사용자의 경우)
+        const isVerified = user.emailVerified || (user.providerData && !user.providerData.some(p => p.providerId === 'password'));
+        
+        if (!isVerified) {
+          if (!isAuthPage) {
+            window.location.href = '/auth';
+          }
+          return;
+        }
+
         window._user = user;
         window._currentUser = user;
         

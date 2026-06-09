@@ -79,6 +79,13 @@ async function upsertUserDoc(user, extra = {}) {
 /** 로그인 상태 감지 및 리다이렉트 */
 onAuthStateChanged(auth, (user) => {
   if (user) {
+    // 이메일 인증 여부 확인 (비밀번호 로그인 사용자의 경우)
+    if (!user.emailVerified && user.providerData.some(p => p.providerId === 'password')) {
+      showAuthForms();
+      window.showError('login', '이메일 인증이 필요합니다. 메일함을 확인해주세요.');
+      return;
+    }
+
     const path = window.location.pathname;
     if (path.includes('/auth') || path.endsWith('auth.html')) {
       window.location.href = '/';
@@ -93,10 +100,11 @@ window.handleSignup = async () => {
   const name     = document.getElementById('signup-name')?.value.trim();
   const email    = document.getElementById('signup-email')?.value.trim();
   const password = document.getElementById('signup-password')?.value;
-  const confirm  = document.getElementById('signup-confirm')?.value;
+  const confirm  = document.getElementById('signup-confirm'); // get confirm password value later
+  const confirmVal = confirm?.value;
 
   if (!name || !email || !password) return window.showError('signup', '모든 항목을 입력해주세요.');
-  if (password !== confirm)         return window.showError('signup', '비밀번호가 일치하지 않습니다.');
+  if (password !== confirmVal)      return window.showError('signup', '비밀번호가 일치하지 않습니다.');
   if (password.length < 6)          return window.showError('signup', '비밀번호는 6자 이상이어야 합니다.');
 
   window.setLoading('signup', true);
@@ -108,24 +116,24 @@ window.handleSignup = async () => {
       return window.showError('signup', '이미 사용 중인 닉네임입니다.');
     }
 
-    // 2. 이메일 중복 체크 (선택적: createUser...가 에러를 던지지만 사용자 경험을 위해 추가 가능)
-    // Firebase v9+ 에서는 fetchSignInMethodsForEmail 이 보안 정책(email enumeration protection)에 의해 제한될 수 있음
-    // 여기서는 기본 에러 핸들링에 맡기거나 필요시 시도
-
-    // 3. 계정 생성
+    // 2. 계정 생성
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     
-    // 4. 프로필 업데이트 및 Firestore 저장
+    // 3. 프로필 업데이트 및 Firestore 저장
     await updateProfile(cred.user, { displayName: name });
     await upsertUserDoc(cred.user, { displayName: name });
 
-    // 5. 이메일 인증 메일 발송
+    // 4. 이메일 인증 메일 발송
     await sendEmailVerification(cred.user);
     
-    window.showSuccess('signup', '회원가입 완료! 인증 메일을 발송했습니다. 이메일을 확인해 주세요.');
+    window.showSuccess('signup', '회원가입 완료! 인증 메일을 발송했습니다. 인증 후 로그인해주세요.');
     
-    // 인증 메일을 보낸 후 사용자를 로그아웃 시키거나 메시지 표시 후 대기
-    // 보통은 가입 직후 로그인이 된 상태이므로, 인증 확인 유도
+    // 인증 전에는 접근을 막기 위해 로그아웃 처리
+    await signOut(auth);
+    setTimeout(() => {
+        const loginTab = document.getElementById('tab-login');
+        if (loginTab) loginTab.click();
+    }, 3000);
   } catch (e) {
     window.showError('signup', firebaseErrorMsg(e.code));
   } finally {
@@ -142,7 +150,14 @@ window.handleLogin = async () => {
 
   window.setLoading('login', true);
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    
+    // 로그인 성공 후 인증 여부 확인 (비밀번호 로그인인 경우)
+    if (!cred.user.emailVerified) {
+      window.showError('login', '이메일 인증이 완료되지 않았습니다. 메일을 확인해주세요.');
+      await signOut(auth);
+      return;
+    }
   } catch (e) {
     window.showError('login', firebaseErrorMsg(e.code));
   } finally {
