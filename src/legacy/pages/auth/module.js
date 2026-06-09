@@ -141,6 +141,26 @@ window.handleSignup = async () => {
   }
 };
 
+/** 이메일 인증 메일 재발송 */
+window.handleResendVerification = async () => {
+  const email = document.getElementById('login-email')?.value.trim();
+  const password = document.getElementById('login-password')?.value;
+
+  if (!email || !password) return window.showError('login', '이메일과 비밀번호를 입력한 상태에서 클릭해주세요.');
+
+  window.setLoading('login', true);
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    await sendEmailVerification(cred.user);
+    window.showSuccess('login', '인증 메일을 다시 발송했습니다. 메일함을 확인해주세요.');
+    await signOut(auth);
+  } catch (e) {
+    window.showError('login', '재발송 중 오류가 발생했습니다: ' + firebaseErrorMsg(e.code));
+  } finally {
+    window.setLoading('login', false);
+  }
+};
+
 /** 이메일 로그인 처리 */
 window.handleLogin = async () => {
   const email    = document.getElementById('login-email')?.value.trim();
@@ -152,9 +172,10 @@ window.handleLogin = async () => {
   try {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     
-    // 로그인 성공 후 인증 여부 확인 (비밀번호 로그인인 경우)
+    // 로그인 성공 후 인증 여부 확인
     if (!cred.user.emailVerified) {
-      window.showError('login', '이메일 인증이 완료되지 않았습니다. 메일을 확인해주세요.');
+      window.showError('login', '이메일 인증이 완료되지 않았습니다. [인증 메일 재발송] 버튼을 눌러보세요.');
+      // 인증되지 않은 경우 재발송 버튼 노출 유도 (에러 메시지에 포함하거나 별도 버튼 UI 활성화 가능)
       await signOut(auth);
       return;
     }
