@@ -92,15 +92,26 @@ window.handleSignup = async () => {
   window.setLoading('signup', true);
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
+    console.log('User created successfully:', cred.user.uid);
+    
     await updateProfile(cred.user, { displayName: name });
+    console.log('Profile updated');
+
     await upsertUserDoc(cred.user, { displayName: name });
     
-    // 이메일 인증 발송
-    await sendEmailVerification(cred.user);
+    // 이메일 인증 발송 전 최신 상태 확인
+    try {
+      console.log('Attempting to send verification email...');
+      await sendEmailVerification(cred.user);
+      console.log('Verification email sent to:', email);
+      window.showSuccess('signup', '회원가입 완료! 인증 이메일을 보냈습니다. (스팸함도 확인해주세요)');
+    } catch (verifyErr) {
+      console.error('Verification email failed during signup:', verifyErr);
+      window.showError('signup', `인증 메일 발송 실패: ${verifyErr.message}`);
+    }
     
-    window.showSuccess('signup', '회원가입 완료! 인증 이메일을 보냈습니다.');
-    // onAuthStateChanged가 감지하여 showVerifyForm()을 호출할 것임
   } catch (e) {
+    console.error('Signup error:', e);
     window.showError('signup', firebaseErrorMsg(e.code));
   } finally {
     window.setLoading('signup', false);
@@ -116,8 +127,10 @@ window.handleLogin = async () => {
 
   window.setLoading('login', true);
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    console.log('Logged in user:', cred.user.email, 'Verified:', cred.user.emailVerified);
   } catch (e) {
+    console.error('Login error:', e);
     window.showError('login', firebaseErrorMsg(e.code));
   } finally {
     window.setLoading('login', false);
@@ -128,8 +141,10 @@ window.handleLogin = async () => {
 window.handleGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
+    console.log('Google login success:', result.user.email);
     await upsertUserDoc(result.user);
   } catch (e) {
+    console.error('Google login error:', e);
     // 구글 로그인은 보통 로그인/회원가입 카드 모두에 있으므로 유연하게 처리
     const errorEl = document.getElementById('signup-error');
     const isSignupVisible = errorEl && !errorEl.closest('.auth-card').classList.contains('hidden');
@@ -143,13 +158,21 @@ window.handleLogout = () => signOut(auth);
 /** 인증 메일 재발송 */
 window.handleResendVerification = async () => {
   const user = auth.currentUser;
-  if (!user) return;
+  if (!user) {
+    console.warn('No user logged in to resend verification');
+    return;
+  }
 
   window.setLoading('resend', true);
   try {
-    await sendEmailVerification(user);
+    // 토큰 갱신 후 발송 시도
+    console.log('Reloading user before resending verification...');
+    await user.reload();
+    await sendEmailVerification(auth.currentUser);
+    console.log('Verification email resent successfully.');
     window.showSuccess('verify', '인증 이메일을 다시 보냈습니다.');
   } catch (e) {
+    console.error('Resend verification error:', e);
     window.showError('verify', firebaseErrorMsg(e.code));
   } finally {
     window.setLoading('resend', false);
