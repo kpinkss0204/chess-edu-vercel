@@ -41,23 +41,16 @@
 
     function checkAuth(user) {
       const path = window.location.pathname;
-      // React 버전에서는 '/' 가 분석 보드(메인)이므로 더 이상 auth page가 아님
       const isAuthPage = path.endsWith('auth.html') || path.includes('/auth');
 
       if (user) {
-        // 이메일 인증 여부 확인 (비밀번호 로그인 사용자의 경우)
-        const isVerified = user.emailVerified || (user.providerData && !user.providerData.some(p => p.providerId === 'password'));
-        
-        if (!isVerified) {
-          if (!isAuthPage) {
-            window.location.href = '/auth';
-          }
-          return;
-        }
-
         window._user = user;
         window._currentUser = user;
         
+        // 이메일 인증 여부 확인 (Google 로그인은 이미 인증된 것으로 간주)
+        const isPasswordProvider = user.providerData && user.providerData.some(p => p.providerId === 'password');
+        const isVerified = user.emailVerified || !isPasswordProvider;
+
         const name = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
         
         // Update Sidebar UI
@@ -72,9 +65,16 @@
         if (myAvatarEl) myAvatarEl.textContent = name[0].toUpperCase();
         if (myNameEl) myNameEl.textContent = name;
 
-        // 로그인 상태인데 인증 페이지(로그인/가입)에 있으면 메인(/)으로 이동
-        if (isAuthPage) {
-          window.location.href = '/';
+        if (isVerified) {
+          // 로그인 상태인데 인증 페이지(로그인/가입)에 있으면 메인(/)으로 이동
+          if (isAuthPage) {
+            window.location.href = '/';
+          }
+        } else {
+          // 로그인 상태이지만 미인증 상태인데 인증 페이지가 아니면 인증 페이지로 이동
+          if (!isAuthPage) {
+            window.location.href = '/auth';
+          }
         }
       } else {
         // 비로그인 상태인데 인증 페이지가 아니면 로그인 페이지로 이동

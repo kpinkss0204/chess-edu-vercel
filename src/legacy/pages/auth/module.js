@@ -8,19 +8,14 @@ import {
   onAuthStateChanged,
   signOut,
   updateProfile,
-  sendEmailVerification,
-  fetchSignInMethodsForEmail
+  sendEmailVerification
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore,
   doc,
   setDoc,
   getDoc,
-  serverTimestamp,
-  collection,
-  query,
-  where,
-  getDocs
+  serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ─────────────────────────────────────────────
@@ -41,18 +36,6 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
-
-/** 닉네임 중복 확인 */
-async function isNicknameTaken(nickname) {
-  try {
-    const q = query(collection(db, 'users'), where('displayName', '==', nickname));
-    const snap = await getDocs(q);
-    return !snap.empty;
-  } catch (e) {
-    console.error('Nickname check error:', e);
-    return false;
-  }
-}
 
 /** Firestore에 사용자 정보 저장 */
 async function upsertUserDoc(user, extra = {}) {
@@ -77,18 +60,18 @@ async function upsertUserDoc(user, extra = {}) {
 }
 
 /** 로그인 상태 감지 및 리다이렉트 */
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   if (user) {
-    // 이메일 인증 여부 확인 (비밀번호 로그인 사용자의 경우)
-    if (!user.emailVerified && user.providerData.some(p => p.providerId === 'password')) {
-      showAuthForms();
-      window.showError('login', '이메일 인증이 필요합니다. 메일함을 확인해주세요.');
-      return;
-    }
-
-    const path = window.location.pathname;
-    if (path.includes('/auth') || path.endsWith('auth.html')) {
-      window.location.href = '/';
+    // 이메일 인증 여부 확인 (Google 로그인은 이미 인증된 것으로 간주)
+    const isPasswordProvider = user.providerData.some(p => p.providerId === 'password');
+    
+    if (isPasswordProvider && !user.emailVerified) {
+      showVerifyForm();
+    } else {
+      const path = window.location.pathname;
+      if (path.includes('/auth') || path.endsWith('auth.html')) {
+        window.location.href = '/';
+      }
     }
   } else {
     showAuthForms();
@@ -100,64 +83,27 @@ window.handleSignup = async () => {
   const name     = document.getElementById('signup-name')?.value.trim();
   const email    = document.getElementById('signup-email')?.value.trim();
   const password = document.getElementById('signup-password')?.value;
-  const confirm  = document.getElementById('signup-confirm'); // get confirm password value later
-  const confirmVal = confirm?.value;
+  const confirm  = document.getElementById('signup-confirm')?.value;
 
   if (!name || !email || !password) return window.showError('signup', '모든 항목을 입력해주세요.');
-  if (password !== confirmVal)      return window.showError('signup', '비밀번호가 일치하지 않습니다.');
+  if (password !== confirm)         return window.showError('signup', '비밀번호가 일치하지 않습니다.');
   if (password.length < 6)          return window.showError('signup', '비밀번호는 6자 이상이어야 합니다.');
 
   window.setLoading('signup', true);
   try {
-    // 1. 닉네임 중복 체크
-    const nicknameExists = await isNicknameTaken(name);
-    if (nicknameExists) {
-      window.setLoading('signup', false);
-      return window.showError('signup', '이미 사용 중인 닉네임입니다.');
-    }
-
-    // 2. 계정 생성
     const cred = await createUserWithEmailAndPassword(auth, email, password);
-    
-    // 3. 프로필 업데이트 및 Firestore 저장
     await updateProfile(cred.user, { displayName: name });
     await upsertUserDoc(cred.user, { displayName: name });
-
-    // 4. 이메일 인증 메일 발송
+    
+    // 이메일 인증 발송
     await sendEmailVerification(cred.user);
     
-    window.showSuccess('signup', '회원가입 완료! 인증 메일을 발송했습니다. 인증 후 로그인해주세요.');
-    
-    // 인증 전에는 접근을 막기 위해 로그아웃 처리
-    await signOut(auth);
-    setTimeout(() => {
-        const loginTab = document.getElementById('tab-login');
-        if (loginTab) loginTab.click();
-    }, 3000);
+    window.showSuccess('signup', '회원가입 완료! 인증 이메일을 보냈습니다.');
+    // onAuthStateChanged가 감지하여 showVerifyForm()을 호출할 것임
   } catch (e) {
     window.showError('signup', firebaseErrorMsg(e.code));
   } finally {
     window.setLoading('signup', false);
-  }
-};
-
-/** 이메일 인증 메일 재발송 */
-window.handleResendVerification = async () => {
-  const email = document.getElementById('login-email')?.value.trim();
-  const password = document.getElementById('login-password')?.value;
-
-  if (!email || !password) return window.showError('login', '이메일과 비밀번호를 입력한 상태에서 클릭해주세요.');
-
-  window.setLoading('login', true);
-  try {
-    const cred = await signInWithEmailAndPassword(auth, email, password);
-    await sendEmailVerification(cred.user);
-    window.showSuccess('login', '인증 메일을 다시 발송했습니다. 메일함을 확인해주세요.');
-    await signOut(auth);
-  } catch (e) {
-    window.showError('login', '재발송 중 오류가 발생했습니다: ' + firebaseErrorMsg(e.code));
-  } finally {
-    window.setLoading('login', false);
   }
 };
 
@@ -170,15 +116,7 @@ window.handleLogin = async () => {
 
   window.setLoading('login', true);
   try {
-    const cred = await signInWithEmailAndPassword(auth, email, password);
-    
-    // 로그인 성공 후 인증 여부 확인
-    if (!cred.user.emailVerified) {
-      window.showError('login', '이메일 인증이 완료되지 않았습니다. [인증 메일 재발송] 버튼을 눌러보세요.');
-      // 인증되지 않은 경우 재발송 버튼 노출 유도 (에러 메시지에 포함하거나 별도 버튼 UI 활성화 가능)
-      await signOut(auth);
-      return;
-    }
+    await signInWithEmailAndPassword(auth, email, password);
   } catch (e) {
     window.showError('login', firebaseErrorMsg(e.code));
   } finally {
@@ -202,11 +140,74 @@ window.handleGoogle = async () => {
 /** 로그아웃 처리 */
 window.handleLogout = () => signOut(auth);
 
+/** 인증 메일 재발송 */
+window.handleResendVerification = async () => {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  window.setLoading('resend', true);
+  try {
+    await sendEmailVerification(user);
+    window.showSuccess('verify', '인증 이메일을 다시 보냈습니다.');
+  } catch (e) {
+    window.showError('verify', firebaseErrorMsg(e.code));
+  } finally {
+    window.setLoading('resend', false);
+  }
+};
+
+/** 인증 상태 새로고침 확인 */
+window.handleRefreshAuth = async () => {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  window.setLoading('verify-refresh', true);
+  try {
+    await user.reload();
+    if (auth.currentUser.emailVerified) {
+      window.location.href = '/';
+    } else {
+      window.showError('verify', '아직 인증이 완료되지 않았습니다. 이메일을 확인해주세요.');
+    }
+  } catch (e) {
+    window.showError('verify', firebaseErrorMsg(e.code));
+  } finally {
+    window.setLoading('verify-refresh', false);
+  }
+};
+
 function showAuthForms() {
   const container = document.getElementById('auth-container');
   const panel = document.getElementById('user-panel');
+  const tabBar = document.querySelector('.tab-bar');
+  const verifyCard = document.getElementById('card-verify');
+  
   if (container) container.classList.remove('hidden');
   if (panel) panel.classList.add('hidden');
+  if (tabBar) tabBar.classList.remove('hidden');
+  if (verifyCard) verifyCard.classList.add('hidden');
+  
+  // 기본적으로 로그인 폼 표시
+  const loginCard = document.getElementById('card-login');
+  const signupCard = document.getElementById('card-signup');
+  if (loginCard) loginCard.classList.remove('hidden');
+  if (signupCard) signupCard.classList.add('hidden');
+}
+
+function showVerifyForm() {
+  const container = document.getElementById('auth-container');
+  const panel = document.getElementById('user-panel');
+  const tabBar = document.querySelector('.tab-bar');
+  const loginCard = document.getElementById('card-login');
+  const signupCard = document.getElementById('card-signup');
+  const verifyCard = document.getElementById('card-verify');
+
+  if (container) container.classList.remove('hidden');
+  if (panel) panel.classList.add('hidden');
+  if (tabBar) tabBar.classList.add('hidden');
+  if (loginCard) loginCard.classList.add('hidden');
+  if (signupCard) signupCard.classList.add('hidden');
+  if (verifyCard) verifyCard.classList.remove('hidden');
 }
 
 /** Firebase 에러 메시지 한국어 변환 */
