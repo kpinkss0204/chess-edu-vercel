@@ -111,23 +111,6 @@ body {
 #puzzle-streak .streak-fire { color: #f0a030; font-size: 14px; }
 #puzzle-streak .streak-num { font-weight: 700; color: var(--text-primary); }
 
-#puzzle-rating-display {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  padding: 4px 10px;
-  border-radius: 20px;
-  margin-left: auto;
-}
-#puzzle-rating-display .rating-val {
-  font-weight: 700;
-  color: var(--accent-green-bright);
-}
-
 /* ===== SCROLL WRAPPER ===== */
 #puzzle-scroll {
   flex: 1;

@@ -7,14 +7,20 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
-  updateProfile
+  updateProfile,
+  sendEmailVerification,
+  fetchSignInMethodsForEmail
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore,
   doc,
   setDoc,
   getDoc,
-  serverTimestamp
+  serverTimestamp,
+  collection,
+  query,
+  where,
+  getDocs
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ─────────────────────────────────────────────
@@ -35,6 +41,18 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+/** 닉네임 중복 확인 */
+async function isNicknameTaken(nickname) {
+  try {
+    const q = query(collection(db, 'users'), where('displayName', '==', nickname));
+    const snap = await getDocs(q);
+    return !snap.empty;
+  } catch (e) {
+    console.error('Nickname check error:', e);
+    return false;
+  }
+}
 
 /** Firestore에 사용자 정보 저장 */
 async function upsertUserDoc(user, extra = {}) {
@@ -83,10 +101,31 @@ window.handleSignup = async () => {
 
   window.setLoading('signup', true);
   try {
+    // 1. 닉네임 중복 체크
+    const nicknameExists = await isNicknameTaken(name);
+    if (nicknameExists) {
+      window.setLoading('signup', false);
+      return window.showError('signup', '이미 사용 중인 닉네임입니다.');
+    }
+
+    // 2. 이메일 중복 체크 (선택적: createUser...가 에러를 던지지만 사용자 경험을 위해 추가 가능)
+    // Firebase v9+ 에서는 fetchSignInMethodsForEmail 이 보안 정책(email enumeration protection)에 의해 제한될 수 있음
+    // 여기서는 기본 에러 핸들링에 맡기거나 필요시 시도
+
+    // 3. 계정 생성
     const cred = await createUserWithEmailAndPassword(auth, email, password);
+    
+    // 4. 프로필 업데이트 및 Firestore 저장
     await updateProfile(cred.user, { displayName: name });
     await upsertUserDoc(cred.user, { displayName: name });
-    window.showSuccess('signup', '회원가입 완료! 잠시 후 이동합니다.');
+
+    // 5. 이메일 인증 메일 발송
+    await sendEmailVerification(cred.user);
+    
+    window.showSuccess('signup', '회원가입 완료! 인증 메일을 발송했습니다. 이메일을 확인해 주세요.');
+    
+    // 인증 메일을 보낸 후 사용자를 로그아웃 시키거나 메시지 표시 후 대기
+    // 보통은 가입 직후 로그인이 된 상태이므로, 인증 확인 유도
   } catch (e) {
     window.showError('signup', firebaseErrorMsg(e.code));
   } finally {

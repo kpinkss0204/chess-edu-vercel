@@ -432,8 +432,6 @@ function renderPuzzleSets(themeId) {
       <span class="puzzle-set-status status-new">실시간</span>
     </div>
     <div style="font-size:11px;color:var(--text-muted);padding:8px 4px;line-height:1.6;">
-      🔑 Lichess API 토큰이 설정되어 있으면 개인화된 퍼즐을 받을 수 있습니다.<br>
-      토큰 없이도 퍼즐을 불러올 수 있습니다.
     </div>
   `;
 }
@@ -1150,7 +1148,8 @@ function updateMoveHistory() {
 
 function updateStats() {
   document.getElementById('streak-count').textContent = state.streak;
-  document.getElementById('my-rating').textContent = state.rating;
+  const ratingEl = document.getElementById('my-rating');
+  if (ratingEl) ratingEl.textContent = state.rating;
   document.getElementById('stat-total').textContent = state.totalSolved;
   document.getElementById('stat-streak').textContent = state.bestStreak;
   document.getElementById('stat-today').textContent = state.todaySolved;
